@@ -1,0 +1,27 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/core/include",
+                "${workspaceFolder}/ext/assimp/include",
+				"${workspaceFolder}/ext/marl/include",
+				"${workspaceFolder}/ext/cereal/include",
+				"${workspaceFolder}/ext/entt/single_include",
+				"${workspaceFolder}/ext/glm"
+			],
+            "defines": [
+                "PLATFORM_LINUX",
+                "VULKAN_SUPPORTED",
+                "GL_SUPPORTED",
+                "DILIGENT_DEVELOPMENT",
+				"USE_GLFW"
+            ],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "gnu17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "gcc-x64"
+        }
+    ],
+    "version": 4
+}

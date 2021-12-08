@@ -1,0 +1,15 @@
+[submodule "ext/marl"]
+	path = ext/marl
+	url = https://github.com/google/marl.git
+[submodule "ext/entt"]
+	path = ext/entt
+	url = https://github.com/skypjack/entt.git
+[submodule "ext/cereal"]
+	path = ext/cereal
+	url = https://github.com/USCiLab/cereal.git
+[submodule "ext/assimp"]
+	path = ext/assimp
+	url = https://github.com/assimp/assimp.git
+[submodule "ext/glm"]
+	path = ext/glm
+	url = https://github.com/g-truc/glm.git
