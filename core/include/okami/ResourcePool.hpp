@@ -61,8 +61,6 @@ namespace okami::core {
                 Get<RefCounter>().mCount--;
             }
         };
-
-        
     };
 
     template <typename desc_t>
