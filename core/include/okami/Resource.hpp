@@ -5,21 +5,61 @@
 
 namespace okami::core {
     typedef int32_t ref_count_t;
+	typedef int64_t resource_id_t;
 
-    class RefCountObject {
+    class Resource {
     private:
         std::atomic<ref_count_t> mRefCount;
         void* mOwner;
-        void (*mDestructor)(void* owner, RefCountObject* object);
+        void (*mDestructor)(void* owner, Resource* object);
+		resource_id_t mId = -1;
+
+	protected:
+		inline void SetId(resource_id_t value) {
+			mId = value;
+		}
 
     public:
-        inline RefCountObject() : 
+		inline resource_id_t Id() const {
+			return mId;
+		}
+
+        inline Resource() : 
             mRefCount(1), 
             mOwner(nullptr), 
             mDestructor(nullptr) {
         }
 
-        inline void SetDestructor(void (*destructor)(void*, RefCountObject*), void* owner) {
+		inline Resource(const Resource& other) : 
+			Resource() {
+		}
+
+		inline Resource(Resource&& other) : 
+			Resource() {
+			if (other.mOwner) {
+				throw std::runtime_error("Cannot move managed resource!");
+			}
+			if (other.mRefCount > 1) {
+				throw std::runtime_error("Cannot move resource with more than one reference!");
+			}
+		}
+
+		inline Resource& operator=(Resource& other) {
+			return *this;
+		}
+
+		inline Resource& operator=(Resource&& other) {
+			if (other.mOwner) {
+				throw std::runtime_error("Cannot move managed resource!");
+			}
+			if (other.mRefCount > 1) {
+				throw std::runtime_error("Cannot move resource with more than one reference!");
+			}
+
+			return *this;
+		}
+
+        inline void SetDestructor(void (*destructor)(void*, Resource*), void* owner) {
             mDestructor = destructor;
             mOwner = owner;
         }

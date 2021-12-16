@@ -10,6 +10,8 @@ list(APPEND SOURCE
     src/Meta.cpp
     src/Transform.cpp
     src/Destroyer.cpp
+    src/System.cpp
+    src/FrameSystem.cpp
 )
 
 list(APPEND INCLUDE
@@ -17,12 +19,14 @@ list(APPEND INCLUDE
     include/okami/Geometry.hpp
     include/okami/System.hpp
     include/okami/ResourceInterface.hpp
-    include/okami/RefCount.hpp
+    include/okami/Resource.hpp
     include/okami/Async.hpp
     include/okami/VertexLayout.hpp
     include/okami/Meta.hpp
     include/okami/Transform.hpp
     include/okami/Destroyer.hpp
+    include/okami/ResourceManager.hpp
+    include/okami/FrameSystem.hpp
 )
 
 add_library(okami-core STATIC ${SOURCE} ${INCLUDE})

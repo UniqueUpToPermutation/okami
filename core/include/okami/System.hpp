@@ -1,10 +1,13 @@
 #pragma once 
 
+#include <entt/entt.hpp>
 #include <okami/Frame.hpp>
 #include <marl/waitgroup.h>
 
 namespace okami::core {
     class SyncObject;
+
+    class Frame;
 
     struct Time {
         double mTimeElapsed;
@@ -17,7 +20,7 @@ namespace okami::core {
         virtual void Startup(marl::WaitGroup& waitGroup) = 0;
         
         // Destroy the system and free all used resources.
-        virtual void Shutdown(marl::WaitGroup& waitGroup) = 0;
+        virtual void Shutdown() = 0;
 
         // Load all underlying resources for the specified frame.
         virtual void LoadResources(Frame* frame, 
@@ -110,6 +113,8 @@ namespace okami::core {
         Frame* mFrame;
     
     public:
+        SystemCollection();
+
         template <typename SystemT, typename ... Args>
         ISystem* Add(Args&&... args) {
             return mSystems.emplace(std::make_unique<SystemT>(std::forward(args...))).first->get();
@@ -130,13 +135,9 @@ namespace okami::core {
         }
 
         inline void Shutdown() {
-            marl::WaitGroup group;
-
             for (auto& system : mSystems) {
-                system->Shutdown(group);
+                system->Shutdown();
             }
-
-            group.wait();
         }
 
         inline void LoadResources(Frame* frame) {

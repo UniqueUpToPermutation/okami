@@ -9,7 +9,7 @@ namespace okami::core {
     class Destroyer final : public ISystem {
     public:
         void Startup(marl::WaitGroup& waitGroup) override;
-        void Shutdown(marl::WaitGroup& waitGroup) override;
+        void Shutdown() override;
         void LoadResources(Frame* frame, 
             marl::WaitGroup& waitGroup) override;
         void BeginExecute(Frame* frame, 

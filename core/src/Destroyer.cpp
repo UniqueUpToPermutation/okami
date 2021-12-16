@@ -4,7 +4,7 @@
 namespace okami::core {
     void Destroyer::Startup(marl::WaitGroup& waitGroup) {
     }
-    void Destroyer::Shutdown(marl::WaitGroup& waitGroup) {
+    void Destroyer::Shutdown() {
     }
     void Destroyer::LoadResources(Frame* frame, 
         marl::WaitGroup& waitGroup) {

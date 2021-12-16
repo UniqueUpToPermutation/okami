@@ -1,7 +1,10 @@
 #pragma once
 
+#include <okami/System.hpp>
+#include <okami/ResourceInterface.hpp>
+
 #include <entt/entt.hpp>
-#include <okami/RefCount.hpp>
+
 #include <stack>
 #include <filesystem>
 
@@ -195,7 +198,7 @@ namespace okami::core {
 		}
 	};
 
-	class Frame final : public RefCountObject {
+	class Frame final : public Resource {
 	private:
 		entt::registry mRegistry;
 		entt::entity mRoot;
@@ -219,21 +222,20 @@ namespace okami::core {
 
 		Frame();
 		~Frame() = default;
-		Frame(const std::filesystem::path& path);
 
 		inline void Orphan(entt::entity ent) {
 			HierarchyData::Orphan(mRegistry, ent);
 		}
-		inline void AddChild(entt::entity parent, entt::entity newChild) {
+		inline void AddEntityChild(entt::entity parent, entt::entity newChild) {
 			HierarchyData::AddChild(mRegistry, parent, newChild);
 		}
-		inline void SetParent(entt::entity child, entt::entity parent) {
-			AddChild(parent, child);
+		inline void SetEntityParent(entt::entity child, entt::entity parent) {
+			AddEntityChild(parent, child);
 		}
 		inline entt::entity CreateEntity() {
 			return CreateEntity(mRoot);
 		}
-		inline entt::entity GetParent(entt::entity ent) {
+		inline entt::entity GetEntityParent(entt::entity ent) {
 			return mRegistry.get<HierarchyData>(ent).mParent;
 		}
 		inline entt::entity GetFirstChild(entt::entity ent) {
@@ -242,10 +244,10 @@ namespace okami::core {
 		inline entt::entity GetLastChild(entt::entity ent) {
 			return mRegistry.get<HierarchyData>(ent).mLastChild;
 		}
-		inline entt::entity GetNext(entt::entity ent) {
+		inline entt::entity GetNextEntity(entt::entity ent) {
 			return mRegistry.get<HierarchyData>(ent).mNext;
 		}
-		inline entt::entity GetPrevious(entt::entity ent) {
+		inline entt::entity GetPreviousEntity(entt::entity ent) {
 			return mRegistry.get<HierarchyData>(ent).mPrevious;
 		}
 		inline DepthFirstNodeIterator GetIterator() {
@@ -286,5 +288,9 @@ namespace okami::core {
 
 		friend class FrameIO;
 		friend class FrameTable;
+	};
+
+	template <>
+	struct LoadParams<Frame> {
 	};
 }
