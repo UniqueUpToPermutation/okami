@@ -1,7 +1,7 @@
 #pragma once
 
 #include <entt/entt.hpp>
-
+#include <okami/RefCount.hpp>
 #include <stack>
 #include <filesystem>
 
@@ -195,7 +195,7 @@ namespace okami::core {
 		}
 	};
 
-	class Frame {
+	class Frame final : public RefCountObject {
 	private:
 		entt::registry mRegistry;
 		entt::entity mRoot;
@@ -280,10 +280,9 @@ namespace okami::core {
 		inline T& Emplace(entt::entity e, Args&&... args) {
 			return mRegistry.emplace<T>(e, std::forward<Args>(args)...);
 		}
-		template <typename T>
-		inline bool Has(entt::entity e) {
-			return mRegistry.has<T>(e);
-		}
+
+		entt::meta_type GetType() const override;
+		static void Register();
 
 		friend class FrameIO;
 		friend class FrameTable;

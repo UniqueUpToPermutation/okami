@@ -7,22 +7,34 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 list(APPEND SOURCE
     src/Frame.cpp
     src/Geometry.cpp
-    src/ResourcePool.cpp
+    src/Meta.cpp
+    src/Transform.cpp
+    src/Destroyer.cpp
 )
 
 list(APPEND INCLUDE
     include/okami/Frame.hpp
     include/okami/Geometry.hpp
     include/okami/System.hpp
-    include/okami/ResourcePool.hpp
+    include/okami/ResourceInterface.hpp
+    include/okami/RefCount.hpp
+    include/okami/Async.hpp
+    include/okami/VertexLayout.hpp
+    include/okami/Meta.hpp
+    include/okami/Transform.hpp
+    include/okami/Destroyer.hpp
 )
 
 add_library(okami-core STATIC ${SOURCE} ${INCLUDE})
+
+SET(OKAMI_CORE_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include" CACHE INTERNAL "OKAMI_CORE_INCLUDE_DIR")
 
 target_include_directories(okami-core PUBLIC
     ${ENTT_INCLUDE_DIR} 
     ${MARL_INCLUDE_DIR} 
     ${CEREAL_INCLUDE_DIR} 
-    ${ASSIMP_INCLUDE_DIR})
+    ${ASSIMP_INCLUDE_DIR}
+    ${GLM_INCLUDE_DIR}
+    ${OKAMI_CORE_INCLUDE_DIR})
 
 target_link_libraries(okami-core marl assimp)

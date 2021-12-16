@@ -1,7 +1,7 @@
 #pragma once
 
 #include <okami/VertexLayout.hpp>
-#include <okami/ResourcePool.hpp>
+#include <okami/RefCount.hpp>
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
@@ -15,17 +15,6 @@ namespace okami::core {
     struct BufferData {
         BufferDesc mDesc;
         std::vector<uint8_t> mBytes;
-    };
-
-    enum class GeometryType {
-        UNDEFINED,
-        STATIC_MESH,
-        NUM_TYPES
-    };
-    
-    struct GeometryDesc {
-        VertexLayout mLayout;
-        GeometryType mType = GeometryType::UNDEFINED;
     };
 
     template <typename IndexType = uint32_t,
@@ -57,7 +46,7 @@ namespace okami::core {
 		typename Vec2Type = glm::vec2,
 		typename Vec3Type = glm::vec3,
 		typename Vec4Type = glm::vec4>
-	struct GeometryDataSource {
+	struct GeometrySource {
 		size_t mVertexCount;
 		size_t mIndexCount;
 
@@ -69,8 +58,8 @@ namespace okami::core {
 		const Vec3Type* mBitangents;
 		std::vector<const Vec4Type*> mColors;
 
-		GeometryDataSource(
-			const GeometryData<IndexType, Vec2Type, Vec3Type, Vec4Type>& data) :
+		GeometrySource(
+			const StructuredGeometryData<IndexType, Vec2Type, Vec3Type, Vec4Type>& data) :
 			mVertexCount(data.mPositions.size()),
 			mIndexCount(data.mIndices.size()),
 			mPositions(data.mPositions.size() > 0 ? &data.mPositions[0] : nullptr),
@@ -85,7 +74,7 @@ namespace okami::core {
 				mColors.emplace_back(&colors[0]);
 		}
 
-		GeometryDataSource(
+		GeometrySource(
 			size_t vertexCount,
 			size_t indexCount,
 			const IndexType indices[],
@@ -106,7 +95,7 @@ namespace okami::core {
 			mColors(colors) {
 		}
 
-		GeometryDataSource(
+		GeometrySource(
 			size_t vertexCount,
 			size_t indexCount,
 			const IndexType indices[],
@@ -116,7 +105,7 @@ namespace okami::core {
 			const Vec3Type tangents[] = nullptr,
 			const Vec3Type bitangents[] = nullptr,
 			const Vec4Type colors[] = nullptr) :
-			GeometryDataSource(vertexCount,
+			GeometrySource(vertexCount,
 				indexCount,
 				indices,
 				positions,
@@ -127,14 +116,14 @@ namespace okami::core {
 				std::vector<const Vec4Type*>{colors}) {
 		}
 		
-		GeometryDataSource(size_t vertexCount,
+		GeometrySource(size_t vertexCount,
 			const Vec3Type positions[],
 			const std::vector<const Vec2Type*>& uvs = {},
 			const Vec3Type normals[] = nullptr,
 			const Vec3Type tangents[] = nullptr,
 			const Vec3Type bitangents[] = nullptr,
 			const std::vector<const Vec4Type*>& colors = {}) :
-			GeometryDataSource(vertexCount,
+			GeometrySource(vertexCount,
 				0,
 				nullptr,
 				positions,
@@ -145,14 +134,14 @@ namespace okami::core {
 				colors) {
 		}
 
-		GeometryDataSource(size_t vertexCount,
+		GeometrySource(size_t vertexCount,
 			const Vec3Type positions[],
 			const Vec2Type uvs[] = nullptr,
 			const Vec3Type normals[] = nullptr,
 			const Vec3Type tangents[] = nullptr,
 			const Vec3Type bitangents[] = nullptr,
 			const Vec4Type colors[] = nullptr) : 
-			GeometryDataSource(vertexCount,
+			GeometrySource(vertexCount,
 				0,
 				nullptr,
 				positions,
@@ -184,12 +173,48 @@ namespace okami::core {
 		}
 	};
 
-    struct GeometryData {
-        GeometryDesc mDesc;
-        std::vector<BufferData> mVertexBuffers;
-        BufferData mIndexBuffer;
-    };
+    class Geometry final : public RefCountObject {
+	public:
+		enum class Type {
+			UNDEFINED,
+			STATIC_MESH,
+			NUM_TYPES
+		};
+		
+		struct Desc {
+			VertexLayout mLayout;
+			Type mType = Type::UNDEFINED;
+		};
 
-    class Geometry : public ResourceHandle<GeometryDesc> {
+		struct Data {
+			Desc mDesc;
+			std::vector<BufferData> mVertexBuffers;
+			BufferData mIndexBuffer;
+		};
+
+	private:
+		Data mData;
+		std::atomic<uint64_t> mFlags;
+
+	public:
+		
+		const Desc& Desc() const {
+			return mData.mDesc;
+		}
+
+		entt::meta_type GetType() const override;
+
+		static void Register();
+
+		struct Prefabs {
+			static Geometry::Data MaterialBall(const VertexLayout& layout);
+			static Geometry::Data Box(const VertexLayout& layout);
+			static Geometry::Data Sphere(const VertexLayout& layout);
+			static Geometry::Data BlenderMonkey(const VertexLayout& layout);
+			static Geometry::Data Torus(const VertexLayout& layout);
+			static Geometry::Data Plane(const VertexLayout& layout);
+			static Geometry::Data StanfordBunny(const VertexLayout& layout);
+			static Geometry::Data UtahTeapot(const VertexLayout& layout);
+		};
     };
 }
