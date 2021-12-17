@@ -4,7 +4,11 @@
 
 namespace okami::core {
     SystemCollection::SystemCollection() {
-        mSystems.emplace(std::make_unique<Destroyer>());
+        mSystems.emplace_back(std::make_unique<Destroyer>());
+    }
+
+    SystemCollection::~SystemCollection() {
+        Shutdown();
     }
 
     void SystemCollection::BeginExecute(Frame* frame, const Time& time) {
@@ -30,6 +34,12 @@ namespace okami::core {
     void SystemCollection::Startup() {
         marl::WaitGroup group;
 
+        mInterfaces = InterfaceCollection();
+
+        for (auto& system : mSystems) {
+            system->RegisterInterfaces(mInterfaces);
+        }
+
         for (auto& system : mSystems) {
             system->Startup(group);
         }
@@ -38,9 +48,13 @@ namespace okami::core {
     }
 
     void SystemCollection::Shutdown() {
-        for (auto& system : mSystems) {
-            system->Shutdown();
+        
+        // Shutdown systems in reverse order
+        for (auto it = mSystems.rbegin(); it != mSystems.rend(); ++it) {
+            it->get()->Shutdown();
         }
+
+        mSystems.clear();
     }
 
     void SystemCollection::LoadResources(Frame* frame) {

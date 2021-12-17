@@ -8,6 +8,7 @@ namespace okami::core {
 
     class Destroyer final : public ISystem {
     public:
+        void RegisterInterfaces(InterfaceCollection& interfaces) override;
         void Startup(marl::WaitGroup& waitGroup) override;
         void Shutdown() override;
         void LoadResources(Frame* frame, 

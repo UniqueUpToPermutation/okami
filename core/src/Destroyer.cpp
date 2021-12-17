@@ -2,6 +2,8 @@
 #include <okami/Destroyer.hpp>
 
 namespace okami::core {
+    void Destroyer::RegisterInterfaces(InterfaceCollection& interfaces) {
+    }
     void Destroyer::Startup(marl::WaitGroup& waitGroup) {
     }
     void Destroyer::Shutdown() {

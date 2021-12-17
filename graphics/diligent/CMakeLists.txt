@@ -1,0 +1,44 @@
+cmake_minimum_required(VERSION 3.6)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+list(APPEND SOURCE
+    src/Display.cpp
+)
+
+list(APPEND INCLUDE
+    include/okami/Display.hpp
+)
+
+add_library(okami-graphics-diligent STATIC ${SOURCE} ${INCLUDE})
+
+set(OKAMI_DILIGENT_HEADERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    CACHE INTERNAL OKAMI_DILIGENT_HEADERS)
+
+list(APPEND DEPENDENCIES_LIST
+    ${OKAMI_DILIGENT_HEADERS}
+    ${OKAMI_GRAPHICS_INTERFACE_DIR}
+    ${GLFW_INCLUDE_DIR}
+)
+
+SET(OKAMI_DILIGENT_INCLUDE_DEPENDENCES "${DEPENDENCIES_LIST}" CACHE INTERNAL "OKAMI_DILIGENT_INCLUDE_DEPENDENCES")
+
+target_include_directories(okami-graphics-diligent PUBLIC
+    ${CEREAL_INCLUDE_DIR} 
+    ${ASSIMP_INCLUDE_DIR}
+    ${OKAMI_CORE_INCLUDE_DEPENDENCES}
+    ${OKAMI_DILIGENT_INCLUDE_DEPENDENCES}
+)
+
+target_compile_definitions(okami-graphics-diligent PRIVATE USE_GLFW=1)
+
+target_link_libraries(okami-graphics-diligent glfw)
+
+list(APPEND LIB_DEPENDENCIES_LIST
+    okami-graphics-diligent
+)
+
+SET(OKAMI_DILIGENT_LIB_DEPENDENCES "${LIB_DEPENDENCIES_LIST}" CACHE INTERNAL "OKAMI_DILIGENT_LIB_DEPENDENCES")

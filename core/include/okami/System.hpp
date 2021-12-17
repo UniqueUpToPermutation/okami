@@ -14,10 +14,34 @@ namespace okami::core {
         double mTotalTime;
     };
 
+    class InterfaceCollection {
+    private:
+        std::unordered_map<entt::id_type, void*> mInterfaces;
+    
+    public:
+        template <typename T>
+        inline void Add(T* t) {
+            mInterfaces.emplace(entt::resolve<T>().id(), t);
+        }
+
+        template <typename T>
+        inline T* Query() {
+            auto it = mInterfaces.find(entt::resolve<T>().id());
+            if (it == mInterfaces.end()) {
+                return nullptr;
+            } else {
+                return reinterpret_cast<T*>(it->second);
+            }
+        }
+    };
+
     class ISystem {
     public:
         // Initialize the system and load all required resources.
         virtual void Startup(marl::WaitGroup& waitGroup) = 0;
+
+        // Register all interfaces to the specified interface collection
+        virtual void RegisterInterfaces(InterfaceCollection& interfaces) = 0;
         
         // Destroy the system and free all used resources.
         virtual void Shutdown() = 0;
@@ -105,15 +129,28 @@ namespace okami::core {
 
     class SystemCollection {
     private:
-        std::set<std::unique_ptr<ISystem>> mSystems;
+        std::vector<std::unique_ptr<ISystem>> mSystems;
         SyncObject mSyncObject;
 
         marl::WaitGroup mRenderGroup;
         marl::WaitGroup mUpdateGroup;
         Frame* mFrame;
+
+        InterfaceCollection mInterfaces;
     
     public:
         SystemCollection();
+        ~SystemCollection();
+
+        template <typename T>
+        inline void AddInterface(T* t) {
+            mInterfaces.Add<T>(t);
+        }
+
+        template <typename T>
+        inline T* QueryInterface() {
+            return mInterfaces.Query<T>();
+        }
 
         template <typename SystemT, typename ... Args>
         ISystem* Add(Args&&... args) {
@@ -121,7 +158,7 @@ namespace okami::core {
         }
 
         inline ISystem* Add(std::unique_ptr<ISystem>&& system) {
-            return mSystems.emplace(std::move(system)).first->get();
+            return mSystems.emplace_back(std::move(system)).get();
         }
 
         inline void WaitOnRender() {

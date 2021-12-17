@@ -15,6 +15,7 @@ namespace okami::core {
 
         FrameSystem(ResourceInterface& resourceInterface); 
 
+        void RegisterInterfaces(InterfaceCollection& interfaces) override;
 	 	void Startup(marl::WaitGroup& waitGroup) override;
         void Shutdown() override;
         void LoadResources(Frame* frame, 

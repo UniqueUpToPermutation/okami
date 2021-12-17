@@ -21,3 +21,4 @@ endfunction()
 
 add_subdirectory(HelloWorld)
 add_subdirectory(GeometryLoadTest)
+add_subdirectory(GLFWTest)

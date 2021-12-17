@@ -11,6 +11,9 @@ namespace okami::core {
         delete frame;
     }
 
+    void FrameSystem::RegisterInterfaces(InterfaceCollection& interfaces) {
+    }
+
     void FrameSystem::Startup(marl::WaitGroup& waitGroup) {
     }
 

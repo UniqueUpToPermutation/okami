@@ -9,7 +9,10 @@
 				"${workspaceFolder}/ext/marl/include",
 				"${workspaceFolder}/ext/cereal/include",
 				"${workspaceFolder}/ext/entt/single_include",
-				"${workspaceFolder}/ext/glm"
+				"${workspaceFolder}/ext/glm",
+                "${workspaceFolder}/graphics/interface",
+                "${workspaceFolder}/graphics/diligent/include",
+                "${workspaceFolder}/ext/DiligentEngine/DiligentSamples/ThirdParty/glfw/include"
 			],
             "defines": [
                 "PLATFORM_LINUX",

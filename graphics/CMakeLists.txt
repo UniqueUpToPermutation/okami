@@ -1,0 +1,7 @@
+set(OKAMI_GRAPHICS_INTERFACE_DIR 
+    "${CMAKE_CURRENT_SOURCE_DIR}/interface" 
+    CACHE INTERNAL OKAMI_GRAPHICS_INTERFACE_DIR)
+
+if (BUILD_OKAMI_DILIGENT)
+    add_subdirectory(diligent)
+endif()

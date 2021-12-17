@@ -10,7 +10,9 @@ set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
 
 option(BUILD_CORE "Compile and build the core library" ON)
+option(BUILD_GRAPHICS "Compile and build the graphics library" ON)
 option(BUILD_TESTS "Compile and build the tests" ON)
+option(BUILD_OKAMI_DILIGENT "Compile and build the DiligentEngine okami module" ON)
 
 add_subdirectory(ext)
 
@@ -26,4 +28,9 @@ endif()
 if (BUILD_TESTS AND BUILD_CORE)
     message("Configuring okami-tests...")
     add_subdirectory(tests)
+endif()
+
+if (BUILD_GRAPHICS)
+    message("Configuring okami-graphics...")
+    add_subdirectory(graphics)
 endif()
