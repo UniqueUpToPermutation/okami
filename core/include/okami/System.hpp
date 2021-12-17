@@ -124,50 +124,14 @@ namespace okami::core {
             return mSystems.emplace(std::move(system)).first->get();
         }
 
-        inline void Startup() {
-            marl::WaitGroup group;
-
-            for (auto& system : mSystems) {
-                system->Startup(group);
-            }
-
-            group.wait();
-        }
-
-        inline void Shutdown() {
-            for (auto& system : mSystems) {
-                system->Shutdown();
-            }
-        }
-
-        inline void LoadResources(Frame* frame) {
-            marl::WaitGroup group;
-
-            for (auto& system : mSystems) {
-                system->LoadResources(frame, group);
-            }
-
-            group.wait();
-        }
-
-        inline void BeginExecute(Frame* frame, const Time& time) {
-            mFrame = frame;
-
-             for (auto& system : mSystems) {
-                system->BeginExecute(frame, mRenderGroup, mUpdateGroup, mSyncObject, time);
-            }
-        }
-
         inline void WaitOnRender() {
             mRenderGroup.wait();
         }
 
-        inline void EndExecute() {
-            mUpdateGroup.wait();
-
-            for (auto& system : mSystems) {
-                system->EndExecute(mFrame);
-            }
-        }
+        void BeginExecute(Frame* frame, const Time& time);
+        void EndExecute();
+        void Startup();
+        void Shutdown();
+        void LoadResources(Frame* frame);
     };
 }

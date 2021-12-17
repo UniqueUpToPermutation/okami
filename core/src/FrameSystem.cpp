@@ -7,6 +7,10 @@ namespace okami::core {
         resourceInterface.Register(this);
     }
 
+    void FrameSystem::OnDestroy(Frame* frame) {
+        delete frame;
+    }
+
     void FrameSystem::Startup(marl::WaitGroup& waitGroup) {
     }
 

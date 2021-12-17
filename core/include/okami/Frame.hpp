@@ -54,57 +54,11 @@ namespace okami::core {
 			mLastChild(lastChild) {
 		}
 
-		static void Orphan(entt::registry& registry, entt::entity ent) {
-			HierarchyData& data = registry.get<HierarchyData>(ent);
-
-			if (data.mParent != entt::null) {
-				HierarchyData& parentData = registry.get<HierarchyData>(data.mParent);
-
-				if (parentData.mFirstChild == ent) {
-					parentData.mFirstChild = data.mNext;
-					if (data.mNext != entt::null) {
-						HierarchyData& nextData = registry.get<HierarchyData>(data.mNext);
-						nextData.mPrevious = entt::null;
-					}
-				}
-
-				if (parentData.mLastChild == ent) {
-					parentData.mLastChild = data.mPrevious;
-					if (data.mPrevious != entt::null) {
-						HierarchyData& prevData = registry.get<HierarchyData>(data.mPrevious);
-						prevData.mNext = entt::null;
-					}
-				}
-			}
-
-			data.mParent = entt::null;
-		}
-
-		static void AddChild(entt::registry& registry, entt::entity parent, entt::entity newChild) {
-			auto& childData = registry.get<HierarchyData>(newChild);
-
-			if (childData.mParent != entt::null) {
-				// Make this node into an orphan
-				Orphan(registry, newChild);
-			}
-
-			auto& selfData = registry.get<HierarchyData>(parent);
-			
-			// Add to the end of linked child list
-			if (selfData.mLastChild != entt::null) {
-				auto& prevLastData = registry.get<HierarchyData>(selfData.mLastChild);
-
-				prevLastData.mNext = newChild;
-				childData.mPrevious = selfData.mLastChild;
-				selfData.mLastChild = newChild;
-
-			} else {
-				selfData.mFirstChild = newChild;
-				selfData.mLastChild = newChild;
-			}
-
-			childData.mParent = parent;
-		}
+		static void Orphan(entt::registry& registry, 
+			entt::entity ent);
+		static void AddChild(entt::registry& registry, 
+			entt::entity parent, 
+			entt::entity newChild);
 	};
 
     class DepthFirstNodeIterator {
@@ -157,7 +111,10 @@ namespace okami::core {
 		entt::registry* mRegistry;
 
 	public:
-		DepthFirstNodeDoubleIterator(entt::registry* registry, entt::entity start) {
+		DepthFirstNodeDoubleIterator(
+			entt::registry* registry, 
+			entt::entity start) {
+
 			mNodeStack.emplace(start);
 			mDirection = IteratorDirection::DOWN;
 			mRegistry = registry;
@@ -202,8 +159,13 @@ namespace okami::core {
 	private:
 		entt::registry mRegistry;
 		entt::entity mRoot;
+		bool bIsUpdating = false;
 
 	public:
+		inline void SetUpdating(bool value) {
+			bIsUpdating = value;
+		}
+
 		Frame(Frame&&) = default;
 		Frame& operator=(Frame&&) = default;
 
