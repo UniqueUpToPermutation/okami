@@ -9,9 +9,10 @@ namespace okami::core {
 
     class Resource {
     private:
-        std::atomic<ref_count_t> mRefCount;
-        void* mOwner;
-        void (*mDestructor)(void* owner, Resource* object);
+        std::atomic<ref_count_t> mRefCount = 1;
+        void* mOwner = nullptr;
+		void* mBackend = nullptr;
+        void (*mDestructor)(void* owner, Resource* object) = nullptr;
 		resource_id_t mId = -1;
 
 	protected:
@@ -24,12 +25,15 @@ namespace okami::core {
 			return mId;
 		}
 
-        inline Resource() : 
-            mRefCount(1), 
-            mOwner(nullptr), 
-            mDestructor(nullptr) {
-        }
+		inline void* GetBackend() const {
+			return mBackend;
+		}
 
+		inline void SetBackend(void* value) {
+			mBackend = value;
+		}
+
+        inline Resource() = default;
 		inline Resource(const Resource& other) : 
 			Resource() {
 		}

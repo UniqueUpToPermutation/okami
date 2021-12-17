@@ -12,6 +12,7 @@ list(APPEND SOURCE
     src/Destroyer.cpp
     src/System.cpp
     src/FrameSystem.cpp
+    src/VertexLayout.cpp
 )
 
 list(APPEND INCLUDE
@@ -47,6 +48,7 @@ target_include_directories(okami-core PUBLIC
     ${CEREAL_INCLUDE_DIR} 
     ${ASSIMP_INCLUDE_DIR}
     ${OKAMI_CORE_INCLUDE_DEPENDENCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 target_link_libraries(okami-core marl assimp)

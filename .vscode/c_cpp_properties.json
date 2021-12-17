@@ -4,6 +4,7 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/core/include",
+                "${workspaceFolder}/core/",
                 "${workspaceFolder}/ext/assimp/include",
 				"${workspaceFolder}/ext/marl/include",
 				"${workspaceFolder}/ext/cereal/include",

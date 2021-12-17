@@ -14,6 +14,10 @@ option(BUILD_TESTS "Compile and build the tests" ON)
 
 add_subdirectory(ext)
 
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+    SET(PLATFORM_LINUX true)
+endif()
+
 if (BUILD_CORE)
     message("Configuring okami-core...")
     add_subdirectory(core)

@@ -6,6 +6,8 @@
 using namespace okami::core;
 
 int main() {
+    Meta::Register();
+
     marl::Scheduler scheduler(marl::Scheduler::Config::allCores());
     scheduler.bind();
     defer(scheduler.unbind());
