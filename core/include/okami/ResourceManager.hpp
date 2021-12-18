@@ -1,6 +1,7 @@
 #pragma once
 
 #include <okami/ResourceInterface.hpp>
+#include <okami/Hashers.hpp>
 
 #include <marl/waitgroup.h>
 #include <marl/defer.h>
@@ -112,12 +113,6 @@ namespace okami::core {
         // Resources that have already loaded. (Backend)
         typedef std::unordered_set<T*> set_t; 
         set_t mOwnedResources;
-
-        struct PathHash {
-            std::size_t operator()(std::filesystem::path const& p) const noexcept {
-                return std::filesystem::hash_value(p);
-            }
-        };
 
         // Various lookups so we don't load resources twice. (Frontend)
         marl::mutex mFrontendMutex;

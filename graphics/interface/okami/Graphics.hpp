@@ -1,16 +1,9 @@
 #pragma once
 
 #include <okami/System.hpp>
+#include <glm/vec2.hpp>
 
 namespace okami::graphics {
-
-    class IWindow {
-    public:
-        virtual bool ShouldClose() const = 0;
-    };
-
-    constexpr uint DEFAULT_WINDOW_WIDTH = 1920;
-    constexpr uint DEFAULT_WINDOW_HEIGHT = 1080;
 
     enum class GraphicsBackend {
         VULKAN,
@@ -18,6 +11,16 @@ namespace okami::graphics {
         D3D11,
         D3D12
     };
+    class IDisplay {
+    public:
+        virtual bool ShouldClose() const = 0;
+        virtual glm::i32vec2 GetFramebufferSize() const = 0;
+        virtual bool GetIsFullscreen() const = 0;
+        virtual GraphicsBackend GetRequestedBackend() const = 0;
+    };
+
+    constexpr uint DEFAULT_WINDOW_WIDTH = 1920;
+    constexpr uint DEFAULT_WINDOW_HEIGHT = 1080;
 
     constexpr GraphicsBackend DEFAULT_BACKEND = GraphicsBackend::VULKAN;
 

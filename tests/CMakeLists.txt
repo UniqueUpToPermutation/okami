@@ -3,8 +3,6 @@ cmake_minimum_required(VERSION 3.6)
 add_custom_target(okami-tests)
 
 function(add_assets TARGET_NAME ASSET_FOLDER)
-    message("ASSET FOLDER: ${ASSET_FOLDER}")
-
     set_source_files_properties(${ASSET_FOLDER} PROPERTIES 
         VS_DEPLOYMENT_LOCATION "."
         MACOSX_PACKAGE_LOCATION "Resources" 
@@ -21,4 +19,11 @@ endfunction()
 
 add_subdirectory(HelloWorld)
 add_subdirectory(GeometryLoadTest)
-add_subdirectory(GLFWTest)
+
+if (USE_GLFW)
+    add_subdirectory(GLFWTest)
+endif()
+
+if (BUILD_OKAMI_DILIGENT)
+    add_subdirectory(DiligentTest)
+endif()

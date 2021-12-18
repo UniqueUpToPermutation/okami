@@ -2,6 +2,8 @@
 
 #if USE_GLFW
 
+#include <GLFW/glfw3native.h>
+
 namespace okami::graphics {
     void DisplayGLFW::Startup(const RealtimeGraphicsParams& params) {
         if (!glfwInit()) {
@@ -9,6 +11,7 @@ namespace okami::graphics {
         }
 
         int glfwApiHint = GLFW_NO_API;
+
         if (params.mDeviceType == GraphicsBackend::OPENGL) {
             glfwApiHint = GLFW_OPENGL_API;
         }
@@ -28,7 +31,6 @@ namespace okami::graphics {
             nullptr, 
             nullptr);
 
-        glfwSetWindowUserPointer(window, this);
         glfwSetWindowSizeLimits(window, 320, 240, GLFW_DONT_CARE, GLFW_DONT_CARE);
 
         if (!window) {
@@ -37,6 +39,9 @@ namespace okami::graphics {
 
         mWindow = window;
         mParams = params;
+
+        if (mParams.mDeviceType == GraphicsBackend::OPENGL)
+			glfwMakeContextCurrent(mWindow);
     }
 
     void DisplayGLFW::Startup(marl::WaitGroup& waitGroup) {
@@ -44,7 +49,8 @@ namespace okami::graphics {
     }
 
     void DisplayGLFW::RegisterInterfaces(core::InterfaceCollection& interfaces) {
-        interfaces.Add<IWindow>(this);
+        interfaces.Add<IDisplay>(this);
+        interfaces.Add<INativeWindowProvider>(this);
     }
 
     bool DisplayGLFW::ShouldClose() const {
@@ -77,6 +83,37 @@ namespace okami::graphics {
 
     std::unique_ptr<core::ISystem> CreateGLFWDisplay(const RealtimeGraphicsParams& params) {
         return std::make_unique<DisplayGLFW>(params);
+    }
+
+    NativeWindow DisplayGLFW::GetWindow() {
+    #if PLATFORM_WIN32
+		DG::Win32NativeWindow Window{glfwGetWin32Window(mWindow)};
+	#endif
+	#if PLATFORM_LINUX
+		DG::LinuxNativeWindow Window;
+		Window.WindowId = glfwGetX11Window(mWindow);
+		Window.pDisplay = glfwGetX11Display();
+	#endif
+	#if PLATFORM_MACOS
+		DG::MacOSNativeWindow Window;
+		Window.pNSView = GetNSWindowView(window);
+	#endif
+
+        return Window;
+    }
+
+    glm::i32vec2 DisplayGLFW::GetFramebufferSize() const {
+        glm::i32vec2 size;
+        glfwGetFramebufferSize(mWindow, &size.x, &size.y);
+        return size;
+    }
+
+    bool DisplayGLFW::GetIsFullscreen() const {
+        return mParams.bFullscreen;
+    }
+
+    GraphicsBackend DisplayGLFW::GetRequestedBackend() const {
+        return mParams.mDeviceType;
     }
 }
 

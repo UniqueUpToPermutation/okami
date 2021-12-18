@@ -1,8 +1,10 @@
 #pragma once 
 
 #include <entt/entt.hpp>
-#include <okami/Frame.hpp>
 #include <marl/waitgroup.h>
+
+#include <okami/Frame.hpp>
+#include <okami/Hashers.hpp>
 
 namespace okami::core {
     class SyncObject;
@@ -14,26 +16,7 @@ namespace okami::core {
         double mTotalTime;
     };
 
-    class InterfaceCollection {
-    private:
-        std::unordered_map<entt::id_type, void*> mInterfaces;
-    
-    public:
-        template <typename T>
-        inline void Add(T* t) {
-            mInterfaces.emplace(entt::resolve<T>().id(), t);
-        }
-
-        template <typename T>
-        inline T* Query() {
-            auto it = mInterfaces.find(entt::resolve<T>().id());
-            if (it == mInterfaces.end()) {
-                return nullptr;
-            } else {
-                return reinterpret_cast<T*>(it->second);
-            }
-        }
-    };
+    class InterfaceCollection;
 
     class ISystem {
     public:
@@ -67,20 +50,48 @@ namespace okami::core {
         virtual ~ISystem() = default;
     };
 
+    class InterfaceCollection {
+    private:
+        std::unordered_map<entt::meta_type, void*, TypeHash> mInterfaces;
+    
+    public:
+        template <typename T>
+        inline void Add(T* t) {
+            mInterfaces.emplace(entt::resolve<T>(), t);
+        }
+
+        template <typename T>
+        inline T* Query() {
+            auto it = mInterfaces.find(entt::resolve<T>());
+            if (it == mInterfaces.end()) {
+                return nullptr;
+            } else {
+                return reinterpret_cast<T*>(it->second);
+            }
+        }
+
+        InterfaceCollection() = default;
+        inline InterfaceCollection(ISystem* system) {
+            system->RegisterInterfaces(*this);
+        }
+    };
+
     class SyncObject {
     private:
-        std::unordered_map<entt::id_type, marl::WaitGroup> mReadWaits;
-        std::unordered_map<entt::id_type, std::unique_ptr<marl::mutex>> mWriteMutexes;
+        std::unordered_map<entt::meta_type, 
+            marl::WaitGroup, TypeHash> mReadWaits;
+        std::unordered_map<entt::meta_type, 
+            std::unique_ptr<marl::mutex>, TypeHash> mWriteMutexes;
 
     public:
-        marl::WaitGroup Read(entt::id_type typeId, bool bCreateIfNotFound = false) {
-            auto it = mReadWaits.find(typeId);
+        marl::WaitGroup Read(const entt::meta_type& type, bool bCreateIfNotFound = false) {
+            auto it = mReadWaits.find(type);
 
             if (it == mReadWaits.end()) {
                 if (bCreateIfNotFound) {
                     auto waitGroup = marl::WaitGroup();
                     mReadWaits.emplace_hint(it, 
-                        std::pair<const entt::id_type, marl::WaitGroup>(typeId, std::move(waitGroup)));
+                        std::pair<entt::meta_type, marl::WaitGroup>(type, std::move(waitGroup)));
                     return waitGroup;
                 } else {
                     throw std::runtime_error("Read wait group not available!");
@@ -90,12 +101,12 @@ namespace okami::core {
             return it->second;
         }
 
-        marl::mutex& Write(entt::id_type typeId, bool bCreateIfNotFound = false) {
-            auto it = mWriteMutexes.find(typeId);
+        marl::mutex& Write(const entt::meta_type& type, bool bCreateIfNotFound = false) {
+            auto it = mWriteMutexes.find(type);
 
             if (it == mWriteMutexes.end()) {
                 if (bCreateIfNotFound) {
-                    std::pair<const entt::id_type, std::unique_ptr<marl::mutex>> mutexPair(typeId, 
+                    std::pair<entt::meta_type, std::unique_ptr<marl::mutex>> mutexPair(type, 
                         std::make_unique<marl::mutex>());
                     return *mWriteMutexes.emplace_hint(it, std::move(mutexPair))->second;
                 } else {
@@ -108,12 +119,12 @@ namespace okami::core {
 
         template <typename T>
         inline marl::WaitGroup Read(bool bCreateIfNotFound = false) {
-            return Read(entt::resolve<T>().id(), bCreateIfNotFound);
+            return Read(entt::resolve<T>(), bCreateIfNotFound);
         }
 
         template <typename T>
         inline marl::mutex& Write(bool bCreateIfNotFound = false) {
-            return Write(entt::resolve<T>().id(), bCreateIfNotFound);
+            return Write(entt::resolve<T>(), bCreateIfNotFound);
         }
 
         template <typename T>

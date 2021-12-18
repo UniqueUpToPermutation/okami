@@ -6,10 +6,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 list(APPEND SOURCE
     src/Display.cpp
+    src/BasicRenderer.cpp
 )
 
 list(APPEND INCLUDE
     include/okami/Display.hpp
+    include/okami/BasicRenderer.hpp
 )
 
 add_library(okami-graphics-diligent STATIC ${SOURCE} ${INCLUDE})
@@ -22,6 +24,7 @@ list(APPEND DEPENDENCIES_LIST
     ${OKAMI_DILIGENT_HEADERS}
     ${OKAMI_GRAPHICS_INTERFACE_DIR}
     ${GLFW_INCLUDE_DIR}
+    ${DILIGENT_INCLUDE_PATHS}
 )
 
 SET(OKAMI_DILIGENT_INCLUDE_DEPENDENCES "${DEPENDENCIES_LIST}" CACHE INTERNAL "OKAMI_DILIGENT_INCLUDE_DEPENDENCES")
@@ -33,9 +36,33 @@ target_include_directories(okami-graphics-diligent PUBLIC
     ${OKAMI_DILIGENT_INCLUDE_DEPENDENCES}
 )
 
-target_compile_definitions(okami-graphics-diligent PRIVATE USE_GLFW=1)
+target_compile_definitions(okami-graphics-diligent PRIVATE ${GLOBAL_COMPILER_FLAGS})
 
-target_link_libraries(okami-graphics-diligent glfw)
+get_supported_backends(ENGINE_LIBRARIES)
+
+target_link_libraries(okami-graphics-diligent
+PRIVATE 
+    Diligent-BuildSettings
+PUBLIC
+    Diligent-Common
+    Diligent-GraphicsTools
+    Diligent-TextureLoader
+    Diligent-TargetPlatform
+    Diligent-Imgui
+    ${ENGINE_LIBRARIES}
+	Diligent-NativeAppBase
+    glfw
+)
+
+if(PLATFORM_UNIVERSAL_WINDOWS)
+    target_link_libraries(okami-graphics-diligent PRIVATE dxguid.lib)
+elseif(PLATFORM_ANDROID)
+    target_link_libraries(okami-graphics-diligent PRIVATE GLESv3 PUBLIC native_app_glue)
+elseif(PLATFORM_LINUX)
+    target_link_libraries(okami-graphics-diligent PRIVATE XCBKeySyms GL X11)
+elseif(PLATFORM_MACOS OR PLATFORM_IOS)
+
+endif()
 
 list(APPEND LIB_DEPENDENCIES_LIST
     okami-graphics-diligent

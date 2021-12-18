@@ -21,7 +21,7 @@ int main() {
 
     systems.Startup();
 
-    auto window = systems.QueryInterface<IWindow>();
+    auto window = systems.QueryInterface<IDisplay>();
 
     systems.LoadResources(&frame);
     

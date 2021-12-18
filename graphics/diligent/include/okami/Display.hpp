@@ -2,11 +2,45 @@
 
 #include <okami/Graphics.hpp>
 
+#if PLATFORM_WIN32
+#   include <Win32NativeWindow.h>
+#endif
+#if PLATFORM_LINUX
+#   define GLFW_EXPOSE_NATIVE_X11 true
+#   include <LinuxNativeWindow.h>
+#endif
+#if PLATFORM_MACOS
+#   include <MacOSNativeWindow.h>
+#endif
+
+namespace DG = Diligent;
+
+namespace okami::graphics {
+#if PLATFORM_WIN32
+    typedef DG::Win32NativeWindow NativeWindow;
+#endif
+#if PLATFORM_LINUX
+    typedef DG::LinuxNativeWindow NativeWindow;
+#endif
+#if PLATFORM_MACOS
+    typedef DG::MacOSNativeWindow NativeWindow;
+#endif
+
+    class INativeWindowProvider {
+    public:
+        virtual NativeWindow GetWindow() = 0;
+    };
+}
+
 #if USE_GLFW
 #include <GLFW/glfw3.h>
 
 namespace okami::graphics {
-    class DisplayGLFW : public core::ISystem, public IWindow {
+
+    class DisplayGLFW : 
+        public core::ISystem, 
+        public IDisplay,
+        public INativeWindowProvider {
     private:
         GLFWwindow* mWindow = nullptr;
 		bool bOwnsWindow;
@@ -30,6 +64,12 @@ namespace okami::graphics {
             core::SyncObject& syncObject,
             const core::Time& time) override;
         void EndExecute(core::Frame* frame) override;
+
+        NativeWindow GetWindow() override;
+
+        glm::i32vec2 GetFramebufferSize() const override;
+        bool GetIsFullscreen() const override;
+        GraphicsBackend GetRequestedBackend() const override;
     };
 }
 
