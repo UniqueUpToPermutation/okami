@@ -166,51 +166,58 @@ namespace okami::core {
         }
 
         // Should be run on main thread!
-        void RunBackend(bool bBlock = false) {
+        void RunBackend(bool bFinal = false) {
             marl::lock lock(mBackendMutex);
 
-            mLoadRequestsBackend.ConsumerCollect(bBlock);
+            if (!bFinal) {
+                mLoadRequestsBackend.ConsumerCollect(false);
 
-            while (!mLoadRequestsBackend.ConsumerIsEmpty()) {
-                ResourceLoadRequest<T>& requestRef = mLoadRequestsBackend.ConsumerFront();
-  
-                marl::schedule([
-                    request = requestRef,
-                    &finalizePipe = mFinalizeRequestsBackend,
-                    &loadFinishedPipe = mLoadsFinishedFrontend,
-                    &assumeOwnershipPipe = mAssumeOwnershipBackend,
-                    taskCounter = mTaskCounter] {
-                    defer(taskCounter.done());
-                    
-                    // Load the resource...
-                    T result = request.mLoader(request.mPath, request.mParams);
-                    Handle<T> resultHandle(std::move(result));
-                    
-                    if (request.mFinalizer) {
-                        // Then send it off to the main thread for finalization...
-                        ResourceFinalizeRequest<T> finalizeRequest;
-                        finalizeRequest.bHasPath = true;
-                        finalizeRequest.mFinalizer = request.mFinalizer;
-                        finalizeRequest.mId = request.mId;
-                        finalizeRequest.mPath = request.mPath;
-                        finalizeRequest.mPromise = std::move(request.mPromise);
-                        finalizeRequest.mHandle = resultHandle;
-                        finalizePipe.ProducerEnqueue(std::move(finalizeRequest));
-                    } else {
-                        // Let the front-end know a new resource has been loaded!
-                        ResourcePostFinalize<T> message;
-                        message.mHandle = resultHandle;
-                        message.mId = request.mId;
-                        message.mPath = request.mPath;
-                        message.bHasPath = true;
-                        loadFinishedPipe.ProducerEnqueue(std::move(message));
-                        assumeOwnershipPipe.ProducerEnqueue(std::move(resultHandle));
-                    }
-                });
-                mLoadRequestsBackend.ConsumerPop();
+                while (!mLoadRequestsBackend.ConsumerIsEmpty()) {
+                    ResourceLoadRequest<T>& requestRef = mLoadRequestsBackend.ConsumerFront();
+    
+                    marl::schedule([
+                        request = requestRef,
+                        &finalizePipe = mFinalizeRequestsBackend,
+                        &loadFinishedPipe = mLoadsFinishedFrontend,
+                        &assumeOwnershipPipe = mAssumeOwnershipBackend,
+                        taskCounter = mTaskCounter] {
+                        defer(taskCounter.done());
+                        
+                        // Load the resource...
+                        T result = request.mLoader(request.mPath, request.mParams);
+                        Handle<T> resultHandle(std::move(result));
+                        
+                        if (request.mFinalizer) {
+                            // Then send it off to the main thread for finalization...
+                            ResourceFinalizeRequest<T> finalizeRequest;
+                            finalizeRequest.bHasPath = true;
+                            finalizeRequest.mFinalizer = request.mFinalizer;
+                            finalizeRequest.mId = request.mId;
+                            finalizeRequest.mPath = request.mPath;
+                            finalizeRequest.mPromise = std::move(request.mPromise);
+                            finalizeRequest.mHandle = resultHandle;
+                            finalizePipe.ProducerEnqueue(std::move(finalizeRequest));
+                        } else {
+                            // Let the front-end know a new resource has been loaded!
+                            ResourcePostFinalize<T> message;
+                            message.mHandle = resultHandle;
+                            message.mId = request.mId;
+                            message.mPath = request.mPath;
+                            message.bHasPath = true;
+                            loadFinishedPipe.ProducerEnqueue(std::move(message));
+                            assumeOwnershipPipe.ProducerEnqueue(std::move(resultHandle));
+                        }
+                    });
+                    mLoadRequestsBackend.ConsumerPop();
+                }
             }
 
-            mFinalizeRequestsBackend.ConsumerCollect(bBlock);
+            if (bFinal) {
+                // Wait for all loads in progress to finish...
+                mTaskCounter.wait();
+            }
+
+            mFinalizeRequestsBackend.ConsumerCollect(bFinal);
 
             while (!mFinalizeRequestsBackend.ConsumerIsEmpty()) {
                 ResourceFinalizeRequest<T>& request = mFinalizeRequestsBackend.ConsumerFront();
@@ -231,14 +238,14 @@ namespace okami::core {
                 mFinalizeRequestsBackend.ConsumerPop();
             }
 
-            mAssumeOwnershipBackend.ConsumerCollect(bBlock);
+            mAssumeOwnershipBackend.ConsumerCollect(bFinal);
 
             while (!mAssumeOwnershipBackend.ConsumerIsEmpty()) {
                 mOwnedResources.emplace(mAssumeOwnershipBackend.ConsumerFront().Ptr());
                 mFinalizeRequestsBackend.ConsumerPop();
             }
 
-            CollectGarbage(bBlock);
+            CollectGarbage(bFinal);
         }
 
         void OnDestroyed(T* t) {
@@ -265,7 +272,7 @@ namespace okami::core {
             bool bQueueLoad = false;
 
             {
-                marl::lock(mFrontendMutex);
+                marl::lock lock(mFrontendMutex);
 
                 mLoadsFinishedFrontend.ConsumerTryCollect();
 
@@ -274,7 +281,7 @@ namespace okami::core {
                     auto& load = mLoadsFinishedFrontend.ConsumerFront();
 
                     auto it = mPathToResource.emplace(load.mPath, load.mHandle.Ptr());
-                    mIdToResource[load.mId] = it;
+                    mIdToResource[load.mId] = it.first;
 
                     mLoadsFinishedFrontend.ConsumerPop();
                 }
@@ -316,7 +323,6 @@ namespace okami::core {
                         // Queue a new load if item is niether loaded or loading
                         bQueueLoad = true;
                         auto emplaceIt = mPathToResourceLoading.emplace(path, request.mPromise);
-                        mIdToResource[request.mId] = emplaceIt;
                     }
                 }
             }

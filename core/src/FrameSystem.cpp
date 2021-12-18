@@ -21,6 +21,9 @@ namespace okami::core {
         mManager.Shutdown();
     }
 
+    void FrameSystem::RequestSync(SyncObject& syncObject) {
+    }
+
     void FrameSystem::LoadResources(Frame* frame, 
         marl::WaitGroup& waitGroup) {
     }

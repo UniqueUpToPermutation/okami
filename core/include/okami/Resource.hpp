@@ -25,7 +25,7 @@ namespace okami::core {
 			return mId;
 		}
 
-		inline void* GetBackend() const {
+		inline void* GetBackend() {
 			return mBackend;
 		}
 

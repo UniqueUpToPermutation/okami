@@ -33,6 +33,10 @@ namespace okami::core {
         virtual void LoadResources(Frame* frame, 
             marl::WaitGroup& waitGroup) = 0;
 
+        // Called at the beginning of every frame execution before BeginExecute.
+        // Use this to request reads and writes to different component types.
+        virtual void RequestSync(SyncObject& syncObject) = 0;
+
         // Begin execution of this system's update proceedure.
         // Gauranteed to be called from the main thread.
         // You should offload work into marl tasks as opposed
@@ -118,18 +122,13 @@ namespace okami::core {
         }
 
         template <typename T>
-        inline marl::WaitGroup Read(bool bCreateIfNotFound = false) {
+        inline marl::WaitGroup Read(bool bCreateIfNotFound = true) {
             return Read(entt::resolve<T>(), bCreateIfNotFound);
         }
 
         template <typename T>
         inline marl::mutex& Write(bool bCreateIfNotFound = false) {
             return Write(entt::resolve<T>(), bCreateIfNotFound);
-        }
-
-        template <typename T>
-        inline void RequireRead() {
-            Read<T>(true);
         }
 
         template <typename T>

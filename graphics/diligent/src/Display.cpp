@@ -66,6 +66,9 @@ namespace okami::graphics {
         marl::WaitGroup& waitGroup) {
     }
 
+    void DisplayGLFW::RequestSync(core::SyncObject& syncObject) {
+    }
+
     void DisplayGLFW::BeginExecute(core::Frame* frame, 
         marl::WaitGroup& renderGroup, 
         marl::WaitGroup& updateGroup,
@@ -100,6 +103,24 @@ namespace okami::graphics {
 	#endif
 
         return Window;
+    }
+
+    void DisplayGLFW::GLMakeContextCurrent() {
+        if (mParams.mDeviceType == GraphicsBackend::OPENGL) {
+            glfwMakeContextCurrent(mWindow);
+        }
+    }
+
+    void DisplayGLFW::GLSwapBuffers(int swapInterval) {
+        if (mParams.mDeviceType == GraphicsBackend::OPENGL) {
+            
+            if (mGLSwapInterval != swapInterval) {
+                mGLSwapInterval = swapInterval;
+                glfwSwapInterval(mGLSwapInterval);
+            }
+
+            glfwSwapBuffers(mWindow);
+        }
     }
 
     glm::i32vec2 DisplayGLFW::GetFramebufferSize() const {

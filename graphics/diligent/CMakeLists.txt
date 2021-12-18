@@ -7,11 +7,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 list(APPEND SOURCE
     src/Display.cpp
     src/BasicRenderer.cpp
+    src/GraphicsUtils.cpp
 )
 
 list(APPEND INCLUDE
     include/okami/Display.hpp
     include/okami/BasicRenderer.hpp
+    include/okami/GraphicsUtils.hpp
 )
 
 add_library(okami-graphics-diligent STATIC ${SOURCE} ${INCLUDE})

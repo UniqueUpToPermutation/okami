@@ -29,6 +29,8 @@ namespace okami::graphics {
     class INativeWindowProvider {
     public:
         virtual NativeWindow GetWindow() = 0;
+        virtual void GLMakeContextCurrent() = 0;
+        virtual void GLSwapBuffers(int swapInterval = 1) = 0;
     };
 }
 
@@ -45,6 +47,7 @@ namespace okami::graphics {
         GLFWwindow* mWindow = nullptr;
 		bool bOwnsWindow;
 		RealtimeGraphicsParams mParams;
+        int mGLSwapInterval = -1;
 
         void Startup(const RealtimeGraphicsParams& params);
 
@@ -58,6 +61,7 @@ namespace okami::graphics {
         void Shutdown() override;
         void LoadResources(core::Frame* frame, 
             marl::WaitGroup& waitGroup) override;
+        void RequestSync(core::SyncObject& syncObject) override;
         void BeginExecute(core::Frame* frame, 
             marl::WaitGroup& renderGroup, 
             marl::WaitGroup& updateGroup,
@@ -66,6 +70,8 @@ namespace okami::graphics {
         void EndExecute(core::Frame* frame) override;
 
         NativeWindow GetWindow() override;
+        void GLMakeContextCurrent() override;
+        void GLSwapBuffers(int swapInterval) override;
 
         glm::i32vec2 GetFramebufferSize() const override;
         bool GetIsFullscreen() const override;

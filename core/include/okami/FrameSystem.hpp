@@ -20,6 +20,8 @@ namespace okami::core {
         void Shutdown() override;
         void LoadResources(Frame* frame, 
             marl::WaitGroup& waitGroup) override;
+        void RequestSync(SyncObject& syncObject) override;
+
         void BeginExecute(Frame* frame, 
             marl::WaitGroup& renderGroup, 
             marl::WaitGroup& updateGroup,

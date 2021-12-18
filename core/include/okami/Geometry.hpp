@@ -244,9 +244,17 @@ namespace okami::core {
 
 	private:
 		RawData mData;
-		std::atomic<uint64_t> mFlags;
+		uint64_t mFlags;
 
 	public:
+		inline RawData& DataCPU() {
+			return mData;
+		}
+
+		inline void Clear() {
+			mData = RawData();
+		}
+
 		inline Geometry(RawData&& data) 
 			: mData(std::move(data)) {
 		}
@@ -279,6 +287,11 @@ namespace okami::core {
 				Vec3Type,
 				Vec4Type>(data));
 		}
+
+		Geometry(const Geometry&) = delete;
+		Geometry& operator=(const Geometry&) = delete;
+		Geometry(Geometry&&) = default;
+		Geometry& operator=(Geometry&&) = default;
 
 		inline const Desc& Desc() const {
 			return mData.mDesc;

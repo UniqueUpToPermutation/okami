@@ -8,6 +8,8 @@ namespace okami::core {
     }
     void Destroyer::Shutdown() {
     }
+    void Destroyer::RequestSync(SyncObject& syncObject) {
+    }
     void Destroyer::LoadResources(Frame* frame, 
         marl::WaitGroup& waitGroup) {
     }

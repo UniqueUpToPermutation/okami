@@ -15,7 +15,11 @@ namespace okami::core {
         mFrame = frame;
         mFrame->SetUpdating(true);
 
-            for (auto& system : mSystems) {
+        for (auto& system : mSystems) {
+            system->RequestSync(mSyncObject);
+        }
+
+        for (auto& system : mSystems) {
             system->BeginExecute(frame, mRenderGroup, mUpdateGroup, mSyncObject, time);
         }
     }

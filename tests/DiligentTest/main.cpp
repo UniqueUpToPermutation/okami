@@ -53,12 +53,12 @@ int main() {
     scheduler.bind();
     defer(scheduler.unbind());
 
-#if VULKAN_SUPPORTED
-    TestBackend(GraphicsBackend::VULKAN);
-#endif
-
 #if GL_SUPPORTED
     TestBackend(GraphicsBackend::OPENGL);
+#endif
+
+#if VULKAN_SUPPORTED
+    TestBackend(GraphicsBackend::VULKAN);
 #endif
 
 #if D3D11_SUPPORTED
