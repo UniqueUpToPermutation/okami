@@ -125,7 +125,7 @@ namespace okami::core {
 
         template <typename Iterator>
         inline void ProducerEnqueue(Iterator it1, Iterator it2) {
-            marl::lock(mProducerMutex);
+            marl::lock lock(mProducerMutex);
             for (auto it = it1; it != it2; it++) {
                 mProducerMessages.push(std::move(*it));
             }

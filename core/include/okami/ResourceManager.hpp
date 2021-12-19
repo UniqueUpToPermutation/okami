@@ -95,9 +95,9 @@ namespace okami::core {
 
         // Used to queue up resources for finalization (move to GPU)
         MessagePipe<ResourceFinalizeRequest<T>> mFinalizeRequestsBackend;
-
-        resource_destroy_delegate_t<T> mDestroyer;
+        
         resource_construct_delegate_t<T> mConstructor;
+        resource_destroy_delegate_t<T> mDestroyer;
 
         // Resources that have already loaded. (Backend)
         typedef std::unordered_set<T*> set_t; 

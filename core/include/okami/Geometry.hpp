@@ -115,6 +115,7 @@ namespace okami::core {
 				const Data<IndexType, Vec2Type, Vec3Type, Vec4Type>& data) :
 				mVertexCount(data.mPositions.size()),
 				mIndexCount(data.mIndices.size()),
+				mIndices(data.mIndices.size() > 0 ? &data.mIndices[0] : nullptr),
 				mPositions(data.mPositions.size() > 0 ? &data.mPositions[0] : nullptr),
 				mNormals(data.mNormals.size() > 0 ? &data.mNormals[0] : nullptr),
 				mTangents(data.mTangents.size() > 0 ? &data.mTangents[0] : nullptr),
@@ -643,7 +644,7 @@ namespace okami::core {
 		uint channelCount = channel_sizes.size();
 	
 		std::vector<std::vector<uint8_t>> vert_buffers(channelCount);
-		for (int i = 0; i < channelCount; ++i)
+		for (uint i = 0; i < channelCount; ++i)
 			vert_buffers[i] = std::vector<uint8_t>(channel_sizes[i]);
 
 		std::vector<uint8_t> indx_buffer_raw(index_count * sizeof(uint32_t));
@@ -671,7 +672,7 @@ namespace okami::core {
 			}
 		}
 
-		for (int iuv = 0; iuv < indexing.mUVChannels.size(); ++iuv) {
+		for (uint iuv = 0; iuv < indexing.mUVChannels.size(); ++iuv) {
 			auto& vertexChannel = vert_buffers[indexing.mUVChannels[iuv]];
 			auto arr = &vertexChannel[indexing.mUVOffsets[iuv]];
 			if (iuv < data.mUVs.size()) {
@@ -721,7 +722,7 @@ namespace okami::core {
 			}
 		}
 
-		for (int icolor = 0; icolor < indexing.mColorChannels.size(); ++icolor) {
+		for (uint icolor = 0; icolor < indexing.mColorChannels.size(); ++icolor) {
 			auto& vertexChannel = vert_buffers[indexing.mColorChannels[icolor]];
 			auto arr = &vertexChannel[indexing.mColorOffsets[icolor]];
 			if (icolor < data.mColors.size()) {
@@ -742,7 +743,7 @@ namespace okami::core {
 
 		std::vector<BufferDesc> bufferDescs;
 
-		for (int i = 0; i < channelCount; ++i) {
+		for (uint i = 0; i < channelCount; ++i) {
 			BufferDesc vertexBufferDesc;
 			vertexBufferDesc.mSizeInBytes = vert_buffers[i].size();
 			bufferDescs.emplace_back(vertexBufferDesc);
@@ -766,7 +767,7 @@ namespace okami::core {
 
 		mVertexBuffers.clear();
 
-		for (int i = 0; i < channelCount; ++i) {
+		for (uint i = 0; i < channelCount; ++i) {
 			BufferData bufferData;
 			bufferData.mBytes = std::move(vert_buffers[i]);
 			bufferData.mDesc = bufferDescs[i];
@@ -810,7 +811,7 @@ namespace okami::core {
 		}
 
 		result.mUVs.resize(indexing.mUVChannels.size());
-		for (int iuv = 0; iuv < indexing.mUVChannels.size(); ++iuv) {
+		for (uint iuv = 0; iuv < indexing.mUVChannels.size(); ++iuv) {
 			result.mUVs[iuv].resize(V2Packer<V2T>::Stride * vertex_count);
 			auto arr = 
 				&mVertexBuffers[indexing.mUVChannels[iuv]].mBytes[indexing.mUVOffsets[iuv]];
@@ -847,7 +848,7 @@ namespace okami::core {
 		}
 
 		result.mColors.resize(indexing.mColorChannels.size());
-		for (int icolor = 0; icolor < indexing.mColorChannels.size(); ++icolor) {
+		for (uint icolor = 0; icolor < indexing.mColorChannels.size(); ++icolor) {
 			result.mColors[icolor].resize(V4Packer<V4T>::Stride * vertex_count);
 			auto arr = 
 				&mVertexBuffers[indexing.mColorChannels[icolor]].mBytes[indexing.mColorOffsets[icolor]];

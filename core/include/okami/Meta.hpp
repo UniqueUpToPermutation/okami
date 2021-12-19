@@ -8,6 +8,8 @@ namespace okami::core {
     public:
         virtual entt::meta_type GetType() const = 0;
         virtual entt::meta_type GetComponentType() const = 0;
+
+        virtual ~IComponentConcept() = default;
     };
 
     class ICopyableConcept : public IComponentConcept {

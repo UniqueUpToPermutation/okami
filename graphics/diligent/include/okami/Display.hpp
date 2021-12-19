@@ -45,7 +45,6 @@ namespace okami::graphics {
         public INativeWindowProvider {
     private:
         GLFWwindow* mWindow = nullptr;
-		bool bOwnsWindow;
 		RealtimeGraphicsParams mParams;
         int mGLSwapInterval = -1;
 

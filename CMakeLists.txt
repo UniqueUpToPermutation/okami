@@ -19,9 +19,17 @@ set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
 
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
-    SET(PLATFORM_LINUX true)
+    SET(PLATFORM_LINUX true CACHE INTERNAL "Is building on Linux")
     list(APPEND GLOBAL_COMPILER_FLAGS
         PLATFORM_LINUX)
+    message("Linux detected as platform.")
+endif()
+
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR {CMAKE_SYSTEM_NAME} STREQUAL "Macos")
+    SET(PLATFORM_MACOS true CACHE INTERNAL "Is building on Macos")
+    list(APPEND GLOBAL_COMPILER_FLAGS
+        PLATFORM_MACOS)
+    message("MacOS detected as platform.")
 endif()
 
 if (USE_GLFW)

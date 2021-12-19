@@ -35,8 +35,8 @@ namespace okami::graphics {
         const get_engine_initialization_attribs& attribsFunc) {
         SwapChainDesc SCDesc;
 
-        auto size = display->GetFramebufferSize();
-        auto isFullscreen = display->GetIsFullscreen();
+        //auto size = display->GetFramebufferSize();
+        //auto isFullscreen = display->GetIsFullscreen();
         auto backend = display->GetRequestedBackend();
         auto window = windowProvider->GetWindow();
 

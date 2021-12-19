@@ -19,6 +19,10 @@ list(APPEND SOURCE
     shader_rc.cpp
 )
 
+if(PLATFORM_MACOS)
+    list(APPEND SOURCE src/SurfaceHelper.mm)
+endif()
+
 list(APPEND INCLUDE
     include/okami/Display.hpp
     include/okami/BasicRenderer.hpp

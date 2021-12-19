@@ -17,11 +17,11 @@ namespace okami::graphics {
 
 	struct ShaderParams {
 		std::string mSource;
-		bool bCache = false;
-		const ShaderPreprocessorConfig mOverrides;
-		std::string mName;
-		std::string mEntryPoint;
 		DG::SHADER_TYPE mShaderType;
+		std::string mName;		
+		const ShaderPreprocessorConfig mOverrides;
+		std::string mEntryPoint;
+		bool bCache = false;
 
 		ShaderParams(const std::string& source,
 			DG::SHADER_TYPE type,
@@ -52,8 +52,8 @@ namespace okami::graphics {
 		inline RawShader(const ShaderPreprocessorOutput& preprocessorOutput,
 			DG::SHADER_TYPE type, const std::string& name, const std::string& entryPoint) :
 			mShaderSource(preprocessorOutput.mContent),
-			mName(name),
-			mEntryPoint(entryPoint) {
+			mEntryPoint(entryPoint),
+			mName(name) {
 			mCreateInfo.Desc.ShaderType = type;
 			mCreateInfo.SourceLanguage = DG::SHADER_SOURCE_LANGUAGE_HLSL;
 			mCreateInfo.UseCombinedTextureSamplers = true;

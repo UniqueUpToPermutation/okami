@@ -21,6 +21,8 @@ namespace okami::core {
 		}
 
     public:
+		virtual ~Resource() = default;
+
 		inline marl::Event& OnLoadEvent() {
 			return mOnLoad;
 		}
@@ -94,8 +96,8 @@ namespace okami::core {
     template <typename T>
 	class Handle {
 	private:
-		RefCountWrapper* mRefCounter;
 		T* mResource;
+		RefCountWrapper* mRefCounter;
 		
 	public:
 		inline Handle(T&& resource) : 

@@ -44,7 +44,8 @@ namespace okami::core {
 
     Geometry Geometry::Prefabs::MaterialBall(const VertexLayout& layout) {
 		return Geometry(layout, 
-			Geometry::DataSource(
+			Geometry::DataSource
+				<uint32_t, float, float, float>(
 				matball::mVertexCount,
 				matball::mIndexCount,
 				matball::mIndices,
@@ -57,7 +58,8 @@ namespace okami::core {
 
 	Geometry Geometry::Prefabs::Box(const VertexLayout& layout) {
 		return Geometry(layout, 
-			Geometry::DataSource(
+			Geometry::DataSource
+				<uint32_t, float, float, float>(
 				box::mVertexCount,
 				box::mIndexCount,
 				box::mIndices,
@@ -70,7 +72,8 @@ namespace okami::core {
 
 	Geometry Geometry::Prefabs::Sphere(const VertexLayout& layout) {
 		return Geometry(layout, 
-			Geometry::DataSource(
+			Geometry::DataSource
+				<uint32_t, float, float, float>(
 				sphere::mVertexCount,
 				sphere::mIndexCount,
 				sphere::mIndices,
@@ -83,7 +86,8 @@ namespace okami::core {
 
 	Geometry Geometry::Prefabs::BlenderMonkey(const VertexLayout& layout) {
 		return Geometry(layout, 
-			Geometry::DataSource(
+			Geometry::DataSource
+				<uint32_t, float, float, float>(
 				monkey::mVertexCount,
 				monkey::mIndexCount,
 				monkey::mIndices,
@@ -96,7 +100,8 @@ namespace okami::core {
 
 	Geometry Geometry::Prefabs::Torus(const VertexLayout& layout) {
 		return Geometry(layout, 
-			Geometry::DataSource(
+			Geometry::DataSource
+				<uint32_t, float, float, float>(
 				torus::mVertexCount,
 				torus::mIndexCount,
 				torus::mIndices,
@@ -109,7 +114,8 @@ namespace okami::core {
 
 	Geometry Geometry::Prefabs::Plane(const VertexLayout& layout) {
 		return Geometry(layout, 
-			Geometry::DataSource(
+			Geometry::DataSource
+				<uint32_t, float, float, float>(
 				plane::mVertexCount,
 				plane::mIndexCount,
 				plane::mIndices,
@@ -122,7 +128,8 @@ namespace okami::core {
 
 	Geometry Geometry::Prefabs::StanfordBunny(const VertexLayout& layout) {
 		return Geometry(layout, 
-			Geometry::DataSource(
+			Geometry::DataSource
+				<uint32_t, float, float, float>(
 				bunny::mVertexCount,
 				bunny::mIndexCount,
 				bunny::mIndices,
@@ -135,7 +142,8 @@ namespace okami::core {
 
 	Geometry Geometry::Prefabs::UtahTeapot(const VertexLayout& layout) {
 		return Geometry(layout, 
-			Geometry::DataSource(
+			Geometry::DataSource
+				<uint32_t, float, float, float>(
 				teapot::mVertexCount,
 				teapot::mIndexCount,
 				teapot::mIndices,

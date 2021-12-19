@@ -2,6 +2,10 @@
 
 #if USE_GLFW
 
+#if PLATFORM_MACOS
+extern void* GetNSWindowView(GLFWwindow* wnd);
+#endif
+
 #include <GLFW/glfw3native.h>
 
 namespace okami::graphics {
@@ -99,7 +103,7 @@ namespace okami::graphics {
 	#endif
 	#if PLATFORM_MACOS
 		DG::MacOSNativeWindow Window;
-		Window.pNSView = GetNSWindowView(window);
+		Window.pNSView = GetNSWindowView(mWindow);
 	#endif
 
         return Window;
