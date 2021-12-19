@@ -181,4 +181,6 @@ namespace okami::core {
         void Shutdown();
         void LoadResources(Frame* frame);
     };
+
+	void PrintWarning(const std::string& str);
 }

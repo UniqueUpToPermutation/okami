@@ -20,15 +20,15 @@ int main() {
     Frame frame;
 
     systems.Startup();
+    {
+        auto window = systems.QueryInterface<IDisplay>();
 
-    auto window = systems.QueryInterface<IDisplay>();
-
-    systems.LoadResources(&frame);
-    
-    while (!window->ShouldClose()) {
-        systems.BeginExecute(&frame, Time{0.0, 0.0});
-        systems.EndExecute();
+        systems.LoadResources(&frame);
+        
+        while (!window->ShouldClose()) {
+            systems.BeginExecute(&frame, Time{0.0, 0.0});
+            systems.EndExecute();
+        }
     }
-
     systems.Shutdown();
 }

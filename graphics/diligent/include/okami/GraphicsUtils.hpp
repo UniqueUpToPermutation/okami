@@ -1,6 +1,7 @@
 #pragma once
 
 #include <okami/Display.hpp>
+#include <okami/VertexLayout.hpp>
 
 #include <EngineFactory.h>
 #include <RenderDevice.h>
@@ -10,6 +11,10 @@
 namespace DG = Diligent;
 
 namespace okami::graphics {
+    struct InputLayoutDiligent {
+        std::vector<DG::LayoutElement> mElements;
+    };
+
     typedef std::function<void(
         DG::RENDER_DEVICE_TYPE DeviceType, 
         DG::EngineCreateInfo& EngineCI, 
@@ -23,4 +28,8 @@ namespace okami::graphics {
         std::vector<DG::IDeviceContext*>& contexts,
         DG::ISwapChain** swapChain,
         const get_engine_initialization_attribs& attribsFunc);
+
+    DG::VALUE_TYPE ToDiligent(core::ValueType valueType);
+    DG::INPUT_ELEMENT_FREQUENCY ToDiligent(core::InputElementFrequency frequency);
+    InputLayoutDiligent ToDiligent(const core::VertexLayout& layout);
 }

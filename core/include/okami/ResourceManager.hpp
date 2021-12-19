@@ -38,10 +38,13 @@ namespace okami::core {
     using resource_destroy_delegate_t = std::function<void(T* resource)>;
 
     template <typename T>
+    using resource_construct_delegate_t = std::function<T()>;
+
+    template <typename T>
     struct ResourceLoadRequest {
         std::filesystem::path mPath;
         resource_id_t mId;
-        Promise<Handle<T>> mPromise;
+        Handle<T> mResource;
         LoadParams<T> mParams;
         resource_load_delegate_t<T> mLoader;
         resource_finalize_delegate_t<T> mFinalizer;
@@ -52,17 +55,8 @@ namespace okami::core {
         bool bHasPath;
         std::filesystem::path mPath;
         resource_id_t mId;
-        Promise<Handle<T>> mPromise;
         Handle<T> mHandle;
         resource_finalize_delegate_t<T> mFinalizer;
-    };
-
-    template <typename T>
-    struct ResourcePostFinalize {
-        resource_id_t mId;
-        bool bHasPath;
-        std::filesystem::path mPath;
-        Handle<T> mHandle;
     };
 
     template <typename T>
@@ -99,16 +93,11 @@ namespace okami::core {
         // Used to queue up resources for loading
         MessagePipe<ResourceLoadRequest<T>> mLoadRequestsBackend;
 
-        // Load to backend
+        // Used to queue up resources for finalization (move to GPU)
         MessagePipe<ResourceFinalizeRequest<T>> mFinalizeRequestsBackend;
-        
-        // Assume ownership of these handles
-        MessagePipe<Handle<T>> mAssumeOwnershipBackend;
-
-        // Backend to frontend
-        MessagePipe<ResourcePostFinalize<T>> mLoadsFinishedFrontend;
 
         resource_destroy_delegate_t<T> mDestroyer;
+        resource_construct_delegate_t<T> mConstructor;
 
         // Resources that have already loaded. (Backend)
         typedef std::unordered_set<T*> set_t; 
@@ -121,9 +110,6 @@ namespace okami::core {
         path_to_resource_t mPathToResource;
         std::unordered_map<resource_id_t,
             typename path_to_resource_t::iterator> mIdToResource;
-        std::unordered_map<std::filesystem::path,
-            Future<Handle<T>>, PathHash> mPathToResourceLoading;
-
 
         void CollectGarbage(bool bBlock = false) {
             mDeleteQueueBackend.ConsumerCollect(bBlock);
@@ -137,7 +123,10 @@ namespace okami::core {
         }
 
     public:
-        ResourceManager(const resource_destroy_delegate_t<T>& destroyer) :
+        ResourceManager(
+            const resource_construct_delegate_t<T>& constructor,
+            const resource_destroy_delegate_t<T>& destroyer) :
+            mConstructor(constructor),
             mDestroyer(destroyer) {
         }
 
@@ -149,15 +138,26 @@ namespace okami::core {
                     marl::lock lock(mFrontendMutex);
 
                     mPathToResource.clear();
-                    mPathToResourceLoading.clear();
                     mIdToResource.clear();
                 }
 
-                // Wait until all active tasks have finished
-                mTaskCounter.wait();
-
-                // Run the backend to perform final cleanup
+                // Run the backend
                 RunBackend(true);
+
+                // Queue all owned resources up for destruction
+                bool bUncollectedResources = false;
+                for (auto resource : mOwnedResources) {
+                    mDeleteQueueBackend.ProducerEnqueue(resource);
+                    mDeleteQueueFrontend.ProducerEnqueue(resource->Id());
+                    bUncollectedResources = true;
+                }
+
+                // Collect all garbage
+                if (bUncollectedResources) {
+                    PrintWarning("ResourceManager::Shutdown(): Uncollected resources are still alive!"
+                        " This may cause a memory leak or corruption!");
+                    CollectGarbage(true);
+                }
             }
         }
 
@@ -166,86 +166,60 @@ namespace okami::core {
         }
 
         // Should be run on main thread!
-        void RunBackend(bool bFinal = false) {
+        void RunBackend(bool bBlock = false) {
             marl::lock lock(mBackendMutex);
 
-            if (!bFinal) {
-                mLoadRequestsBackend.ConsumerCollect(false);
+            mLoadRequestsBackend.ConsumerCollect(bBlock);
 
-                while (!mLoadRequestsBackend.ConsumerIsEmpty()) {
-                    ResourceLoadRequest<T>& requestRef = mLoadRequestsBackend.ConsumerFront();
-    
-                    marl::schedule([
-                        request = requestRef,
-                        &finalizePipe = mFinalizeRequestsBackend,
-                        &loadFinishedPipe = mLoadsFinishedFrontend,
-                        &assumeOwnershipPipe = mAssumeOwnershipBackend,
-                        taskCounter = mTaskCounter] {
-                        defer(taskCounter.done());
-                        
-                        // Load the resource...
-                        T result = request.mLoader(request.mPath, request.mParams);
-                        Handle<T> resultHandle(std::move(result));
-                        
-                        if (request.mFinalizer) {
-                            // Then send it off to the main thread for finalization...
-                            ResourceFinalizeRequest<T> finalizeRequest;
-                            finalizeRequest.bHasPath = true;
-                            finalizeRequest.mFinalizer = request.mFinalizer;
-                            finalizeRequest.mId = request.mId;
-                            finalizeRequest.mPath = request.mPath;
-                            finalizeRequest.mPromise = std::move(request.mPromise);
-                            finalizeRequest.mHandle = resultHandle;
-                            finalizePipe.ProducerEnqueue(std::move(finalizeRequest));
-                        } else {
-                            // Let the front-end know a new resource has been loaded!
-                            ResourcePostFinalize<T> message;
-                            message.mHandle = resultHandle;
-                            message.mId = request.mId;
-                            message.mPath = request.mPath;
-                            message.bHasPath = true;
-                            loadFinishedPipe.ProducerEnqueue(std::move(message));
-                            assumeOwnershipPipe.ProducerEnqueue(std::move(resultHandle));
-                        }
-                    });
-                    mLoadRequestsBackend.ConsumerPop();
-                }
+            while (!mLoadRequestsBackend.ConsumerIsEmpty()) {
+                ResourceLoadRequest<T>& requestRef = mLoadRequestsBackend.ConsumerFront();
+
+                mTaskCounter.add();
+                marl::schedule([
+                    request = requestRef,
+                    &finalizePipe = mFinalizeRequestsBackend,
+                    taskCounter = mTaskCounter] {
+                    defer(taskCounter.done());
+                    
+                    // Load the resource...
+                    *request.mResource = request.mLoader(request.mPath, request.mParams);
+                    
+                    // Then send it off to the main thread for finalization...
+                    ResourceFinalizeRequest<T> finalizeRequest;
+                    finalizeRequest.bHasPath = true;
+                    finalizeRequest.mFinalizer = request.mFinalizer;
+                    finalizeRequest.mId = request.mId;
+                    finalizeRequest.mPath = request.mPath;
+                    finalizeRequest.mHandle = request.mResource;
+                    finalizePipe.ProducerEnqueue(std::move(finalizeRequest));
+                });
+                mLoadRequestsBackend.ConsumerPop();
             }
 
-            if (bFinal) {
+            if (bBlock) {
                 // Wait for all loads in progress to finish...
                 mTaskCounter.wait();
             }
 
-            mFinalizeRequestsBackend.ConsumerCollect(bFinal);
+            mFinalizeRequestsBackend.ConsumerCollect(bBlock);
 
             while (!mFinalizeRequestsBackend.ConsumerIsEmpty()) {
                 ResourceFinalizeRequest<T>& request = mFinalizeRequestsBackend.ConsumerFront();
 
                 // Run finalizer on main thread!
-                request.mFinalizer(request.mHandle.Ptr());
+                if (request.mFinalizer)
+                    request.mFinalizer(request.mHandle.Ptr());
 
-                // Finally fulfill the promise!
-                request.mPromise.Set(request.mHandle);
+                mOwnedResources.emplace(request.mHandle.Ptr());
 
-                // Let the front-end know a new resource has been loaded!
-                ResourcePostFinalize<T> message;
-                message.mHandle = request.mHandle;
-                message.mId = request.mId;
-                message.mPath = request.mPath;
-                
-                mLoadsFinishedFrontend.ProducerEnqueue(std::move(message));
+                // Let everyone know this resource is ready to be used.
+                request.mHandle->OnLoadEvent().signal();
+
                 mFinalizeRequestsBackend.ConsumerPop();
             }
 
-            mAssumeOwnershipBackend.ConsumerCollect(bFinal);
-
-            while (!mAssumeOwnershipBackend.ConsumerIsEmpty()) {
-                mOwnedResources.emplace(mAssumeOwnershipBackend.ConsumerFront().Ptr());
-                mFinalizeRequestsBackend.ConsumerPop();
-            }
-
-            CollectGarbage(bFinal);
+            // Collect garbage
+            CollectGarbage(bBlock);
         }
 
         void OnDestroyed(T* t) {
@@ -254,37 +228,24 @@ namespace okami::core {
             mDeleteQueueBackend.ProducerEnqueue(t);
         }
 
-        Future<Handle<T>> Load(
+        Handle<T> Load(
             const std::filesystem::path& path,
             const LoadParams<T>& params,
             resource_id_t newId,
             const resource_load_delegate_t<T>& loader,
             const resource_finalize_delegate_t<T>& finalizer) {
 
-            if (!bShutdownCalled) {
-                return Future<Handle<T>>();
+            if (bShutdownCalled) {
+                return nullptr;
             }
 
             Handle<T> resource = nullptr;
-            Future<Handle<T>> future;
             ResourceLoadRequest<T> request;
 
             bool bQueueLoad = false;
 
             {
                 marl::lock lock(mFrontendMutex);
-
-                mLoadsFinishedFrontend.ConsumerTryCollect();
-
-                // Update the lookups with the finished loads
-                while (!mLoadsFinishedFrontend.ConsumerIsEmpty()) {
-                    auto& load = mLoadsFinishedFrontend.ConsumerFront();
-
-                    auto it = mPathToResource.emplace(load.mPath, load.mHandle.Ptr());
-                    mIdToResource[load.mId] = it.first;
-
-                    mLoadsFinishedFrontend.ConsumerPop();
-                }
 
                 // Force the collection of any deletion messages
                 if (mDeleteQueueFrontend.HasMessages()) {
@@ -308,124 +269,82 @@ namespace okami::core {
                 // Find the resource
                 auto it = mPathToResource.find(path);
 
-                // Check if resource has been loaded
                 if (it != mPathToResource.end()) {
                     resource = it->second;
                 } else {
-
-                    // Check if resource is currently loading
-                    auto it2 = mPathToResourceLoading.find(path);
-
-                    if (it2 != mPathToResourceLoading.end()) {
-                        future = it2->second;
-                    } else {
-
-                        // Queue a new load if item is niether loaded or loading
-                        bQueueLoad = true;
-                        auto emplaceIt = mPathToResourceLoading.emplace(path, request.mPromise);
-                    }
+                    // Queue a new load if item is niether loaded or loading
+                    bQueueLoad = true;
+                    resource = Handle<T>(mConstructor(), this, &ResourceDestructorWrapper<T>);
+                    auto emplace_it = mPathToResource.emplace_hint(it, path, resource.Ptr());
+                    mIdToResource.emplace(newId, emplace_it);
                 }
-            }
-
-            if (resource) {
-                request.mPromise.Set(resource);
-                return request.mPromise;
             }
 
             if (bQueueLoad) {
-                future = request.mPromise;
-                {
-                    request.mId = newId;
-                    request.mParams = params;
-                    request.mPath = path;
-                    request.mLoader = loader;
-                    request.mFinalizer = finalizer;
-                    mLoadRequestsBackend.ProducerEnqueue(std::move(request));
-                }
+                request.mId = newId;
+                request.mParams = params;
+                request.mPath = path;
+                request.mLoader = loader;
+                request.mFinalizer = finalizer;
+                request.mResource = resource;
+                mLoadRequestsBackend.ProducerEnqueue(std::move(request));
             }
 
-            return future;
+            return resource;
         }
 
-        Future<Handle<T>> Add(T&& object,
+        Handle<T> Add(T&& object,
             resource_id_t newId,
             const resource_finalize_delegate_t<T>& finalizer) {
 
-            if (!bShutdownCalled) {
-                return Future<Handle<T>>();
+            if (bShutdownCalled) {
+                return nullptr;
             }
-
-            Handle<T> handle(std::move(object));
 
             // Make sure that the destruction of this resource is reported to the manager
-            handle->SetDestructor(&ResourceDestructorWrapper<T>, this);
+            Handle<T> handle(std::move(object), this, &ResourceDestructorWrapper<T>);
 
-            if (finalizer) {
-                ResourceFinalizeRequest<T> request;
-                request.mId = newId;
-                request.bHasPath = false;
-                request.mHandle = handle;
-                request.mFinalizer = finalizer;
+            ResourceFinalizeRequest<T> request;
+            request.mId = newId;
+            request.bHasPath = false;
+            request.mHandle = handle;
+            request.mFinalizer = finalizer;
 
-                Future<Handle<T>> future = request.mPromise;
+            // Tell the backend to finalize this resource
+            mFinalizeRequestsBackend.ProducerEnqueue(std::move(request));
 
-                // Tell the backend to finalize this resource
-                mFinalizeRequestsBackend.ProducerEnqueue(std::move(request));
-
-                return future;
-            } else {
-                Handle<T> handleCopy = handle;
-                mAssumeOwnershipBackend.ProducerEnqueue(std::move(handle));
-                return Promise<Handle<T>>(std::move(handleCopy));
-            }
+            return handle;
         }
 
-        Future<Handle<T>> Add(T&& object,
+        Handle<T> Add(T&& object,
             const std::filesystem::path& path,
             resource_id_t newId,
             const resource_finalize_delegate_t<T>& finalizer) {
 
-            if (!bShutdownCalled) {
-                return Future<Handle<T>>();
+            if (bShutdownCalled) {
+                return nullptr;
             }
-
-            Handle<T> handle(std::move(object));
 
             // Make sure that the destruction of this resource is reported to the manager
-            handle->SetDestructor(&ResourceDestructorWrapper<T>, this);
+            Handle<T> handle(std::move(object), this, &ResourceDestructorWrapper<T>);
 
-            if (finalizer) {
-                ResourceFinalizeRequest<T> request;
-                request.mId = newId;
-                request.bHasPath = true;
-                request.mPath = path;
-                request.mHandle = handle;
-                request.mFinalizer = finalizer;
+            ResourceFinalizeRequest<T> request;
+            request.mId = newId;
+            request.bHasPath = true;
+            request.mPath = path;
+            request.mHandle = handle;
+            request.mFinalizer = finalizer;
 
-                Future<Handle<T>> future = request.mPromise;
-
-                {
-                    marl::lock lock(mFrontendMutex);
-                    mPathToResourceLoading.emplace(path, request.mPromise);
-                }
-
-                // Tell the backend to finalize this resource
-                mFinalizeRequestsBackend.ProducerEnqueue(std::move(request));
-
-                return future;
-            } else {
-                
-                {    
-                    marl::lock lock(mFrontendMutex);
-                    auto emplaceIt = mPathToResource.emplace(path, handle.Ptr());
-                    mIdToResource[newId] = emplaceIt.first;
-                }
-
-                Handle<T> handleCopy = handle;
-                mAssumeOwnershipBackend.ProducerEnqueue(std::move(handle));
-
-                return Promise<Handle<T>>(std::move(handleCopy));
+            {
+                marl::lock lock(mFrontendMutex);
+                auto it = mPathToResource.emplace(path, handle.Ptr());
+                mIdToResource.emplace(newId, it.first);
             }
+
+            // Tell the backend to finalize this resource
+            mFinalizeRequestsBackend.ProducerEnqueue(std::move(request));
+
+            return handle;
         }
     };
 

@@ -2,8 +2,15 @@
 #include <okami/Display.hpp>
 #include <okami/Transform.hpp>
 #include <okami/GraphicsUtils.hpp>
+#include <okami/StaticMesh.hpp>
+#include <okami/Embed.hpp>
+#include <okami/Shader.hpp>
+#include <okami/StaticMesh.hpp>
 
 using namespace Diligent;
+
+// Load shader locations in TEXT into a lookup
+void MakeShaderMap(okami::core::file_map_t* map);
 
 namespace okami::graphics {
 
@@ -27,9 +34,14 @@ namespace okami::graphics {
         }
     }
 
-    BasicRenderer::BasicRenderer(core::ISystem* displaySystem) : 
+    BasicRenderer::BasicRenderer(core::ISystem* displaySystem, core::ResourceInterface& resources) : 
         mDisplaySystem(displaySystem), 
-        mGeometryManager([this](core::Geometry* geo) { OnDestroy(geo); }) {
+        mGeometryManager(
+            []() { return core::Geometry(); },
+            [this](core::Geometry* geo) { OnDestroy(geo); }) {
+
+        // Associate the renderer with the geometry 
+        resources.Register<core::Geometry>(this);
     }
 
     void BasicRenderer::OnDestroy(core::Geometry* geometry) {
@@ -132,20 +144,62 @@ namespace okami::graphics {
         mDisplay = display;
         mNativeWindowProvider = windowProvider;
         mBackend = display->GetRequestedBackend();
+
+        mVertexLayouts.Register<core::StaticMesh>(core::VertexLayout::PositionUV());
+
+        // Load shaders
+        core::EmbeddedFileLoader fileLoader(&MakeShaderMap);
+
+        ShaderParams paramsStaticMeshVS("BasicVert.vsh", DG::SHADER_TYPE_VERTEX, "Static Mesh VS");
+        ShaderParams paramsStaticMeshPS("BasicPixel.psh", DG::SHADER_TYPE_PIXEL, "Static Mesh PS");
+
+        bool bAddLineNumbers = mBackend != GraphicsBackend::OPENGL;
+
+        mStaticMeshVS.Attach(CompileEmbeddedShader(mDevice, paramsStaticMeshVS, &fileLoader, bAddLineNumbers));
+        mStaticMeshPS.Attach(CompileEmbeddedShader(mDevice, paramsStaticMeshPS, &fileLoader, bAddLineNumbers));
+
+        // Create pipeline
+        GraphicsPipelineStateCreateInfo PSOCreateInfo;
+
+        PSOCreateInfo.PSODesc.Name = "Static Mesh";
+
+        PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+        PSOCreateInfo.GraphicsPipeline.NumRenderTargets             = 1;
+        PSOCreateInfo.GraphicsPipeline.RTVFormats[0]                = mSwapChain->GetDesc().ColorBufferFormat;
+        PSOCreateInfo.GraphicsPipeline.DSVFormat                    = mSwapChain->GetDesc().DepthBufferFormat;
+        PSOCreateInfo.GraphicsPipeline.PrimitiveTopology            = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode      = CULL_MODE_NONE;
+        PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = false;
+
+        InputLayoutDiligent layout = ToDiligent(mVertexLayouts.Get<core::StaticMesh>());
+        PSOCreateInfo.GraphicsPipeline.InputLayout.LayoutElements = layout.mElements.data();
+        PSOCreateInfo.GraphicsPipeline.InputLayout.NumElements = layout.mElements.size();
+
+        PSOCreateInfo.pVS = mStaticMeshVS;
+        PSOCreateInfo.pPS = mStaticMeshPS;
+
+        DG::IPipelineState* meshPipeline = nullptr;
+        mDevice->CreateGraphicsPipelineState(PSOCreateInfo, &meshPipeline);
+        mStaticMeshPipeline.Attach(meshPipeline);
     }
 
     void BasicRenderer::RegisterInterfaces(core::InterfaceCollection& interfaces) {
+        interfaces.Add<core::IVertexLayoutProvider>(this);
     }
 
     void BasicRenderer::LoadResources(core::Frame* frame, 
         marl::WaitGroup& waitGroup) {
+
+        waitGroup.add();
+        marl::Task task([&geoManager = mGeometryManager, waitGroup]() {
+            defer(waitGroup.done());
+            geoManager.RunBackend(true);
+        }, marl::Task::Flags::SameThread);
+
+        marl::schedule(std::move(task));
     }
 
-    void BasicRenderer::RequestSync(core::SyncObject& syncObject) {
-        syncObject.Read<core::Transform>().add();
-    }
-
-    core::Future<core::Handle<core::Geometry>> BasicRenderer::Load(
+    core::Handle<core::Geometry> BasicRenderer::Load(
         const std::filesystem::path& path, 
         const core::LoadParams<core::Geometry>& params, 
         core::resource_id_t newResId) {
@@ -162,7 +216,7 @@ namespace okami::graphics {
         return mGeometryManager.Load(path, params, newResId, loader, finalizer);
     } 
 
-    core::Future<core::Handle<core::Geometry>> BasicRenderer::Add(core::Geometry&& obj, 
+    core::Handle<core::Geometry> BasicRenderer::Add(core::Geometry&& obj, 
         core::resource_id_t newResId) {
         auto finalizer = [this](core::Geometry* geo) {
             OnFinalize(geo);
@@ -170,13 +224,21 @@ namespace okami::graphics {
         return mGeometryManager.Add(std::move(obj), newResId, finalizer);
     }
 
-    core::Future<core::Handle<core::Geometry>> BasicRenderer::Add(core::Geometry&& obj, 
+    core::Handle<core::Geometry> BasicRenderer::Add(core::Geometry&& obj, 
         const std::filesystem::path& path, 
         core::resource_id_t newResId) {
          auto finalizer = [this](core::Geometry* geo) {
             OnFinalize(geo);
         };
         return mGeometryManager.Add(std::move(obj), path, newResId, finalizer);
+    }
+
+    const core::VertexLayout& BasicRenderer::GetVertexLayout(
+        const entt::meta_type& type) const {
+        return mVertexLayouts.Get(type);
+    }
+
+    void BasicRenderer::RequestSync(core::SyncObject& syncObject) {
     }
 
     void BasicRenderer::BeginExecute(core::Frame* frame, 
@@ -193,11 +255,6 @@ namespace okami::graphics {
         }, marl::Task::Flags::SameThread);
         marl::schedule(std::move(managerUpdates));
 
-        {
-            // Read updated transforms
-            syncObject.Read<core::Transform>().done();
-        }
-
         auto backBufferRTV = mSwapChain->GetCurrentBackBufferRTV();
         auto depthBufferDSV = mSwapChain->GetDepthBufferDSV();
         auto immediateContext = mContexts[0];
@@ -209,6 +266,40 @@ namespace okami::graphics {
             RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         immediateContext->ClearRenderTarget(backBufferRTV, color, 
             RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+        auto& registry = frame->Registry();
+
+        auto staticMeshes = registry.view<core::StaticMesh>();
+
+        for (auto entity : staticMeshes) {
+            auto& mesh = staticMeshes.get<core::StaticMesh>(entity);
+
+            auto geometryImpl = reinterpret_cast<GeometryImpl*>(mesh.mGeometry->GetBackend());
+
+            DG::IBuffer* vertBuffers[] = { geometryImpl->mVertexBuffers[0] };
+            DG::Uint64 offsets[] = { 0 };
+            immediateContext->SetVertexBuffers(0, 1, vertBuffers, offsets, 
+                RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_NONE);
+            if (geometryImpl->mIndexBuffer) {
+                immediateContext->SetIndexBuffer(geometryImpl->mIndexBuffer, 0, 
+                    RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+            }
+
+            immediateContext->SetPipelineState(mStaticMeshPipeline);
+            
+            const auto& desc = mesh.mGeometry->Desc();
+
+            if (geometryImpl->mIndexBuffer) {
+                DG::DrawIndexedAttribs attribs;
+                attribs.NumIndices = desc.mIndexedAttribs.mNumIndices;
+                attribs.IndexType = ToDiligent(desc.mIndexedAttribs.mIndexType);
+                immediateContext->DrawIndexed(attribs);
+            } else {
+                DG::DrawAttribs attribs;
+                attribs.NumVertices = desc.mAttribs.mNumVertices;
+                immediateContext->Draw(attribs);
+            }
+        }
 
         if (mBackend == GraphicsBackend::OPENGL) {
             // For OpenGL with GLFW, we need to call glfwSwapBuffers.
@@ -222,13 +313,17 @@ namespace okami::graphics {
     }
 
     void BasicRenderer::Shutdown() {
+        mStaticMeshPipeline.Release();
+        mStaticMeshPS.Release();
+        mStaticMeshVS.Release();
+
         mSwapChain.Release();
         mContexts.clear();
         mDevice.Release();
         mEngineFactory.Release();
     }
 
-    std::unique_ptr<core::ISystem> CreateRenderer(core::ISystem* displaySystem) {
-        return std::make_unique<BasicRenderer>(displaySystem);
+    std::unique_ptr<core::ISystem> CreateRenderer(core::ISystem* displaySystem, core::ResourceInterface& resources) {
+        return std::make_unique<BasicRenderer>(displaySystem, resources);
     }
 }

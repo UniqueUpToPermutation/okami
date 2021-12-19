@@ -1,5 +1,8 @@
 #include <okami/Okami.hpp>
 #include <okami/Graphics.hpp>
+#include <okami/Geometry.hpp>
+#include <okami/Transform.hpp>
+#include <okami/StaticMesh.hpp>
 
 #include <iostream>
 #include <marl/defer.h>
@@ -14,16 +17,16 @@ void TestBackend(GraphicsBackend backend) {
 
     switch (backend) {
         case GraphicsBackend::VULKAN:
-            params.mWindowTitle = "okami Diligent-Engine Test (Vulkan)";
+            params.mWindowTitle = "okami Diligent-Engine Geometry Test (Vulkan)";
             break;
         case GraphicsBackend::OPENGL:
-            params.mWindowTitle = "okami Diligent-Engine Test (OpenGL)";
+            params.mWindowTitle = "okami Diligent-Engine Geometry Test (OpenGL)";
             break;
         case GraphicsBackend::D3D11:
-            params.mWindowTitle = "okami Diligent-Engine Test (D3D11)";
+            params.mWindowTitle = "okami Diligent-Engine Geometry Test (D3D11)";
             break;
         case GraphicsBackend::D3D12:
-            params.mWindowTitle = "okami Diligent-Engine Test (D3D12)";
+            params.mWindowTitle = "okami Diligent-Engine Geometry Test (D3D12)";
             break;
     }
 
@@ -34,12 +37,27 @@ void TestBackend(GraphicsBackend backend) {
 
     systems.Startup();
     {
-        Frame frame;
+        auto displayInterface = systems.QueryInterface<IDisplay>();
+        auto vertexLayouts = systems.QueryInterface<IVertexLayoutProvider>();
+        auto staticMeshLayout = vertexLayouts->GetVertexLayout<StaticMesh>();
 
-        auto window = systems.QueryInterface<IDisplay>();
+        Geometry::Data<> data;
+        data.mPositions = {
+            glm::vec3(0.0f, 0.5f, 0.0f),
+            glm::vec3(0.5f, -0.5f, 0.0f),
+            glm::vec3(-0.5f, -0.5f, 0.0f)
+        };
+        auto geo = resources.Add(
+            Geometry(staticMeshLayout, std::move(data)));
+
+        Frame frame;
+        auto entity = frame.CreateEntity();
+        frame.Emplace<Transform>(entity);
+        frame.Emplace<StaticMesh>(entity, StaticMesh{geo});
+
         systems.LoadResources(&frame);
         
-        while (!window->ShouldClose()) {
+        while (!displayInterface->ShouldClose()) {
             systems.BeginExecute(&frame, Time{0.0, 0.0});
             systems.EndExecute();
         }

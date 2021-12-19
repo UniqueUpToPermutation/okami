@@ -327,4 +327,59 @@ namespace okami::graphics {
                 break;
         }
     }
+
+    DG::VALUE_TYPE ToDiligent(core::ValueType valueType) {
+        switch (valueType) {
+        case core::ValueType::INT8:
+            return VT_INT8;
+        case core::ValueType::INT16:
+            return VT_UINT16;
+        case core::ValueType::INT32:
+            return VT_UINT32;
+        case core::ValueType::UINT8:
+            return VT_UINT8;
+        case core::ValueType::UINT16:
+            return VT_UINT16;
+        case core::ValueType::UINT32:
+            return VT_UINT32;
+        case core::ValueType::FLOAT16:
+            return VT_FLOAT16;
+        case core::ValueType::FLOAT32:
+            return VT_FLOAT32;
+        default:
+            throw std::runtime_error("Unrecognized value type!");
+        }
+    }
+
+    DG::INPUT_ELEMENT_FREQUENCY ToDiligent(core::InputElementFrequency frequency) {
+        switch (frequency) {
+        case core::InputElementFrequency::PER_INSTANCE:
+            return DG::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE;
+        case core::InputElementFrequency::PER_VERTEX:
+            return DG::INPUT_ELEMENT_FREQUENCY_PER_VERTEX;
+        default:
+            throw std::runtime_error("Uncognized input element frequency!");    
+        }
+    }
+
+    InputLayoutDiligent ToDiligent(const core::VertexLayout& layout) {
+        InputLayoutDiligent result;
+
+        for (auto& element : layout.mElements) {
+            DG::LayoutElement dg_element;
+            dg_element.BufferSlot = element.mBufferSlot;
+            dg_element.Frequency = ToDiligent(element.mFrequency);
+            dg_element.InputIndex = element.mInputIndex;
+            dg_element.InstanceDataStepRate = element.mInstanceDataStepRate;
+            dg_element.IsNormalized = element.bIsNormalized;
+            dg_element.NumComponents = element.mNumComponents;
+            dg_element.RelativeOffset = element.mRelativeOffset;
+            dg_element.Stride = element.mStride;
+            dg_element.ValueType = ToDiligent(element.mValueType);
+            
+            result.mElements.emplace_back(std::move(dg_element));
+        }
+
+        return result;
+    }
 }

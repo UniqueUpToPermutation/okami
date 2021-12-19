@@ -3,17 +3,17 @@
 
 #include <entt/entt.hpp>
 
+#include <marl/event.h>
+
 namespace okami::core {
-    typedef int32_t ref_count_t;
+    typedef int64_t ref_count_t;
 	typedef int64_t resource_id_t;
 
     class Resource {
     private:
-        std::atomic<ref_count_t> mRefCount = 1;
-        void* mOwner = nullptr;
-		void* mBackend = nullptr;
-        void (*mDestructor)(void* owner, Resource* object) = nullptr;
 		resource_id_t mId = -1;
+		marl::Event mOnLoad;
+		void* mBackend = nullptr;
 
 	protected:
 		inline void SetId(resource_id_t value) {
@@ -21,6 +21,10 @@ namespace okami::core {
 		}
 
     public:
+		inline marl::Event& OnLoadEvent() {
+			return mOnLoad;
+		}
+
 		inline resource_id_t Id() const {
 			return mId;
 		}
@@ -36,106 +40,136 @@ namespace okami::core {
         inline Resource() = default;
 		inline Resource(const Resource& other) : 
 			Resource() {
+			assert(other.mBackend == nullptr);
 		}
 
 		inline Resource(Resource&& other) : 
 			Resource() {
-			if (other.mOwner) {
-				throw std::runtime_error("Cannot move managed resource!");
-			}
-			if (other.mRefCount > 1) {
-				throw std::runtime_error("Cannot move resource with more than one reference!");
-			}
-		}
-
-		inline Resource& operator=(Resource& other) {
-			return *this;
+			assert(other.mBackend == nullptr);
 		}
 
 		inline Resource& operator=(Resource&& other) {
-			if (other.mOwner) {
-				throw std::runtime_error("Cannot move managed resource!");
-			}
-			if (other.mRefCount > 1) {
-				throw std::runtime_error("Cannot move resource with more than one reference!");
-			}
-
+			assert(other.mBackend == nullptr);
 			return *this;
 		}
 
-        inline void SetDestructor(void (*destructor)(void*, Resource*), void* owner) {
-            mDestructor = destructor;
-            mOwner = owner;
-        }
-
-        inline void AddRef() {
-            mRefCount++;
-        }
-
-        inline void Release() {
-            auto result = mRefCount.fetch_sub(1);
-        
-            if (result == 1) {
-                if (mDestructor) {
-                    mDestructor(mOwner, this);
-                } else {
-                    delete this;
-                }
-            }
-        }
+		inline Resource& operator=(const Resource& other) {
+			assert(other.mBackend == nullptr);
+			return *this;
+		}
 
 		virtual entt::meta_type GetType() const = 0;
     };
 
+	typedef void(*resource_destructor_t)(void* owner, Resource* object);
+
+	struct RefCountWrapper {
+		std::atomic<ref_count_t> mRefCount = 1;
+        void* const mOwner;
+        resource_destructor_t const mDestructor;
+
+		void AddRef() {
+			++mRefCount;
+		}
+
+		void Release(Resource* object) {
+			auto value = mRefCount.fetch_sub(1);
+
+			if (value == 1) {
+				if (mOwner) {
+					mDestructor(mOwner, object);
+				} else {
+					delete object;
+				}
+
+				delete this;
+			}
+		}
+
+		RefCountWrapper(void* owner, resource_destructor_t destructor) :
+			mOwner(owner), mDestructor(std::move(destructor)) {
+		}
+	};
+
     template <typename T>
 	class Handle {
 	private:
+		RefCountWrapper* mRefCounter;
 		T* mResource;
-
+		
 	public:
 		inline Handle(T&& resource) : 
-			mResource(new T(std::move(resource))) {
+			mResource(new T(std::move(resource))),
+			mRefCounter(new RefCountWrapper(nullptr, nullptr)) {
 		}
 
-		inline Handle() : mResource(nullptr) {
+		inline Handle(T&& resource, void* owner, resource_destructor_t destructor) : 
+			mResource(new T(std::move(resource))),
+			mRefCounter(new RefCountWrapper(owner, std::move(destructor))) {
 		}
 
-		inline Handle(T* resource) : mResource(resource) {
-			if (resource)
-				resource->AddRef();
+		inline Handle() : 
+			mResource(nullptr),
+			mRefCounter(nullptr) {
 		}
 
-		inline Handle(const Handle<T>& h) : mResource(h.mResource) {
-			if (mResource)
-				mResource->AddRef();
+		inline Handle(T* resource) : 
+			mResource(resource),
+			mRefCounter(nullptr) {
+			if (resource) {
+				mRefCounter = new RefCountWrapper(nullptr, nullptr);
+			}
 		}
 
-		inline Handle(Handle<T>&& h) : mResource(h.mResource) {
+		inline Handle(const Handle<T>& h) : 
+			mResource(h.mResource),
+			mRefCounter(h.mRefCounter) {
+			if (mResource) {
+				mRefCounter->AddRef();
+			}
+		}
+
+		inline Handle(Handle<T>&& h) : 
+			mResource(h.mResource), 
+			mRefCounter(h.mRefCounter) {
 			h.mResource = nullptr;
+			h.mRefCounter = nullptr;
+		}
+
+		inline void Release() {
+			if (mResource) {
+				mRefCounter->Release(mResource);
+			}
+		}
+
+		inline void Adopt(T* resource, void* owner, resource_destructor_t destructor) {
+			Release();
+
+			mResource = resource;
+			if (resource) {
+				mRefCounter = new RefCountWrapper(owner, std::move(destructor));
+			}
 		}
 
 		inline void Adopt(T* resource) {
-			if (mResource)
-				mResource->Release();
-
-			mResource = resource;
+			Adopt(resource, nullptr, nullptr);
 		}
 
 		inline Handle<T>& operator=(const Handle<T>& h) {
-			if (mResource)
-				mResource->Release();
+			Release();
+
+			if (h.mRefCounter) {
+				h.mRefCounter->AddRef();
+			}
 
 			mResource = h.mResource;
-
-			if (mResource)
-				mResource->AddRef();
+			mRefCounter = h.mRefCounter;
 
 			return *this;
 		}
 
 		inline Handle<T>& operator=(Handle<T>&& h) {
-			if (mResource)
-				mResource->Release();
+			Release();
 
 			mResource = h;
 			h.mResource = nullptr;
@@ -143,8 +177,7 @@ namespace okami::core {
 		}
 
 		inline ~Handle() {
-			if (mResource)
-				mResource->Release();
+			Release();
 		}
 
 		inline T* Ptr() const {
@@ -179,15 +212,6 @@ namespace okami::core {
 		template <typename T2>
 		inline Handle<T2> DownCast() {
 			return Handle<T2>(static_cast<T2*>(mResource));
-		}
-
-		inline T* Release() {
-			T* result = mResource;
-			if (mResource) {
-				result->Release();
-				mResource = nullptr;
-			}
-			return result;
 		}
 
 		struct Hasher {

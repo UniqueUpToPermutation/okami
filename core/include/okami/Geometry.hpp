@@ -3,6 +3,7 @@
 #include <okami/VertexLayout.hpp>
 #include <okami/Resource.hpp>
 #include <okami/ResourceInterface.hpp>
+#include <okami/System.hpp>
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
@@ -288,6 +289,7 @@ namespace okami::core {
 				Vec4Type>(data));
 		}
 
+		Geometry() = default;
 		Geometry(const Geometry&) = delete;
 		Geometry& operator=(const Geometry&) = delete;
 		Geometry(Geometry&&) = default;
@@ -628,8 +630,6 @@ namespace okami::core {
 			size_t vertex_count);
 	};
 
-	void PrintWarning(const std::string& str);
-
 	template <typename I3T, typename V2T, typename V3T, typename V4T>
 	void Geometry::RawData::Pack(const VertexLayout& layout,
 		const Geometry::DataSource<I3T, V2T, V3T, V4T>& data) {
@@ -674,7 +674,7 @@ namespace okami::core {
 		for (int iuv = 0; iuv < indexing.mUVChannels.size(); ++iuv) {
 			auto& vertexChannel = vert_buffers[indexing.mUVChannels[iuv]];
 			auto arr = &vertexChannel[indexing.mUVOffsets[iuv]];
-			if (iuv <= data.mUVs.size()) {
+			if (iuv < data.mUVs.size()) {
 				ArraySliceCopyToBytes<float, V2T, &V2Packer<V2T>::Pack>(
 					arr, &data.mUVs[iuv][0], indexing.mUVStrides[iuv], V2Packer<V2T>::Stride, vertex_count);
 			} else {
@@ -724,7 +724,7 @@ namespace okami::core {
 		for (int icolor = 0; icolor < indexing.mColorChannels.size(); ++icolor) {
 			auto& vertexChannel = vert_buffers[indexing.mColorChannels[icolor]];
 			auto arr = &vertexChannel[indexing.mColorOffsets[icolor]];
-			if (icolor <= data.mColors.size()) {
+			if (icolor < data.mColors.size()) {
 				ArraySliceCopyToBytes<float, V4T, &V4Packer<V4T>::Pack>(
 					arr, &data.mColors[icolor][0], indexing.mColorStrides[icolor], 
 						V4Packer<V4T>::Stride, vertex_count);
@@ -734,7 +734,7 @@ namespace okami::core {
 			}
 		}
 
-		if (data.mIndices != nullptr) {
+		if (data.mIndices != nullptr && data.mIndexCount > 0) {
 			ArraySliceCopy<uint32_t, I3T, &I3Packer<I3T>::Pack>(
 				&indx_buffer[0], &data.mIndices[0], 3, 
 				I3Packer<I3T>::Stride, index_count / 3);
@@ -759,7 +759,7 @@ namespace okami::core {
 		attribs.mNumVertices = vertex_count;
 
 		// Write to output raw geometry
-		mDesc.bIsIndexed = true;
+		mDesc.bIsIndexed = (data.mIndices != nullptr && data.mIndexCount > 0);
 		mDesc.mAttribs = attribs;
 		mDesc.mIndexedAttribs = indexedAttribs;
 		mDesc.mLayout = layout;
@@ -876,4 +876,42 @@ namespace okami::core {
 		auto rawData = Geometry::RawData::Load(path, layout);
 		return rawData.Unpack<IndexType, Vec2Type, Vec3Type, Vec4Type>();
 	}
+
+	class IVertexLayoutProvider {
+    public:
+        virtual const VertexLayout& GetVertexLayout(
+            const entt::meta_type& type) const = 0;
+        
+        template <typename T>
+        inline const VertexLayout& GetVertexLayout() const {
+            return GetVertexLayout(entt::resolve<T>());
+        }
+    };
+
+    class VertexLayoutRegistry {
+    private:
+        std::unordered_map<entt::meta_type, VertexLayout, TypeHash> 
+            mVertexLayouts;
+    public:
+        template <typename T>
+        void Register(VertexLayout layout) {
+            mVertexLayouts.emplace(entt::resolve<T>(), std::move(layout));
+        }
+
+        const VertexLayout& Get(const entt::meta_type& type) const {
+            auto it = mVertexLayouts.find(type);
+
+            if (it != mVertexLayouts.end()) {
+                return it->second;
+            } else {
+                throw std::runtime_error("This type does not have"
+                    " an associated vertex layout!");
+            }
+        }
+
+		template <typename T>
+		const VertexLayout& Get() const {
+			return Get(entt::resolve<T>());
+		}
+    };
 }

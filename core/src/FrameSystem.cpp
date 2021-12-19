@@ -3,7 +3,9 @@
 
 namespace okami::core {
     FrameSystem::FrameSystem(ResourceInterface& resourceInterface) : 
-        mManager([this](Frame* frame) { this->OnDestroy(frame); }) {
+        mManager(
+            []() { return Frame(); },
+            [this](Frame* frame) { this->OnDestroy(frame); }) {
         resourceInterface.Register(this);
     }
 
@@ -46,7 +48,7 @@ namespace okami::core {
     void FrameSystem::EndExecute(Frame* frame) {
     }
 
-    Future<Handle<Frame>> FrameSystem::Load(
+    Handle<Frame> FrameSystem::Load(
         const std::filesystem::path& path, 
         const LoadParams<Frame>& params, 
         resource_id_t newResId) {
@@ -54,12 +56,12 @@ namespace okami::core {
         throw std::runtime_error("Not implemented yet!");
     }
 
-    Future<Handle<Frame>> FrameSystem::Add(Frame&& obj, 
+    Handle<Frame> FrameSystem::Add(Frame&& obj, 
         resource_id_t newResId) {
         return mManager.Add(std::move(obj), newResId, nullptr);
     }
 
-    Future<Handle<Frame>> FrameSystem::Add(Frame&& obj, 
+    Handle<Frame> FrameSystem::Add(Frame&& obj, 
         const std::filesystem::path& path,
         resource_id_t newResId) {
         return mManager.Add(std::move(obj), path, newResId, nullptr);

@@ -29,14 +29,14 @@ namespace okami::core {
             const Time& time) override;
         void EndExecute(Frame* frame) override;
 
-		Future<Handle<Frame>> Load(
+		Handle<Frame> Load(
             const std::filesystem::path& path, 
             const LoadParams<Frame>& params, 
             resource_id_t newResId) override;
 
-        Future<Handle<Frame>> Add(Frame&& obj, 
+        Handle<Frame> Add(Frame&& obj, 
 			resource_id_t newResId) override;
-		Future<Handle<Frame>> Add(Frame&& obj, 
+		Handle<Frame> Add(Frame&& obj, 
 			const std::filesystem::path& path,
 			resource_id_t newResId) override;
 	};

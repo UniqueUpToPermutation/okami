@@ -8,6 +8,7 @@ option(BUILD_OKAMI_DILIGENT "Compile and build the DiligentEngine okami module" 
 option(USE_GLFW "Use GLFW for windowing" ON)
 
 add_subdirectory(ext)
+add_subdirectory(tools)
 
 include(CTest)
 

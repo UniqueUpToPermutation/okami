@@ -26,4 +26,5 @@ endif()
 
 if (BUILD_OKAMI_DILIGENT)
     add_subdirectory(DiligentTest)
+    add_subdirectory(DiligentGeometryTest)
 endif()

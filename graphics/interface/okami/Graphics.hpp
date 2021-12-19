@@ -40,5 +40,7 @@ namespace okami::graphics {
         return CreateGLFWDisplay(params);
     }
 
-    std::unique_ptr<core::ISystem> CreateRenderer(core::ISystem* displaySystem);
+    std::unique_ptr<core::ISystem> CreateRenderer(
+        core::ISystem* displaySystem, 
+        core::ResourceInterface& resources);
 }

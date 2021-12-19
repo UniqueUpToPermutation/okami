@@ -32,11 +32,11 @@ namespace teapot {
 	#include <embed/teapotmesh.hpp>
 }
 
-#include <iostream>
-
 #include <assimp/postprocess.h>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
+
+#include <iostream>
 
 using namespace entt;
 
@@ -261,10 +261,6 @@ namespace okami::core {
 			}
 		}
 	}
-
-    void PrintWarning(const std::string& str) {
-        std::cout << "WARNING: " << str << std::endl;
-    }
 
     PackIndexing PackIndexing::From(
         const VertexLayout& layout,

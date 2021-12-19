@@ -2,7 +2,13 @@
 #include <okami/Destroyer.hpp>
 #include <okami/Frame.hpp>
 
+#include <iostream>
+
 namespace okami::core {
+    void PrintWarning(const std::string& str) {
+        std::cout << "WARNING: " << str << std::endl;
+    }
+
     SystemCollection::SystemCollection() {
         mSystems.emplace_back(std::make_unique<Destroyer>());
     }

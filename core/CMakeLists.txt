@@ -12,6 +12,7 @@ list(APPEND SOURCE
     src/Destroyer.cpp
     src/System.cpp
     src/FrameSystem.cpp
+    src/Embed.cpp
     src/VertexLayout.cpp
 )
 
@@ -29,6 +30,7 @@ list(APPEND INCLUDE
     include/okami/ResourceManager.hpp
     include/okami/FrameSystem.hpp
     include/okami/Okami.hpp
+    include/okami/Embed.hpp
 )
 
 add_library(okami-core STATIC ${SOURCE} ${INCLUDE})

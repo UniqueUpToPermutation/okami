@@ -4,16 +4,27 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Embed shaders (LINUX)
+add_custom_command(
+	OUTPUT shader_rc.cpp
+	COMMAND embedfile ${CMAKE_CURRENT_SOURCE_DIR}/shaders shader_rc.cpp MakeShaderMap
+	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*)
+
 list(APPEND SOURCE
     src/Display.cpp
     src/BasicRenderer.cpp
     src/GraphicsUtils.cpp
+    src/ShaderPreprocessor.cpp
+    src/Shader.cpp
+    shader_rc.cpp
 )
 
 list(APPEND INCLUDE
     include/okami/Display.hpp
     include/okami/BasicRenderer.hpp
     include/okami/GraphicsUtils.hpp
+    include/okami/ShaderPreprocessor.hpp
+    include/okami/Shader.hpp
 )
 
 add_library(okami-graphics-diligent STATIC ${SOURCE} ${INCLUDE})

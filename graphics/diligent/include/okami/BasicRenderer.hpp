@@ -2,6 +2,7 @@
 
 #include <okami/System.hpp>
 #include <okami/ResourceManager.hpp>
+#include <okami/ResourceInterface.hpp>
 #include <okami/Geometry.hpp>
 #include <okami/Graphics.hpp>
 #include <okami/Display.hpp>
@@ -16,7 +17,8 @@ namespace DG = Diligent;
 namespace okami::graphics {
     class BasicRenderer : 
         public core::ISystem,
-        public core::IResourceManager<core::Geometry> {
+        public core::IResourceManager<core::Geometry>,
+        public core::IVertexLayoutProvider {
     private:
         DG::RefCntAutoPtr<DG::IRenderDevice>    mDevice;
         DG::RefCntAutoPtr<DG::IEngineFactory>   mEngineFactory;
@@ -27,6 +29,11 @@ namespace okami::graphics {
         INativeWindowProvider*                  mNativeWindowProvider;
         IDisplay*                               mDisplay;
         GraphicsBackend                         mBackend;
+        core::VertexLayoutRegistry              mVertexLayouts;
+
+        DG::RefCntAutoPtr<DG::IShader>          mStaticMeshVS;
+        DG::RefCntAutoPtr<DG::IShader>          mStaticMeshPS;
+        DG::RefCntAutoPtr<DG::IPipelineState>   mStaticMeshPipeline;
 
         core::ResourceManager<core::Geometry>   mGeometryManager;
 
@@ -34,7 +41,7 @@ namespace okami::graphics {
         void OnDestroy(core::Geometry* geometry);
         void OnFinalize(core::Geometry* geometry);
 
-        BasicRenderer(core::ISystem* displaySystem);
+        BasicRenderer(core::ISystem* displaySystem, core::ResourceInterface& resources);
 
         void Startup(marl::WaitGroup& waitGroup) override;
         void Shutdown() override;
@@ -50,15 +57,18 @@ namespace okami::graphics {
             const core::Time& time) override;
         void EndExecute(core::Frame* frame) override;
 
-        core::Future<core::Handle<core::Geometry>> Load(
+        core::Handle<core::Geometry> Load(
             const std::filesystem::path& path, 
             const core::LoadParams<core::Geometry>& params, 
             core::resource_id_t newResId) override;
 
-        core::Future<core::Handle<core::Geometry>> Add(core::Geometry&& obj, 
+        core::Handle<core::Geometry> Add(core::Geometry&& obj, 
             core::resource_id_t newResId) override;
-        core::Future<core::Handle<core::Geometry>> Add(core::Geometry&& obj, 
+        core::Handle<core::Geometry> Add(core::Geometry&& obj, 
             const std::filesystem::path& path, 
             core::resource_id_t newResId) override;
+
+        const core::VertexLayout& GetVertexLayout(
+            const entt::meta_type& type) const override;
     };
 }

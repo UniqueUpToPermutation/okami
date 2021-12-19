@@ -5,8 +5,10 @@
 #include <atomic>
 
 #include <entt/entt.hpp>
+
 #include <okami/Resource.hpp>
 #include <okami/Async.hpp>
+#include <okami/Hashers.hpp>
 
 namespace okami::core {
 
@@ -21,14 +23,14 @@ namespace okami::core {
     template <typename T>
     class IResourceManager : public IResourceManagerAbstract {
     public:
-        virtual Future<Handle<T>> Load(
+        virtual Handle<T> Load(
             const std::filesystem::path& path, 
             const LoadParams<T>& params, 
             resource_id_t newResId) = 0;
 
-        virtual Future<Handle<T>> Add(T&& obj, 
+        virtual Handle<T> Add(T&& obj, 
             resource_id_t newResId) = 0;
-        virtual Future<Handle<T>> Add(T&& obj, 
+        virtual Handle<T> Add(T&& obj, 
             const std::filesystem::path& path, 
             resource_id_t newResId) = 0;
 
@@ -39,19 +41,21 @@ namespace okami::core {
 
     class ResourceInterface {
     private:
-        std::unordered_map<entt::id_type, IResourceManagerAbstract*> mLoaderInterfaces;
+        std::unordered_map<entt::meta_type, 
+            IResourceManagerAbstract*, TypeHash> mLoaderInterfaces;
         std::atomic<resource_id_t> mCurrentId = 0;
        
     public:
-        inline void Register(IResourceManagerAbstract* loader) {
-            mLoaderInterfaces.emplace(loader->GetType().id(), loader);
+        template <typename T>
+        inline void Register(IResourceManager<T>* loader) {
+            mLoaderInterfaces.emplace(entt::resolve<T>(), loader);
         }
 
         template <typename T>
-        Future<Handle<T>> Load(const std::filesystem::path& path, 
+        Handle<T> Load(const std::filesystem::path& path, 
             const LoadParams<T>& params = LoadParams<T>()) {
             auto type = entt::resolve<T>();
-            auto it = mLoaderInterfaces.find(type.id());
+            auto it = mLoaderInterfaces.find(type);
 
             if (it == mLoaderInterfaces.end()) {
                 throw std::runtime_error("No registered interface for this type!");
@@ -64,9 +68,9 @@ namespace okami::core {
         }
 
         template <typename T>
-        Future<Handle<T>> Add(T&& obj) {
+        Handle<T> Add(T&& obj) {
             auto type = entt::resolve<T>();
-            auto it = mLoaderInterfaces.find(type.id());
+            auto it = mLoaderInterfaces.find(type);
 
             if (it == mLoaderInterfaces.end()) {
                 throw std::runtime_error("No registered interface for this type!");
@@ -79,9 +83,9 @@ namespace okami::core {
         }
 
         template <typename T>
-        Future<Handle<T>> Add(T&& obj, const std::filesystem::path& path) {
+        Handle<T> Add(T&& obj, const std::filesystem::path& path) {
             auto type = entt::resolve<T>();
-            auto it = mLoaderInterfaces.find(type.id());
+            auto it = mLoaderInterfaces.find(type);
 
             if (it == mLoaderInterfaces.end()) {
                 throw std::runtime_error("No registered interface for this type!");
