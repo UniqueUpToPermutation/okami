@@ -111,7 +111,7 @@ namespace okami::core {
 			const Vec3Type* mBitangents;
 			std::vector<const Vec4Type*> mColors;
 
-			DataSource(
+			inline DataSource(
 				const Data<IndexType, Vec2Type, Vec3Type, Vec4Type>& data) :
 				mVertexCount(data.mPositions.size()),
 				mIndexCount(data.mIndices.size()),
@@ -242,6 +242,11 @@ namespace okami::core {
 
 			static RawData Load(const std::filesystem::path& path,
 				const VertexLayout& layout);
+
+			inline void Dealloc() {
+				mVertexBuffers.clear();
+				mIndexBuffer.mBytes.clear();
+			}
 		};
 
 	private:
@@ -253,8 +258,16 @@ namespace okami::core {
 			return mData;
 		}
 
+		inline const RawData& DataCPU() const {
+			return mData;
+		}
+
 		inline void Clear() {
 			mData = RawData();
+		}
+
+		inline void DeallocCPU() {
+			mData.Dealloc();
 		}
 
 		inline Geometry(RawData&& data) 
@@ -296,7 +309,7 @@ namespace okami::core {
 		Geometry(Geometry&&) = default;
 		Geometry& operator=(Geometry&&) = default;
 
-		inline const Desc& Desc() const {
+		inline const Desc& GetDesc() const {
 			return mData.mDesc;
 		}
 
@@ -321,8 +334,7 @@ namespace okami::core {
 
 	template <>
 	struct LoadParams<Geometry> {
-		VertexLayout mLayout;
-		Geometry::Type mType = Geometry::Type::UNDEFINED;
+		entt::meta_type mComponentType;
 	};
 
 	template <typename T>

@@ -2,6 +2,8 @@
 #include <okami/Transform.hpp>
 #include <okami/Geometry.hpp>
 #include <okami/Frame.hpp>
+#include <okami/Texture.hpp>
+#include <okami/Material.hpp>
 
 using namespace entt;
 
@@ -84,5 +86,7 @@ namespace okami::core {
         Transform::Register();
         Geometry::Register();
         Frame::Register();
+        Texture::Register();
+        BaseMaterial::Register();
     }
 }

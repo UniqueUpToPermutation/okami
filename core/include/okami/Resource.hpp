@@ -173,8 +173,10 @@ namespace okami::core {
 		inline Handle<T>& operator=(Handle<T>&& h) {
 			Release();
 
-			mResource = h;
+			mResource = h.mResource;
+			mRefCounter = h.mRefCounter;
 			h.mResource = nullptr;
+			h.mRefCounter = nullptr;
 			return *this;
 		}
 

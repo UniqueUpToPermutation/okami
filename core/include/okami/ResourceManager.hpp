@@ -165,6 +165,15 @@ namespace okami::core {
             Shutdown();
         }
 
+        void ScheduleBackend(marl::WaitGroup group, bool bBlock = false) {
+            group.add();
+            marl::Task managerUpdates([this, bBlock, group] {
+                defer(group.done());
+                RunBackend(bBlock);
+            }, marl::Task::Flags::SameThread);
+            marl::schedule(std::move(managerUpdates));
+        }
+
         // Should be run on main thread!
         void RunBackend(bool bBlock = false) {
             marl::lock lock(mBackendMutex);

@@ -7,8 +7,11 @@ struct PSOutput {
     float4 Color : SV_TARGET; 
 };
 
+Texture2D    t_Albedo;
+SamplerState t_Albedo_sampler; // By convention, texture samplers must use the '_sampler' suffix
+
 void main(in PSInput ps_input,
             out PSOutput ps_output)
 {
-    ps_output.Color = float4(ps_input.UV.x, ps_input.UV.y, 0.0, 1.0);
+    ps_output.Color = t_Albedo.Sample(t_Albedo_sampler, ps_input.UV); 
 }

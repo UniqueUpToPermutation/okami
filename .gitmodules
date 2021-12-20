@@ -16,3 +16,6 @@
 [submodule "ext/DiligentEngine"]
 	path = ext/DiligentEngine
 	url = https://github.com/DiligentGraphics/DiligentEngine.git
+[submodule "ext/lodepng"]
+	path = ext/lodepng
+	url = https://github.com/lvandeve/lodepng.git

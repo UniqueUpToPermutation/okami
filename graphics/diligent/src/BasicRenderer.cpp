@@ -14,13 +14,6 @@ void MakeShaderMap(okami::core::file_map_t* map);
 
 namespace okami::graphics {
 
-    struct GeometryImpl {
-        std::vector<DG::RefCntAutoPtr<DG::IBuffer>>
-            mVertexBuffers;
-        DG::RefCntAutoPtr<DG::IBuffer>
-            mIndexBuffer;
-    };
-
     void GetEngineInitializationAttribs(
         DG::RENDER_DEVICE_TYPE DeviceType, 
         DG::EngineCreateInfo& EngineCI, 
@@ -38,10 +31,18 @@ namespace okami::graphics {
         mDisplaySystem(displaySystem), 
         mGeometryManager(
             []() { return core::Geometry(); },
-            [this](core::Geometry* geo) { OnDestroy(geo); }) {
+            [this](core::Geometry* geo) { OnDestroy(geo); }),
+        mTextureManager(
+            []() { return core::Texture(); },
+            [this](core::Texture* tex) { OnDestroy(tex); }),
+        mBaseMaterialManager(
+            []() { return core::BaseMaterial(); },
+            [this](core::BaseMaterial* mat) { OnDestroy(mat); }) {
 
         // Associate the renderer with the geometry 
         resources.Register<core::Geometry>(this);
+        resources.Register<core::Texture>(this);
+        resources.Register<core::BaseMaterial>(this);
     }
 
     void BasicRenderer::OnDestroy(core::Geometry* geometry) {
@@ -50,11 +51,12 @@ namespace okami::graphics {
         delete geometry;
     }
 
-    void BasicRenderer::OnFinalize(core::Geometry* geometry) {
+    std::unique_ptr<BasicRenderer::GeometryImpl>
+        BasicRenderer::MoveToGPU(const core::Geometry& geometry) {
         auto impl = std::make_unique<GeometryImpl>();
 
-        const auto& geoDesc = geometry->Desc();
-        auto& data = geometry->DataCPU();
+        const auto& geoDesc = geometry.GetDesc();
+        const auto& data = geometry.DataCPU();
 
         for (auto& vertBuffer : data.mVertexBuffers) {
             DG::BufferDesc bufDesc;
@@ -102,7 +104,103 @@ namespace okami::graphics {
             impl->mIndexBuffer.Attach(buffer);
         }
 
+        return impl;
+    }
+
+    void BasicRenderer::OnFinalize(core::Geometry* geometry) {
+        auto impl = MoveToGPU(*geometry);
+        geometry->DeallocCPU();
         geometry->SetBackend(impl.release());
+    }
+
+    void BasicRenderer::OnDestroy(core::Texture* tex) {
+        auto impl = reinterpret_cast<TextureImpl*>(tex->GetBackend());
+        delete impl;
+        delete tex;
+    }
+
+    std::unique_ptr<BasicRenderer::TextureImpl> 
+        BasicRenderer::MoveToGPU(const core::Texture& texture) {
+        auto impl = std::make_unique<TextureImpl>();
+
+        const auto& texDesc = texture.GetDesc();
+        const auto& data = texture.DataCPU();
+
+        TextureDesc dg_desc;
+        dg_desc.BindFlags = BIND_SHADER_RESOURCE;
+        dg_desc.CPUAccessFlags = CPU_ACCESS_NONE;
+        dg_desc.Width = texDesc.mWidth;
+        dg_desc.Height = texDesc.mHeight;
+        dg_desc.Depth = texDesc.GetDepth();
+        dg_desc.ArraySize = texDesc.GetArraySize();
+        dg_desc.Type = ToDiligent(texDesc.mType);
+        dg_desc.SampleCount = texDesc.mSampleCount;
+        dg_desc.MipLevels = texDesc.mMipLevels;
+        dg_desc.Name = "Generated Texture";
+        dg_desc.Format = ToDiligent(texDesc.mFormat);
+
+        auto subresources = texDesc.GetSubresourceDescs();
+
+        std::vector<TextureSubResData> subres_data(subresources.size());
+
+        for (uint i = 0; i < subresources.size(); ++i) {
+            subres_data[i].DepthStride = subresources[i].mDepthStride;
+            subres_data[i].SrcOffset = subresources[i].mSrcOffset;
+            subres_data[i].Stride = subresources[i].mStride;
+            subres_data[i].pData = &data.mData[subresources[i].mSrcOffset];
+        }
+
+        TextureData dg_data;
+        dg_data.NumSubresources = subresources.size();
+        dg_data.pContext = mContexts[0];
+        dg_data.pSubResources = &subres_data[0];
+
+        ITexture* dg_texture = nullptr;
+        mDevice->CreateTexture(dg_desc, &dg_data, &dg_texture);
+        impl->mTexture.Attach(dg_texture);
+
+        return impl;
+    }
+
+    void BasicRenderer::OnFinalize(core::Texture* texture) {
+        auto impl = MoveToGPU(*texture);
+        texture->DeallocCPU();
+        texture->SetBackend(impl.release());
+    }
+
+    std::unique_ptr<BasicRenderer::BaseMaterialImpl> 
+        BasicRenderer::MoveToGPU(const core::BaseMaterial& material) {
+        auto impl = std::make_unique<BasicRenderer::BaseMaterialImpl>();
+        auto data = material.GetData();
+
+        DG::ITexture* albedo;
+        if (data.mAlbedo) {
+            data.mAlbedo->OnLoadEvent().wait();
+            albedo = reinterpret_cast<TextureImpl*>(data.mAlbedo->GetBackend())->mTexture;
+        } else
+            albedo = mDefaultTexture;
+       
+        DG::IShaderResourceBinding* binding = nullptr;
+        mStaticMeshPipeline.mState->CreateShaderResourceBinding(
+            &binding, true);
+
+        binding->GetVariableByIndex(DG::SHADER_TYPE_PIXEL, 
+            mStaticMeshPipeline.mAlbedoIdx)->Set(
+                albedo->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+
+        impl->mBinding = binding;
+        return impl;
+    }
+
+    void BasicRenderer::OnFinalize(core::BaseMaterial* material) {
+        auto impl = MoveToGPU(*material);
+        material->SetBackend(impl.release());
+    }
+
+    void BasicRenderer::OnDestroy(core::BaseMaterial* material) {
+        auto impl = reinterpret_cast<BaseMaterialImpl*>(material->GetBackend());
+        delete impl;
+        delete material;
     }
 
     void BasicRenderer::Startup(marl::WaitGroup& waitGroup) {
@@ -155,14 +253,14 @@ namespace okami::graphics {
 
         bool bAddLineNumbers = mBackend != GraphicsBackend::OPENGL;
 
-        mStaticMeshVS.Attach(CompileEmbeddedShader(mDevice, paramsStaticMeshVS, &fileLoader, bAddLineNumbers));
-        mStaticMeshPS.Attach(CompileEmbeddedShader(mDevice, paramsStaticMeshPS, &fileLoader, bAddLineNumbers));
+        mStaticMeshPipeline.mVS.Attach(CompileEmbeddedShader(
+            mDevice, paramsStaticMeshVS, &fileLoader, bAddLineNumbers));
+        mStaticMeshPipeline.mPS.Attach(CompileEmbeddedShader(
+            mDevice, paramsStaticMeshPS, &fileLoader, bAddLineNumbers));
 
         // Create pipeline
         GraphicsPipelineStateCreateInfo PSOCreateInfo;
-
         PSOCreateInfo.PSODesc.Name = "Static Mesh";
-
         PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
         PSOCreateInfo.GraphicsPipeline.NumRenderTargets             = 1;
         PSOCreateInfo.GraphicsPipeline.RTVFormats[0]                = mSwapChain->GetDesc().ColorBufferFormat;
@@ -175,12 +273,36 @@ namespace okami::graphics {
         PSOCreateInfo.GraphicsPipeline.InputLayout.LayoutElements = layout.mElements.data();
         PSOCreateInfo.GraphicsPipeline.InputLayout.NumElements = layout.mElements.size();
 
-        PSOCreateInfo.pVS = mStaticMeshVS;
-        PSOCreateInfo.pPS = mStaticMeshPS;
+        PSOCreateInfo.pVS = mStaticMeshPipeline.mVS;
+        PSOCreateInfo.pPS = mStaticMeshPipeline.mPS;
+
+        ShaderResourceVariableDesc Vars[] = {
+            {SHADER_TYPE_PIXEL, "t_Albedo", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE}
+        };
+        mStaticMeshPipeline.mAlbedoIdx = 0;
+
+        PSOCreateInfo.PSODesc.ResourceLayout.Variables    = Vars;
+        PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(Vars);
+
+        SamplerDesc SamLinearClampDesc {
+            FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, 
+            TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+        };
+        ImmutableSamplerDesc ImtblSamplers[] = {
+            {SHADER_TYPE_PIXEL, "t_Albedo", SamLinearClampDesc}
+        };
+        PSOCreateInfo.PSODesc.ResourceLayout.ImmutableSamplers    = ImtblSamplers;
+        PSOCreateInfo.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(ImtblSamplers);
+        PSOCreateInfo.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
         DG::IPipelineState* meshPipeline = nullptr;
         mDevice->CreateGraphicsPipelineState(PSOCreateInfo, &meshPipeline);
-        mStaticMeshPipeline.Attach(meshPipeline);
+        mStaticMeshPipeline.mState.Attach(meshPipeline);
+
+        auto basicTexture = core::Texture::Prefabs::SolidColor(16, 16, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        mDefaultTexture = MoveToGPU(basicTexture)->mTexture;
+        
+        mStaticMeshPipeline.mDefaultBinding = MoveToGPU(core::BaseMaterial())->mBinding;
     }
 
     void BasicRenderer::RegisterInterfaces(core::InterfaceCollection& interfaces) {
@@ -190,13 +312,9 @@ namespace okami::graphics {
     void BasicRenderer::LoadResources(core::Frame* frame, 
         marl::WaitGroup& waitGroup) {
 
-        waitGroup.add();
-        marl::Task task([&geoManager = mGeometryManager, waitGroup]() {
-            defer(waitGroup.done());
-            geoManager.RunBackend(true);
-        }, marl::Task::Flags::SameThread);
-
-        marl::schedule(std::move(task));
+        mGeometryManager.ScheduleBackend(waitGroup, true);
+        mTextureManager.ScheduleBackend(waitGroup, true);
+        mBaseMaterialManager.ScheduleBackend(waitGroup, true);
     }
 
     core::Handle<core::Geometry> BasicRenderer::Load(
@@ -204,9 +322,10 @@ namespace okami::graphics {
         const core::LoadParams<core::Geometry>& params, 
         core::resource_id_t newResId) {
 
-        auto loader = [](const std::filesystem::path& path, 
-            const core::LoadParams<core::Geometry>& geo) {
-            return core::Geometry::Load(path, geo.mLayout);
+        auto loader = [this](const std::filesystem::path& path, 
+            const core::LoadParams<core::Geometry>& params) {
+            auto layout = GetVertexLayout(params.mComponentType);
+            return core::Geometry::Load(path, layout);
         };
 
         auto finalizer = [this](core::Geometry* geo) {
@@ -227,10 +346,67 @@ namespace okami::graphics {
     core::Handle<core::Geometry> BasicRenderer::Add(core::Geometry&& obj, 
         const std::filesystem::path& path, 
         core::resource_id_t newResId) {
-         auto finalizer = [this](core::Geometry* geo) {
+        auto finalizer = [this](core::Geometry* geo) {
             OnFinalize(geo);
         };
         return mGeometryManager.Add(std::move(obj), path, newResId, finalizer);
+    }
+
+    core::Handle<core::Texture> BasicRenderer::Load(
+        const std::filesystem::path& path, 
+        const core::LoadParams<core::Texture>& params, 
+        core::resource_id_t newResId) {
+        auto loader = [](const std::filesystem::path& path, 
+            const core::LoadParams<core::Texture>& params) {
+            return core::Texture::Load(path, params);
+        };
+
+        auto finalizer = [this](core::Texture* tex) {
+            OnFinalize(tex);
+        };
+
+        return mTextureManager.Load(path, params, newResId, loader, finalizer);
+    }
+
+    core::Handle<core::Texture> BasicRenderer::Add(core::Texture&& obj, 
+        core::resource_id_t newResId) {
+        auto finalizer = [this](core::Texture* tex) {
+            OnFinalize(tex);
+        };
+        return mTextureManager.Add(std::move(obj), newResId, finalizer);
+    }
+
+    core::Handle<core::Texture> BasicRenderer::Add(core::Texture&& obj, 
+        const std::filesystem::path& path, 
+        core::resource_id_t newResId) {
+        auto finalizer = [this](core::Texture* tex) {
+            OnFinalize(tex);
+        };
+        return mTextureManager.Add(std::move(obj), path, newResId, finalizer);
+    }
+
+    core::Handle<core::BaseMaterial> BasicRenderer::Load(
+        const std::filesystem::path& path, 
+        const core::LoadParams<core::BaseMaterial>& params, 
+        core::resource_id_t newResId) {
+        throw std::runtime_error("Not implemented!");
+    }
+
+    core::Handle<core::BaseMaterial> BasicRenderer::Add(core::BaseMaterial&& obj, 
+        core::resource_id_t newResId) {
+        auto finalizer = [this](core::BaseMaterial* mat) {
+            OnFinalize(mat);
+        };
+        return mBaseMaterialManager.Add(std::move(obj), newResId, finalizer);
+    }
+
+    core::Handle<core::BaseMaterial> BasicRenderer::Add(core::BaseMaterial&& obj, 
+        const std::filesystem::path& path, 
+        core::resource_id_t newResId) {
+        auto finalizer = [this](core::BaseMaterial* mat) {
+            OnFinalize(mat);
+        };
+        return mBaseMaterialManager.Add(std::move(obj), path, newResId, finalizer);
     }
 
     const core::VertexLayout& BasicRenderer::GetVertexLayout(
@@ -247,13 +423,10 @@ namespace okami::graphics {
         core::SyncObject& syncObject,
         const core::Time& time) {
 
-        // Schedule the update of the geometry manager
-        updateGroup.add();
-        marl::Task managerUpdates([geoManager = &mGeometryManager, updateGroup] {
-            defer(updateGroup.done());
-            geoManager->RunBackend();
-        }, marl::Task::Flags::SameThread);
-        marl::schedule(std::move(managerUpdates));
+        // Schedule the updates of resource managers
+        mGeometryManager.ScheduleBackend(updateGroup);
+        mTextureManager.ScheduleBackend(updateGroup);
+        mBaseMaterialManager.ScheduleBackend(updateGroup);
 
         auto backBufferRTV = mSwapChain->GetCurrentBackBufferRTV();
         auto depthBufferDSV = mSwapChain->GetDepthBufferDSV();
@@ -274,7 +447,8 @@ namespace okami::graphics {
         for (auto entity : staticMeshes) {
             auto& mesh = staticMeshes.get<core::StaticMesh>(entity);
 
-            auto geometryImpl = reinterpret_cast<GeometryImpl*>(mesh.mGeometry->GetBackend());
+            auto geometryImpl = reinterpret_cast<GeometryImpl*>
+                (mesh.mGeometry->GetBackend());
 
             DG::IBuffer* vertBuffers[] = { geometryImpl->mVertexBuffers[0] };
             DG::Uint64 offsets[] = { 0 };
@@ -285,18 +459,30 @@ namespace okami::graphics {
                     RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
             }
 
-            immediateContext->SetPipelineState(mStaticMeshPipeline);
+            immediateContext->SetPipelineState(mStaticMeshPipeline.mState);
+
+            if (mesh.mMaterial) {
+                auto materialImpl = reinterpret_cast<BaseMaterialImpl*>
+                    (mesh.mMaterial->GetBackend());
+                immediateContext->CommitShaderResources(
+                    materialImpl->mBinding,
+                    RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+            } else {
+                immediateContext->CommitShaderResources(
+                    mStaticMeshPipeline.mDefaultBinding,
+                    RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+            }
             
-            const auto& desc = mesh.mGeometry->Desc();
+            const auto& geoDesc = mesh.mGeometry->GetDesc();
 
             if (geometryImpl->mIndexBuffer) {
                 DG::DrawIndexedAttribs attribs;
-                attribs.NumIndices = desc.mIndexedAttribs.mNumIndices;
-                attribs.IndexType = ToDiligent(desc.mIndexedAttribs.mIndexType);
+                attribs.NumIndices = geoDesc.mIndexedAttribs.mNumIndices;
+                attribs.IndexType = ToDiligent(geoDesc.mIndexedAttribs.mIndexType);
                 immediateContext->DrawIndexed(attribs);
             } else {
                 DG::DrawAttribs attribs;
-                attribs.NumVertices = desc.mAttribs.mNumVertices;
+                attribs.NumVertices = geoDesc.mAttribs.mNumVertices;
                 immediateContext->Draw(attribs);
             }
         }
@@ -313,10 +499,9 @@ namespace okami::graphics {
     }
 
     void BasicRenderer::Shutdown() {
-        mStaticMeshPipeline.Release();
-        mStaticMeshPS.Release();
-        mStaticMeshVS.Release();
+        mStaticMeshPipeline = StaticMeshPipeline();
 
+        mDefaultTexture.Release();
         mSwapChain.Release();
         mContexts.clear();
         mDevice.Release();

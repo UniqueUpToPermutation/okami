@@ -15,6 +15,7 @@ namespace okami::core {
         UINT32,
         FLOAT16,
         FLOAT32,
+        NULL_T,
         NUM_TYPES
     };
 

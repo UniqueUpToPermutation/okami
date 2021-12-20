@@ -14,6 +14,10 @@ list(APPEND SOURCE
     src/FrameSystem.cpp
     src/Embed.cpp
     src/VertexLayout.cpp
+    src/Texture.cpp
+    src/Material.cpp
+
+    ../ext/lodepng/lodepng.cpp
 )
 
 list(APPEND INCLUDE
@@ -31,6 +35,9 @@ list(APPEND INCLUDE
     include/okami/FrameSystem.hpp
     include/okami/Okami.hpp
     include/okami/Embed.hpp
+    include/okami/MipGenerator.hpp
+    include/okami/Texture.hpp
+    include/okami/Material.hpp
 )
 
 add_library(okami-core STATIC ${SOURCE} ${INCLUDE})
@@ -55,6 +62,7 @@ target_include_directories(okami-core PUBLIC
     ${ASSIMP_INCLUDE_DIR}
     ${OKAMI_CORE_INCLUDE_DEPENDENCES}
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${LODEPNG_INCLUDE_DIR}
 )
 
 target_link_libraries(okami-core marl assimp)

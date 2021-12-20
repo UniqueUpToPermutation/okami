@@ -2,6 +2,7 @@
 
 #include <okami/Display.hpp>
 #include <okami/VertexLayout.hpp>
+#include <okami/Texture.hpp>
 
 #include <EngineFactory.h>
 #include <RenderDevice.h>
@@ -29,7 +30,9 @@ namespace okami::graphics {
         DG::ISwapChain** swapChain,
         const get_engine_initialization_attribs& attribsFunc);
 
+    DG::RESOURCE_DIMENSION ToDiligent(core::ResourceDimension dim);
     DG::VALUE_TYPE ToDiligent(core::ValueType valueType);
     DG::INPUT_ELEMENT_FREQUENCY ToDiligent(core::InputElementFrequency frequency);
     InputLayoutDiligent ToDiligent(const core::VertexLayout& layout);
+    DG::TEXTURE_FORMAT ToDiligent(const core::TextureFormat& format);
 }

@@ -17,7 +17,8 @@
                 "${workspaceFolder}/ext/DiligentEngine/DiligentCore/Graphics/GraphicsEngine/interface",
                 "${workspaceFolder}/ext/DiligentEngine/DiligentCore/Graphics/GraphicsEngineVulkan/interface",
                 "${workspaceFolder}/ext/DiligentEngine/DiligentCore/Graphics/GraphicsEngineOpenGL/interface",
-                "${workspaceFolder}/ext/DiligentEngine/DiligentCore/Platforms/Linux/interface"
+                "${workspaceFolder}/ext/DiligentEngine/DiligentCore/Platforms/Linux/interface",
+                "${workspaceFolder}/ext/lodepng"
             ],
             "defines": [
                 "PLATFORM_LINUX",

@@ -328,6 +328,29 @@ namespace okami::graphics {
         }
     }
 
+    DG::RESOURCE_DIMENSION ToDiligent(core::ResourceDimension dim) {
+        switch (dim) {
+        case core::ResourceDimension::Buffer:
+            return RESOURCE_DIM_BUFFER;
+        case core::ResourceDimension::Texture1D:
+            return RESOURCE_DIM_TEX_1D;
+        case core::ResourceDimension::Texture1DArray:
+            return RESOURCE_DIM_TEX_1D_ARRAY;
+        case core::ResourceDimension::Texture2D:
+            return RESOURCE_DIM_TEX_2D;
+        case core::ResourceDimension::Texture2DArray:
+            return RESOURCE_DIM_TEX_2D_ARRAY;
+        case core::ResourceDimension::Texture3D:
+            return RESOURCE_DIM_TEX_3D;
+        case core::ResourceDimension::TextureCube:
+            return RESOURCE_DIM_TEX_CUBE;
+        case core::ResourceDimension::TextureCubeArray:
+            return RESOURCE_DIM_TEX_CUBE_ARRAY;
+        default:
+            throw std::runtime_error("Unrecognized ResourceDimension type!");
+        }
+    }
+
     DG::VALUE_TYPE ToDiligent(core::ValueType valueType) {
         switch (valueType) {
         case core::ValueType::INT8:
@@ -381,5 +404,167 @@ namespace okami::graphics {
         }
 
         return result;
+    }
+
+    DG::TEXTURE_FORMAT ToDiligent(const core::TextureFormat& format) {
+        switch (format.mValueType) {
+        case core::ValueType::FLOAT32:
+            switch (format.mChannels) {
+            case 1:
+                return DG::TEX_FORMAT_R32_FLOAT;
+            case 2:
+                return DG::TEX_FORMAT_RG32_FLOAT;
+            case 3:
+                return DG::TEX_FORMAT_RGB32_FLOAT;
+            case 4:
+                return DG::TEX_FORMAT_RGBA32_FLOAT;
+            default:
+                throw std::runtime_error("Invalid format!");
+            }
+        case core::ValueType::FLOAT16:
+            switch (format.mChannels) {
+            case 1:
+                return DG::TEX_FORMAT_R16_FLOAT;
+            case 2:
+                return DG::TEX_FORMAT_RG16_FLOAT;
+            case 4:
+                return DG::TEX_FORMAT_RGBA16_FLOAT;
+            default:
+                throw std::runtime_error("Invalid format!");
+            }
+        case core::ValueType::UINT8:
+            if (format.bNormalized) {
+                if (format.bLinear) {
+                    switch (format.mChannels) {
+                    case 1:
+                        return DG::TEX_FORMAT_R8_UNORM;
+                    case 2:
+                        return DG::TEX_FORMAT_RG8_UNORM;
+                    case 4:
+                        return DG::TEX_FORMAT_RGBA8_UNORM;
+                    default:
+                        throw std::runtime_error("Invalid format!");
+                    }
+                } else {
+                    switch (format.mChannels) {
+                    case 4:
+                        return DG::TEX_FORMAT_RGBA8_UNORM_SRGB;
+                    default:
+                        throw std::runtime_error("Invalid format!");
+                    }
+                }
+            } else {
+                switch (format.mChannels) {
+                case 1:
+                    return DG::TEX_FORMAT_R8_UINT;
+                case 2:
+                    return DG::TEX_FORMAT_RG8_UINT;
+                case 4:
+                    return DG::TEX_FORMAT_RGBA8_UINT;
+                default:
+                    throw std::runtime_error("Invalid format!");
+                }
+            }
+        case core::ValueType::UINT16:
+            if (format.bNormalized) {
+                if (format.bLinear) {
+                    switch (format.mChannels) {
+                    case 1:
+                        return DG::TEX_FORMAT_R16_UNORM;
+                    case 2:
+                        return DG::TEX_FORMAT_RG16_UNORM;
+                    case 4:
+                        return DG::TEX_FORMAT_RGBA16_UNORM;
+                    default:
+                        throw std::runtime_error("Invalid format!");
+                    }
+                } else {
+                    throw std::runtime_error("Invalid format!");
+                }
+            } else {
+                switch (format.mChannels) {
+                case 1:
+                    return DG::TEX_FORMAT_R16_UINT;
+                case 2:
+                    return DG::TEX_FORMAT_RG16_UINT;
+                case 4:
+                    return DG::TEX_FORMAT_RGBA16_UINT;
+                default:
+                    throw std::runtime_error("Invalid format!");
+                }
+            }
+        case core::ValueType::UINT32:
+            switch (format.mChannels) {
+            case 1:
+                return DG::TEX_FORMAT_R32_UINT;
+            case 2:
+                return DG::TEX_FORMAT_RG32_UINT;
+            case 4:
+                return DG::TEX_FORMAT_RGBA32_UINT;
+            default:
+                throw std::runtime_error("Invalid format!");
+            }
+        case core::ValueType::INT8:
+            if (format.bNormalized) {
+                switch (format.mChannels) {
+                case 1:
+                    return DG::TEX_FORMAT_R8_SNORM;
+                case 2:
+                    return DG::TEX_FORMAT_RG8_SNORM;
+                case 4:
+                    return DG::TEX_FORMAT_RGBA8_SNORM;
+                default:
+                    throw std::runtime_error("Invalid format!");
+                }
+            } else {
+                switch (format.mChannels) {
+                case 1:
+                    return DG::TEX_FORMAT_R8_SINT;
+                case 2:
+                    return DG::TEX_FORMAT_RG8_SINT;
+                case 4:
+                    return DG::TEX_FORMAT_RGBA8_SINT;
+                default:
+                    throw std::runtime_error("Invalid format!");
+                }
+            }
+        case core::ValueType::INT16:
+            if (format.bNormalized) {
+                switch (format.mChannels) {
+                case 1:
+                    return DG::TEX_FORMAT_R16_SNORM;
+                case 2:
+                    return DG::TEX_FORMAT_RG16_SNORM;
+                case 4:
+                    return DG::TEX_FORMAT_RGBA16_SNORM;
+                default:
+                    throw std::runtime_error("Invalid format!");
+                }
+            } else {
+                switch (format.mChannels) {
+                case 1:
+                    return DG::TEX_FORMAT_R16_SINT;
+                case 2:
+                    return DG::TEX_FORMAT_RG16_SINT;
+                case 4:
+                    return DG::TEX_FORMAT_RGBA16_SINT;
+                default:
+                    throw std::runtime_error("Invalid format!");
+                }
+            }
+        case core::ValueType::INT32:
+            switch (format.mChannels) {
+            case 1:
+                return DG::TEX_FORMAT_R32_SINT;
+            case 2:
+                return DG::TEX_FORMAT_RG32_SINT;
+            case 4:
+                return DG::TEX_FORMAT_RGBA32_SINT;
+            default:
+                throw std::runtime_error("Invalid format!");
+            }
+        default:
+            throw std::runtime_error("Invalid format!");
+        }
     }
 }
