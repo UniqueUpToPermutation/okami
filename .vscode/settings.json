@@ -98,6 +98,7 @@
 		"semaphore": "cpp",
 		"span": "cpp",
 		"stack": "cpp",
-		"stop_token": "cpp"
+		"stop_token": "cpp",
+		"*.hlsl": "cpp"
 	}
 }

@@ -13,5 +13,6 @@ SamplerState t_Albedo_sampler; // By convention, texture samplers must use the '
 void main(in PSInput ps_input,
             out PSOutput ps_output)
 {
-    ps_output.Color = t_Albedo.Sample(t_Albedo_sampler, ps_input.UV); 
+    ps_output.Color = t_Albedo.SampleLevel(
+        t_Albedo_sampler, ps_input.UV, 1.0);
 }

@@ -13,9 +13,10 @@ list(APPEND SOURCE
     src/System.cpp
     src/FrameSystem.cpp
     src/Embed.cpp
-    src/VertexLayout.cpp
+    src/VertexFormat.cpp
     src/Texture.cpp
     src/Material.cpp
+    src/Clock.cpp
 
     ../ext/lodepng/lodepng.cpp
 )
@@ -27,7 +28,7 @@ list(APPEND INCLUDE
     include/okami/ResourceInterface.hpp
     include/okami/Resource.hpp
     include/okami/Async.hpp
-    include/okami/VertexLayout.hpp
+    include/okami/VertexFormat.hpp
     include/okami/Meta.hpp
     include/okami/Transform.hpp
     include/okami/Destroyer.hpp
@@ -38,6 +39,7 @@ list(APPEND INCLUDE
     include/okami/MipGenerator.hpp
     include/okami/Texture.hpp
     include/okami/Material.hpp
+    include/okami/Clock.hpp
 )
 
 add_library(okami-core STATIC ${SOURCE} ${INCLUDE})

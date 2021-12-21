@@ -1,4 +1,4 @@
-#include <okami/VertexLayout.hpp>
+#include <okami/VertexFormat.hpp>
 
 namespace okami::core {
     int GetSize(ValueType v) {
@@ -24,8 +24,8 @@ namespace okami::core {
 		}
 	}
 
-	VertexLayout VertexLayout::PositionUVNormalTangent() {
-		VertexLayout layout;
+	VertexFormat VertexFormat::PositionUVNormalTangent() {
+		VertexFormat layout;
 		layout.mPosition = 0;
 		layout.mUVs = {1};
 		layout.mNormal = 2;
@@ -42,8 +42,8 @@ namespace okami::core {
 		return layout;
 	}
 
-	VertexLayout VertexLayout::PositionUVNormal() {
-		VertexLayout layout;
+	VertexFormat VertexFormat::PositionUVNormal() {
+		VertexFormat layout;
 		layout.mPosition = 0;
 		layout.mUVs = {1};
 		layout.mNormal = 2;
@@ -58,8 +58,8 @@ namespace okami::core {
 		return layout;
 	}
 
-	VertexLayout VertexLayout::PositionUVNormalTangentBitangent() {
-		VertexLayout layout;
+	VertexFormat VertexFormat::PositionUVNormalTangentBitangent() {
+		VertexFormat layout;
 		layout.mPosition = 0;
 		layout.mUVs = {1};
 		layout.mNormal = 2;
@@ -78,8 +78,8 @@ namespace okami::core {
 		return layout;
 	}
 
-	VertexLayout VertexLayout::PositionUV() {
-		VertexLayout layout;
+	VertexFormat VertexFormat::PositionUV() {
+		VertexFormat layout;
 		layout.mPosition = 0;
 		layout.mUVs = {1};
 
@@ -92,8 +92,8 @@ namespace okami::core {
 		return layout;
 	}
 
-	VertexLayout VertexLayout::Position() {
-		VertexLayout layout;
+	VertexFormat VertexFormat::Position() {
+		VertexFormat layout;
 		layout.mPosition = 0;
 
 		std::vector<LayoutElement> layoutElements = {

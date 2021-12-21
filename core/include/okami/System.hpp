@@ -5,16 +5,12 @@
 
 #include <okami/Frame.hpp>
 #include <okami/Hashers.hpp>
+#include <okami/Clock.hpp>
 
 namespace okami::core {
     class SyncObject;
 
     class Frame;
-
-    struct Time {
-        double mTimeElapsed;
-        double mTotalTime;
-    };
 
     class InterfaceCollection;
 

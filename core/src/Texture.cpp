@@ -271,7 +271,7 @@ namespace okami::core {
         Texture::Desc desc;
         desc.mWidth = width;
         desc.mHeight = height;
-        desc.mMipLevels = params.bGenerateMips ? 0 : 1;
+        desc.mMipLevels = params.bGenerateMips ? MipCount(width, height) : 1;
         desc.mFormat = format;
         desc.mType = ResourceDimension::Texture2D;
         desc.mArraySizeOrDepth = 1;

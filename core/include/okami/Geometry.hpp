@@ -1,6 +1,6 @@
 #pragma once
 
-#include <okami/VertexLayout.hpp>
+#include <okami/VertexFormat.hpp>
 #include <okami/Resource.hpp>
 #include <okami/ResourceInterface.hpp>
 #include <okami/System.hpp>
@@ -39,12 +39,6 @@ namespace okami::core {
 
     class Geometry final : public Resource {
 	public:
-		enum class Type {
-			UNDEFINED,
-			STATIC_MESH,
-			NUM_TYPES
-		};
-
 		struct Attribs {
 			uint32_t mNumVertices = 0;
 		};
@@ -55,12 +49,10 @@ namespace okami::core {
 		};
 		
 		struct Desc {
-			VertexLayout mLayout;
+			VertexFormat mLayout;
 			Attribs mAttribs;
 			IndexedAttribs mIndexedAttribs;
 			bool bIsIndexed;
-
-			Type mType = Type::UNDEFINED;
 		};
 
 		template <typename IndexType = uint32_t,
@@ -92,7 +84,7 @@ namespace okami::core {
 				Vec3Type, 
 				Vec4Type> Load(
 					const std::filesystem::path& path,
-					const VertexLayout& layout);
+					const VertexFormat& layout);
 		};
 
 		template <typename IndexType = uint32_t,
@@ -234,14 +226,14 @@ namespace okami::core {
 			BoundingBox mBoundingBox;
 
 			template <typename I3T, typename V2T, typename V3T, typename V4T>
-			void Pack(const VertexLayout& layout,
+			void Pack(const VertexFormat& layout,
 				const DataSource<I3T, V2T, V3T, V4T>& data);
 
 			template <typename I3T, typename V2T, typename V3T, typename V4T>
 				Data<I3T, V2T, V3T, V4T> Unpack() const;
 
 			static RawData Load(const std::filesystem::path& path,
-				const VertexLayout& layout);
+				const VertexFormat& layout);
 
 			inline void Dealloc() {
 				mVertexBuffers.clear();
@@ -279,7 +271,7 @@ namespace okami::core {
 			typename Vec3Type,
 			typename Vec4Type> 
 		inline Geometry(
-			const VertexLayout& layout,
+			const VertexFormat& layout,
 			const DataSource<IndexType, 
 				Vec2Type, 
 				Vec3Type, 
@@ -292,7 +284,7 @@ namespace okami::core {
 			typename Vec3Type,
 			typename Vec4Type> 
 		inline Geometry(
-			const VertexLayout& layout,
+			const VertexFormat& layout,
 			const Data<IndexType, 
 				Vec2Type, 
 				Vec3Type, 
@@ -313,23 +305,27 @@ namespace okami::core {
 			return mData.mDesc;
 		}
 
+		inline const BoundingBox& GetBoundingBox() const {
+			return mData.mBoundingBox;
+		}
+
 		entt::meta_type GetType() const override;
 
 		static void Register();
 
 		struct Prefabs {
-			static Geometry MaterialBall(const VertexLayout& layout);
-			static Geometry Box(const VertexLayout& layout);
-			static Geometry Sphere(const VertexLayout& layout);
-			static Geometry BlenderMonkey(const VertexLayout& layout);
-			static Geometry Torus(const VertexLayout& layout);
-			static Geometry Plane(const VertexLayout& layout);
-			static Geometry StanfordBunny(const VertexLayout& layout);
-			static Geometry UtahTeapot(const VertexLayout& layout);
+			static Geometry MaterialBall(const VertexFormat& layout);
+			static Geometry Box(const VertexFormat& layout);
+			static Geometry Sphere(const VertexFormat& layout);
+			static Geometry BlenderMonkey(const VertexFormat& layout);
+			static Geometry Torus(const VertexFormat& layout);
+			static Geometry Plane(const VertexFormat& layout);
+			static Geometry StanfordBunny(const VertexFormat& layout);
+			static Geometry UtahTeapot(const VertexFormat& layout);
 		};
 
 		static Geometry Load(const std::filesystem::path& path, 
-			const VertexLayout& layout);
+			const VertexFormat& layout);
     };
 
 	template <>
@@ -539,8 +535,8 @@ namespace okami::core {
 		std::fill(lower.begin(), lower.end(), std::numeric_limits<T>::infinity());
 
 		size_t srcIndex = 0;
-		for (size_t i = 0; i < count; ++i, srcIndex += stride) {
-			auto arr_cast = reinterpret_cast<T*>(&arr[i]);
+		for (size_t i = 0; i < count; srcIndex += stride, ++i) {
+			auto arr_cast = reinterpret_cast<T*>(&arr[srcIndex]);
 			for (size_t component = 0; component < dim; ++component) {
 				upper[component] = std::max<T>(upper[component], arr_cast[component]);
 				lower[component] = std::min<T>(lower[component], arr_cast[component]);
@@ -605,7 +601,7 @@ namespace okami::core {
 	// of each of the geometry elements in the layout
 	void ComputeLayoutProperties(
 		size_t vertex_count,
-		const VertexLayout& layout,
+		const VertexFormat& layout,
 		std::vector<size_t>& offsets,
 		std::vector<size_t>& strides,
 		std::vector<size_t>& channel_sizes);
@@ -639,12 +635,12 @@ namespace okami::core {
 
 		std::vector<size_t> mChannelSizes;
 
-		static PackIndexing From(const VertexLayout& layout,
+		static PackIndexing From(const VertexFormat& layout,
 			size_t vertex_count);
 	};
 
 	template <typename I3T, typename V2T, typename V3T, typename V4T>
-	void Geometry::RawData::Pack(const VertexLayout& layout,
+	void Geometry::RawData::Pack(const VertexFormat& layout,
 		const Geometry::DataSource<I3T, V2T, V3T, V4T>& data) {
 
 		size_t vertex_count = data.mVertexCount;
@@ -885,33 +881,33 @@ namespace okami::core {
 		Vec3Type, 
 		Vec4Type>::Load(
 			const std::filesystem::path& path,
-			const VertexLayout& layout) {
+			const VertexFormat& layout) {
 		auto rawData = Geometry::RawData::Load(path, layout);
 		return rawData.Unpack<IndexType, Vec2Type, Vec3Type, Vec4Type>();
 	}
 
 	class IVertexLayoutProvider {
     public:
-        virtual const VertexLayout& GetVertexLayout(
+        virtual const VertexFormat& GetVertexLayout(
             const entt::meta_type& type) const = 0;
         
         template <typename T>
-        inline const VertexLayout& GetVertexLayout() const {
+        inline const VertexFormat& GetVertexLayout() const {
             return GetVertexLayout(entt::resolve<T>());
         }
     };
 
     class VertexLayoutRegistry {
     private:
-        std::unordered_map<entt::meta_type, VertexLayout, TypeHash> 
+        std::unordered_map<entt::meta_type, VertexFormat, TypeHash> 
             mVertexLayouts;
     public:
         template <typename T>
-        void Register(VertexLayout layout) {
+        void Register(VertexFormat layout) {
             mVertexLayouts.emplace(entt::resolve<T>(), std::move(layout));
         }
 
-        const VertexLayout& Get(const entt::meta_type& type) const {
+        const VertexFormat& Get(const entt::meta_type& type) const {
             auto it = mVertexLayouts.find(type);
 
             if (it != mVertexLayouts.end()) {
@@ -923,7 +919,7 @@ namespace okami::core {
         }
 
 		template <typename T>
-		const VertexLayout& Get() const {
+		const VertexFormat& Get() const {
 			return Get(entt::resolve<T>());
 		}
     };

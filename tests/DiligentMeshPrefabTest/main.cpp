@@ -3,6 +3,7 @@
 #include <okami/Geometry.hpp>
 #include <okami/Transform.hpp>
 #include <okami/StaticMesh.hpp>
+#include <okami/Camera.hpp>
 
 #include <iostream>
 #include <marl/defer.h>
@@ -17,16 +18,16 @@ void TestBackend(GraphicsBackend backend) {
 
     switch (backend) {
         case GraphicsBackend::VULKAN:
-            params.mWindowTitle = "okami Diligent-Engine Texture Test (Vulkan)";
+            params.mWindowTitle = "okami Diligent-Engine Mesh Prefab Test (Vulkan)";
             break;
         case GraphicsBackend::OPENGL:
-            params.mWindowTitle = "okami Diligent-Engine Texture Test (OpenGL)";
+            params.mWindowTitle = "okami Diligent-Engine Mesh Prefab Test (OpenGL)";
             break;
         case GraphicsBackend::D3D11:
-            params.mWindowTitle = "okami Diligent-Engine Texture Test (D3D11)";
+            params.mWindowTitle = "okami Diligent-Engine Mesh Prefab Test (D3D11)";
             break;
         case GraphicsBackend::D3D12:
-            params.mWindowTitle = "okami Diligent-Engine Texture Test (D3D12)";
+            params.mWindowTitle = "okami Diligent-Engine Mesh Prefab Test (D3D12)";
             break;
     }
 
@@ -41,51 +42,50 @@ void TestBackend(GraphicsBackend backend) {
         auto vertexLayouts = systems.QueryInterface<IVertexLayoutProvider>();
         auto staticMeshLayout = vertexLayouts->GetVertexLayout<StaticMesh>();
 
-        // Create a geometry object from user-specified data
-        Geometry::Data<> data;
-        data.mPositions = {
-            glm::vec3(-0.5f, 0.5f, 0.0f),
-            glm::vec3(0.5f, 0.5f, 0.0f),
-            glm::vec3(-0.5f, -0.5f, 0.0f),
-
-            glm::vec3(-0.5f, -0.5f, 0.0f),
-            glm::vec3(0.5f, 0.5f, 0.0f),
-            glm::vec3(0.5f, -0.5f, 0.0f)
-        };
-        data.mUVs.emplace_back(std::vector<glm::vec2>{
-            glm::vec2(0.0f, 0.0f),
-            glm::vec2(1.0f, 0.0f),
-            glm::vec2(0.0f, 1.0f),
-
-            glm::vec2(0.0f, 1.0f),
-            glm::vec2(1.0f, 0.0f),
-            glm::vec2(1.0f, 1.0f)
-        });
-        
-        auto geo = resources.Add(
-            Geometry(staticMeshLayout, std::move(data)));
-
+        // Create a geometry object from a built-in prefab
+        auto geo = resources.Add(Geometry::Prefabs::MaterialBall(staticMeshLayout));
         // Load a texture from disk
         auto texture = resources.Load<Texture>("test.png");
 
-         // Create a material for that texture
+        // Create a material for that texture
         BaseMaterial::Data materialData;
         materialData.mAlbedo = texture;
         auto material = resources.Add<BaseMaterial>(
             std::move(materialData));
 
-        // Create a frame with the mesh at the origin
+        // Create a frame with the static mesh at the origin
         Frame frame;
-        auto entity = frame.CreateEntity();
-        frame.Emplace<Transform>(entity);
-        frame.Emplace<StaticMesh>(entity, StaticMesh{geo, material});
+        auto staticMeshEntity = frame.CreateEntity();
+        auto& meshTransform = frame.Emplace<Transform>(staticMeshEntity);
+        frame.Emplace<StaticMesh>(staticMeshEntity, StaticMesh{geo, material});
 
+        // Create a camera
+        auto cameraEntity = frame.CreateEntity();
+        auto& camera = frame.Emplace<Camera>(cameraEntity);
+    
         // Geometry and texture are available to use after this is called.
         systems.LoadResources(&frame);
+
+        // Apply a transformation based on the bounding box to make sure that
+        // the camera is a good distance away from the model
+        auto aabb = geo->GetBoundingBox();
+        glm::vec3 modelCenter = (aabb.mUpper + aabb.mLower) / 2.0f;
+        float modelRadius = glm::length((aabb.mUpper - aabb.mLower) / 2.0f);
+
+        auto& cameraTransform = frame.Emplace<Transform>(cameraEntity,
+            Transform::LookAt(
+                1.5f * modelRadius * glm::vec3(1.0f, 1.0f, 1.0f) + modelCenter,
+                glm::vec3(0.0f, 0.0f, 0.0f) + modelCenter,
+                glm::vec3(0.0f, 1.0f, 0.0f)
+            ));
         
         Clock clock;
         while (!displayInterface->ShouldClose()) {
-            systems.BeginExecute(&frame, clock.GetTime());
+            auto time = clock.GetTime();
+            // Rotate the mesh
+            meshTransform.mRotation = 
+                glm::angleAxis(time.mTotalTime, glm::dvec3(0.0, 1.0, 0.0));
+            systems.BeginExecute(&frame, time);
             systems.EndExecute();
         }
     }

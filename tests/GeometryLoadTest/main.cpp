@@ -8,7 +8,7 @@ using namespace okami::core;
 int main() {
     std::filesystem::path path = "cube.obj";
 
-    auto layout = VertexLayout::PositionUVNormal();
+    auto layout = VertexFormat::PositionUVNormal();
 
     std::cout << "Loading " << path << "..." << std::endl;
     auto data = Geometry::Data<>::Load(path, layout);

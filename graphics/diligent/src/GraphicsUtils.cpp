@@ -385,7 +385,7 @@ namespace okami::graphics {
         }
     }
 
-    InputLayoutDiligent ToDiligent(const core::VertexLayout& layout) {
+    InputLayoutDiligent ToDiligent(const core::VertexFormat& layout) {
         InputLayoutDiligent result;
 
         for (auto& element : layout.mElements) {
@@ -566,5 +566,124 @@ namespace okami::graphics {
         default:
             throw std::runtime_error("Invalid format!");
         }
+    }
+
+	DG::float4x4 GetSurfacePretransformMatrix(DG::ISwapChain* swapChain, 
+		const DG::float3& f3CameraViewAxis)
+	{
+		const auto& SCDesc = swapChain->GetDesc();
+		switch (SCDesc.PreTransform)
+		{
+			case  DG::SURFACE_TRANSFORM_ROTATE_90:
+				// The image content is rotated 90 degrees clockwise.
+				return DG::float4x4::RotationArbitrary(f3CameraViewAxis, -DG::PI_F / 2.f);
+
+			case  DG::SURFACE_TRANSFORM_ROTATE_180:
+				// The image content is rotated 180 degrees clockwise.
+				return DG::float4x4::RotationArbitrary(f3CameraViewAxis, -DG::PI_F);
+
+			case  DG::SURFACE_TRANSFORM_ROTATE_270:
+				// The image content is rotated 270 degrees clockwise.
+				return DG::float4x4::RotationArbitrary(f3CameraViewAxis, -DG::PI_F * 3.f / 2.f);
+
+			case  DG::SURFACE_TRANSFORM_OPTIMAL:
+				UNEXPECTED("SURFACE_TRANSFORM_OPTIMAL is only valid as parameter during swap chain initialization.");
+				return DG::float4x4::Identity();
+
+			case DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR:
+			case DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90:
+			case DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180:
+			case DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270:
+				UNEXPECTED("Mirror transforms are not supported");
+				return DG::float4x4::Identity();
+
+			default:
+				return DG::float4x4::Identity();
+		}
+	}
+
+	DG::float4x4 GetAdjustedProjectionMatrix(DG::ISwapChain* swapChain, 
+		bool bIsGL, 
+		float FOV, 
+		float NearPlane, 
+		float FarPlane)
+	{
+		const auto& SCDesc = swapChain->GetDesc();
+
+		float AspectRatio = static_cast<float>(SCDesc.Width) / static_cast<float>(SCDesc.Height);
+		float XScale, YScale;
+		if (SCDesc.PreTransform == DG::SURFACE_TRANSFORM_ROTATE_90 ||
+			SCDesc.PreTransform == DG::SURFACE_TRANSFORM_ROTATE_270 ||
+			SCDesc.PreTransform == DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90 ||
+			SCDesc.PreTransform == DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270)
+		{
+			// When the screen is rotated, vertical FOV becomes horizontal FOV
+			XScale = 1.f / std::tan(FOV / 2.f);
+			// Aspect ratio is inversed
+			YScale = XScale * AspectRatio;
+		}
+		else
+		{
+			YScale = 1.f / std::tan(FOV / 2.f);
+			XScale = YScale / AspectRatio;
+		}
+
+		DG::float4x4 Proj;
+		Proj._11 = XScale;
+		Proj._22 = YScale;
+		Proj.SetNearFarClipPlanes(NearPlane, FarPlane, bIsGL);
+		return Proj;
+	}
+
+	DG::float4x4 GetAdjustedOrthoMatrix(
+		bool bIsGL,
+		const DG::float2& fCameraSize,
+		float zNear, float zFar) {
+		float XScale = (float)(2.0 / fCameraSize.x);
+		float YScale = (float)(2.0 / fCameraSize.y);
+
+		DG::float4x4 Proj;
+		Proj._11 = XScale;
+		Proj._22 = YScale;
+
+		if (bIsGL)
+        {
+            Proj._33 = -(-(zFar + zNear) / (zFar - zNear));
+            Proj._43 = -2 * zNear * zFar / (zFar - zNear);
+        }
+        else
+        {
+            Proj._33 = zFar / (zFar - zNear);
+            Proj._43 = -zNear * zFar / (zFar - zNear);
+        }
+
+		Proj._44 = 1;
+
+		return Proj;
+	}
+
+    DG::float4x4 GetProjection(
+        const core::Camera& camera,
+        DG::ISwapChain* swapChain, 
+        bool bIsGL) {
+        if (camera.mType == core::Camera::Type::PERSPECTIVE) {
+			// Get pretransform matrix that rotates the scene according the surface orientation
+			auto srfPreTransform = GetSurfacePretransformMatrix(swapChain, DG::float3{0, 0, 1});
+
+			// Get projection matrix adjusted to the current screen orientation
+			auto proj = GetAdjustedProjectionMatrix(swapChain, bIsGL, 
+                camera.mFieldOfView, camera.mNearPlane, camera.mFarPlane);
+			return srfPreTransform * proj;
+		} else if (camera.mType == core::Camera::Type::ORTHOGRAPHIC) {
+			// Get pretransform matrix that rotates the scene according the surface orientation
+			auto srfPreTransform = GetSurfacePretransformMatrix(swapChain, DG::float3{0, 0, 1});
+
+			// Get projection matrix adjusted to the current screen orientation
+			auto proj = GetAdjustedOrthoMatrix(bIsGL, ToDiligent(camera.mOrthoSize), 
+                camera.mNearPlane, camera.mFarPlane);
+			return srfPreTransform * proj;
+		} else {
+			throw std::runtime_error("Invalid Camera Type!");
+		}
     }
 }

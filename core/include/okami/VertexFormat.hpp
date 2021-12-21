@@ -104,7 +104,15 @@ namespace okami::core {
         }
     };
 
-    struct VertexLayout {
+    enum class Topology {
+        TRIANGLE_LIST,
+        TRIANGLE_STRIP,
+        POINT_LIST,
+        LINE_LIST,
+        LINE_STRIP
+    };
+
+    struct VertexFormat {
 	public:
 		std::vector<LayoutElement> mElements;
 
@@ -113,14 +121,16 @@ namespace okami::core {
 		int mTangent 	= -1;
 		int mBitangent	= -1;
 
+        Topology mTopology = Topology::TRIANGLE_LIST;
+
 		std::vector<int> mUVs;
 		std::vector<int> mColors;
 		
-		static VertexLayout PositionUVNormalTangent();
-		static VertexLayout PositionUVNormal();
-		static VertexLayout PositionUVNormalTangentBitangent();
-        static VertexLayout PositionUV();
-        static VertexLayout Position();
+		static VertexFormat PositionUVNormalTangent();
+		static VertexFormat PositionUVNormal();
+		static VertexFormat PositionUVNormalTangentBitangent();
+        static VertexFormat PositionUV();
+        static VertexFormat Position();
 
 		template <class Archive>
 		void serialize(Archive& archive) {
@@ -133,6 +143,7 @@ namespace okami::core {
 
 			archive(mUVs);
 			archive(mColors);
+            archive(mTopology);
 		}
 	};
 }

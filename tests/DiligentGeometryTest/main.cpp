@@ -41,6 +41,7 @@ void TestBackend(GraphicsBackend backend) {
         auto vertexLayouts = systems.QueryInterface<IVertexLayoutProvider>();
         auto staticMeshLayout = vertexLayouts->GetVertexLayout<StaticMesh>();
 
+        // Create a geometry object from user-specified data
         Geometry::Data<> data;
         data.mPositions = {
             glm::vec3(0.0f, 0.5f, 0.0f),
@@ -50,15 +51,18 @@ void TestBackend(GraphicsBackend backend) {
         auto geo = resources.Add(
             Geometry(staticMeshLayout, std::move(data)));
 
+        // Create a static mesh using the specified geometry
         Frame frame;
         auto entity = frame.CreateEntity();
         frame.Emplace<Transform>(entity);
         frame.Emplace<StaticMesh>(entity, StaticMesh{geo});
 
+        // Geometry is a available to use after this is called
         systems.LoadResources(&frame);
         
+        Clock clock;
         while (!displayInterface->ShouldClose()) {
-            systems.BeginExecute(&frame, Time{0.0, 0.0});
+            systems.BeginExecute(&frame, clock.GetTime());
             systems.EndExecute();
         }
     }

@@ -29,6 +29,7 @@ list(APPEND INCLUDE
     include/okami/GraphicsUtils.hpp
     include/okami/ShaderPreprocessor.hpp
     include/okami/Shader.hpp
+    include/okami/UniformBuffer.hpp
 )
 
 add_library(okami-graphics-diligent STATIC ${SOURCE} ${INCLUDE})
@@ -51,6 +52,7 @@ target_include_directories(okami-graphics-diligent PUBLIC
     ${ASSIMP_INCLUDE_DIR}
     ${OKAMI_CORE_INCLUDE_DEPENDENCES}
     ${OKAMI_DILIGENT_INCLUDE_DEPENDENCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 target_compile_definitions(okami-graphics-diligent PRIVATE ${GLOBAL_COMPILER_FLAGS})

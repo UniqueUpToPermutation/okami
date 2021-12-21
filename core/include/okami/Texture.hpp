@@ -2,7 +2,7 @@
 
 #include <okami/Resource.hpp>
 #include <okami/ResourceInterface.hpp>
-#include <okami/VertexLayout.hpp>
+#include <okami/VertexFormat.hpp>
 
 #include <glm/vec4.hpp>
 

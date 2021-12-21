@@ -8,11 +8,15 @@
 #include <okami/Material.hpp>
 #include <okami/Graphics.hpp>
 #include <okami/Display.hpp>
+#include <okami/UniformBuffer.hpp>
 
 #include <RenderDevice.h>
 #include <SwapChain.h>
 #include <DeviceContext.h>
 #include <RefCntAutoPtr.hpp>
+#include <BasicMath.hpp>
+
+#include <shaders/BasicTypes.hlsl>
 
 namespace DG = Diligent;
 
@@ -68,14 +72,22 @@ namespace okami::graphics {
         core::ResourceManager<core::Texture>        mTextureManager;
         core::ResourceManager<core::BaseMaterial>   mBaseMaterialManager;
 
+        DynamicUniformBuffer<SceneGlobals>          mSceneGlobals;
+        DynamicUniformBuffer<StaticInstanceData>    mInstanceData;
+
         std::unique_ptr<GeometryImpl>       MoveToGPU(const core::Geometry& geometry);
         std::unique_ptr<TextureImpl>        MoveToGPU(const core::Texture& texture);
         std::unique_ptr<BaseMaterialImpl>   MoveToGPU(const core::BaseMaterial& material);
+
+        StaticMeshPipeline CreateStaticMeshPipeline();
 
     public:
         BasicRenderer(
             core::ISystem* displaySystem, 
             core::ResourceInterface& resources);
+
+        void Render(core::Frame* frame,
+            core::SyncObject& syncObject);
 
         void Startup(marl::WaitGroup& waitGroup) override;
         void Shutdown() override;
@@ -92,7 +104,7 @@ namespace okami::graphics {
             const core::Time& time) override;
         void EndExecute(core::Frame* frame) override;
 
-        const core::VertexLayout& GetVertexLayout(
+        const core::VertexFormat& GetVertexLayout(
             const entt::meta_type& type) const override;
 
         // Geometry resource handlers

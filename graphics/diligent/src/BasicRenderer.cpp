@@ -203,6 +203,79 @@ namespace okami::graphics {
         delete material;
     }
 
+    BasicRenderer::StaticMeshPipeline BasicRenderer::CreateStaticMeshPipeline() {
+        // Load shaders
+        core::EmbeddedFileLoader fileLoader(&MakeShaderMap);
+
+        ShaderParams paramsStaticMeshVS(
+            "BasicVert.vsh", DG::SHADER_TYPE_VERTEX, "Static Mesh VS");
+        ShaderParams paramsStaticMeshPS(
+            "BasicPixel.psh", DG::SHADER_TYPE_PIXEL, "Static Mesh PS");
+
+        bool bAddLineNumbers = mBackend != GraphicsBackend::OPENGL;
+
+        BasicRenderer::StaticMeshPipeline pipeline;
+
+        pipeline.mVS.Attach(CompileEmbeddedShader(
+            mDevice, paramsStaticMeshVS, &fileLoader, bAddLineNumbers));
+        pipeline.mPS.Attach(CompileEmbeddedShader(
+            mDevice, paramsStaticMeshPS, &fileLoader, bAddLineNumbers));
+
+        // Create pipeline
+        GraphicsPipelineStateCreateInfo PSOCreateInfo;
+        PSOCreateInfo.PSODesc.Name = "Static Mesh";
+        PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
+        PSOCreateInfo.GraphicsPipeline.NumRenderTargets             = 1;
+        PSOCreateInfo.GraphicsPipeline.RTVFormats[0]                = mSwapChain->GetDesc().ColorBufferFormat;
+        PSOCreateInfo.GraphicsPipeline.DSVFormat                    = mSwapChain->GetDesc().DepthBufferFormat;
+        PSOCreateInfo.GraphicsPipeline.PrimitiveTopology            = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode      = CULL_MODE_BACK;
+        PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = true;
+
+        InputLayoutDiligent layout = ToDiligent(mVertexLayouts.Get<core::StaticMesh>());
+        PSOCreateInfo.GraphicsPipeline.InputLayout.LayoutElements = layout.mElements.data();
+        PSOCreateInfo.GraphicsPipeline.InputLayout.NumElements = layout.mElements.size();
+
+        PSOCreateInfo.pVS = pipeline.mVS;
+        PSOCreateInfo.pPS = pipeline.mPS;
+
+        ShaderResourceVariableDesc Vars[] = {
+            {SHADER_TYPE_PIXEL, "t_Albedo", 
+                SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE},
+            {SHADER_TYPE_VERTEX, "cbuf_SceneGlobals", 
+                SHADER_RESOURCE_VARIABLE_TYPE_STATIC},
+            {SHADER_TYPE_VERTEX, "cbuf_InstanceData", 
+                SHADER_RESOURCE_VARIABLE_TYPE_STATIC}
+        };
+        pipeline.mAlbedoIdx = 0;
+
+        PSOCreateInfo.PSODesc.ResourceLayout.Variables    = Vars;
+        PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(Vars);
+
+        SamplerDesc SamLinearClampDesc {
+            FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, 
+            TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+        };
+        ImmutableSamplerDesc ImtblSamplers[] = {
+            {SHADER_TYPE_PIXEL, "t_Albedo", SamLinearClampDesc}
+        };
+        PSOCreateInfo.PSODesc.ResourceLayout.ImmutableSamplers    = ImtblSamplers;
+        PSOCreateInfo.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(ImtblSamplers);
+        PSOCreateInfo.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+        DG::IPipelineState* meshPipeline = nullptr;
+        mDevice->CreateGraphicsPipelineState(PSOCreateInfo, &meshPipeline);
+        pipeline.mState.Attach(meshPipeline);
+
+        // Set the scene globals buffer
+        pipeline.mState->GetStaticVariableByName(
+            DG::SHADER_TYPE_VERTEX, "cbuf_SceneGlobals")->Set(mSceneGlobals.Get());
+        pipeline.mState->GetStaticVariableByName(
+            DG::SHADER_TYPE_VERTEX, "cbuf_InstanceData")->Set(mInstanceData.Get());
+    
+        return pipeline;
+    }
+
     void BasicRenderer::Startup(marl::WaitGroup& waitGroup) {
         core::InterfaceCollection displayInterfaces(mDisplaySystem);
         auto windowProvider = displayInterfaces.Query<INativeWindowProvider>();
@@ -236,73 +309,26 @@ namespace okami::graphics {
         mSwapChain.Attach(swapChain);
 
         for (auto context : contexts) {
-            mContexts.emplace_back(DG::RefCntAutoPtr<DG::IDeviceContext>(context));
+            mContexts.emplace_back(
+                DG::RefCntAutoPtr<DG::IDeviceContext>(context));
         }
 
         mDisplay = display;
         mNativeWindowProvider = windowProvider;
         mBackend = display->GetRequestedBackend();
 
-        mVertexLayouts.Register<core::StaticMesh>(core::VertexLayout::PositionUV());
+        mVertexLayouts.Register<core::StaticMesh>(core::VertexFormat::PositionUV());
 
-        // Load shaders
-        core::EmbeddedFileLoader fileLoader(&MakeShaderMap);
+        // Create globals buffer
+        mSceneGlobals = DynamicUniformBuffer<SceneGlobals>(mDevice);
+        mInstanceData = DynamicUniformBuffer<StaticInstanceData>(mDevice);
 
-        ShaderParams paramsStaticMeshVS("BasicVert.vsh", DG::SHADER_TYPE_VERTEX, "Static Mesh VS");
-        ShaderParams paramsStaticMeshPS("BasicPixel.psh", DG::SHADER_TYPE_PIXEL, "Static Mesh PS");
-
-        bool bAddLineNumbers = mBackend != GraphicsBackend::OPENGL;
-
-        mStaticMeshPipeline.mVS.Attach(CompileEmbeddedShader(
-            mDevice, paramsStaticMeshVS, &fileLoader, bAddLineNumbers));
-        mStaticMeshPipeline.mPS.Attach(CompileEmbeddedShader(
-            mDevice, paramsStaticMeshPS, &fileLoader, bAddLineNumbers));
-
-        // Create pipeline
-        GraphicsPipelineStateCreateInfo PSOCreateInfo;
-        PSOCreateInfo.PSODesc.Name = "Static Mesh";
-        PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
-        PSOCreateInfo.GraphicsPipeline.NumRenderTargets             = 1;
-        PSOCreateInfo.GraphicsPipeline.RTVFormats[0]                = mSwapChain->GetDesc().ColorBufferFormat;
-        PSOCreateInfo.GraphicsPipeline.DSVFormat                    = mSwapChain->GetDesc().DepthBufferFormat;
-        PSOCreateInfo.GraphicsPipeline.PrimitiveTopology            = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode      = CULL_MODE_NONE;
-        PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = false;
-
-        InputLayoutDiligent layout = ToDiligent(mVertexLayouts.Get<core::StaticMesh>());
-        PSOCreateInfo.GraphicsPipeline.InputLayout.LayoutElements = layout.mElements.data();
-        PSOCreateInfo.GraphicsPipeline.InputLayout.NumElements = layout.mElements.size();
-
-        PSOCreateInfo.pVS = mStaticMeshPipeline.mVS;
-        PSOCreateInfo.pPS = mStaticMeshPipeline.mPS;
-
-        ShaderResourceVariableDesc Vars[] = {
-            {SHADER_TYPE_PIXEL, "t_Albedo", SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE}
-        };
-        mStaticMeshPipeline.mAlbedoIdx = 0;
-
-        PSOCreateInfo.PSODesc.ResourceLayout.Variables    = Vars;
-        PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(Vars);
-
-        SamplerDesc SamLinearClampDesc {
-            FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, 
-            TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
-        };
-        ImmutableSamplerDesc ImtblSamplers[] = {
-            {SHADER_TYPE_PIXEL, "t_Albedo", SamLinearClampDesc}
-        };
-        PSOCreateInfo.PSODesc.ResourceLayout.ImmutableSamplers    = ImtblSamplers;
-        PSOCreateInfo.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(ImtblSamplers);
-        PSOCreateInfo.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
-
-        DG::IPipelineState* meshPipeline = nullptr;
-        mDevice->CreateGraphicsPipelineState(PSOCreateInfo, &meshPipeline);
-        mStaticMeshPipeline.mState.Attach(meshPipeline);
-
-        auto basicTexture = core::Texture::Prefabs::SolidColor(16, 16, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        mStaticMeshPipeline = CreateStaticMeshPipeline();
+        auto basicTexture = core::Texture::Prefabs::SolidColor(
+            16, 16, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         mDefaultTexture = MoveToGPU(basicTexture)->mTexture;
-        
-        mStaticMeshPipeline.mDefaultBinding = MoveToGPU(core::BaseMaterial())->mBinding;
+        mStaticMeshPipeline.mDefaultBinding = 
+            MoveToGPU(core::BaseMaterial())->mBinding;
     }
 
     void BasicRenderer::RegisterInterfaces(core::InterfaceCollection& interfaces) {
@@ -409,47 +435,106 @@ namespace okami::graphics {
         return mBaseMaterialManager.Add(std::move(obj), path, newResId, finalizer);
     }
 
-    const core::VertexLayout& BasicRenderer::GetVertexLayout(
+    const core::VertexFormat& BasicRenderer::GetVertexLayout(
         const entt::meta_type& type) const {
         return mVertexLayouts.Get(type);
     }
 
     void BasicRenderer::RequestSync(core::SyncObject& syncObject) {
+        syncObject.Read<core::Transform>().add();
+        syncObject.Read<core::Camera>().add();
+        syncObject.Read<core::StaticMesh>().add();
     }
 
-    void BasicRenderer::BeginExecute(core::Frame* frame, 
-        marl::WaitGroup& renderGroup, 
-        marl::WaitGroup& updateGroup,
-        core::SyncObject& syncObject,
-        const core::Time& time) {
+    void BasicRenderer::Render(core::Frame* frame,
+        core::SyncObject& syncObject) {
 
-        // Schedule the updates of resource managers
-        mGeometryManager.ScheduleBackend(updateGroup);
-        mTextureManager.ScheduleBackend(updateGroup);
-        mBaseMaterialManager.ScheduleBackend(updateGroup);
+        struct RenderCall {
+            DG::float4x4 mWorldTransform;
+            core::StaticMesh mStaticMesh;
+        };
+
+        auto& registry = frame->Registry();
+
+        // Queue up render calls and compute transforms
+        std::vector<RenderCall> renderCalls;
+        SceneGlobals globals;
+        globals.mView = DG::float4x4::Identity();
+        globals.mViewProj = DG::float4x4::Identity();
+
+        {
+            auto staticMeshes = registry.view<core::StaticMesh>();
+
+            for (auto entity : staticMeshes) {
+                auto& staticMesh = staticMeshes.get<core::StaticMesh>(entity);
+                auto transform = registry.try_get<core::Transform>(entity);
+
+                RenderCall call;
+                call.mStaticMesh = staticMesh;
+                if (transform) {
+                    call.mWorldTransform = ToMatrix(*transform);
+                } else {
+                    call.mWorldTransform = DG::float4x4::Identity();
+                }
+                renderCalls.emplace_back(std::move(call));
+            }
+
+            auto cameras = registry.view<core::Camera>();
+
+            if (!cameras.empty()) {
+                auto cameraEntity = cameras.front();
+                auto camera = cameras.get<core::Camera>(cameraEntity);
+                DG::float4x4 projTransform = GetProjection(camera, mSwapChain, 
+                    mBackend == GraphicsBackend::OPENGL);
+                
+                auto transform = registry.try_get<core::Transform>(cameraEntity);
+                DG::float4x4 viewTransform = DG::float4x4::Identity();
+                if (transform) {
+                    viewTransform = ToMatrix(*transform).Inverse();
+                }
+
+                globals.mView = viewTransform;
+                globals.mViewProj = viewTransform * projTransform;
+            }
+
+            syncObject.Read<core::Transform>().done();
+            syncObject.Read<core::Camera>().done();
+            syncObject.Read<core::StaticMesh>().done();
+
+            globals.mInvView = globals.mView.Inverse();
+            globals.mInvViewProj = globals.mViewProj.Inverse();
+        }
 
         auto backBufferRTV = mSwapChain->GetCurrentBackBufferRTV();
         auto depthBufferDSV = mSwapChain->GetDepthBufferDSV();
         auto immediateContext = mContexts[0];
 
+        // Move globals to GPU
+        mSceneGlobals.Write(immediateContext, globals);
+
+        // Clear screen
         ITextureView* backBuffers[] = {backBufferRTV};
         float color[] = { 0.5f, 0.5f, 0.5f, 1.0f };
-
         immediateContext->SetRenderTargets(1, backBuffers, depthBufferDSV, 
             RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         immediateContext->ClearRenderTarget(backBufferRTV, color, 
             RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        immediateContext->ClearDepthStencil(depthBufferDSV,
+            DG::CLEAR_DEPTH_FLAG, 1.0f, 0, 
+            DG::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
-        auto& registry = frame->Registry();
+        // Bind pipeline state
+        immediateContext->SetPipelineState(mStaticMeshPipeline.mState);
 
         auto staticMeshes = registry.view<core::StaticMesh>();
 
-        for (auto entity : staticMeshes) {
-            auto& mesh = staticMeshes.get<core::StaticMesh>(entity);
+        // Iterate through all static meshes
+        for (auto call : renderCalls) {
 
             auto geometryImpl = reinterpret_cast<GeometryImpl*>
-                (mesh.mGeometry->GetBackend());
+                (call.mStaticMesh.mGeometry->GetBackend());
 
+            // Setup vertex buffers
             DG::IBuffer* vertBuffers[] = { geometryImpl->mVertexBuffers[0] };
             DG::Uint64 offsets[] = { 0 };
             immediateContext->SetVertexBuffers(0, 1, vertBuffers, offsets, 
@@ -459,11 +544,10 @@ namespace okami::graphics {
                     RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
             }
 
-            immediateContext->SetPipelineState(mStaticMeshPipeline.mState);
-
-            if (mesh.mMaterial) {
+            // Bind shader resources
+            if (call.mStaticMesh.mMaterial) {
                 auto materialImpl = reinterpret_cast<BaseMaterialImpl*>
-                    (mesh.mMaterial->GetBackend());
+                    (call.mStaticMesh.mMaterial->GetBackend());
                 immediateContext->CommitShaderResources(
                     materialImpl->mBinding,
                     RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
@@ -472,13 +556,18 @@ namespace okami::graphics {
                     mStaticMeshPipeline.mDefaultBinding,
                     RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
             }
-            
-            const auto& geoDesc = mesh.mGeometry->GetDesc();
 
+            // Submit instance data to the GPU
+            mInstanceData.Write(immediateContext, 
+                StaticInstanceData{call.mWorldTransform});
+            
+            // Submit draw call to GPU
+            const auto& geoDesc = call.mStaticMesh.mGeometry->GetDesc();
             if (geometryImpl->mIndexBuffer) {
                 DG::DrawIndexedAttribs attribs;
                 attribs.NumIndices = geoDesc.mIndexedAttribs.mNumIndices;
                 attribs.IndexType = ToDiligent(geoDesc.mIndexedAttribs.mIndexType);
+
                 immediateContext->DrawIndexed(attribs);
             } else {
                 DG::DrawAttribs attribs;
@@ -495,10 +584,32 @@ namespace okami::graphics {
         }
     }
 
+    void BasicRenderer::BeginExecute(core::Frame* frame, 
+        marl::WaitGroup& renderGroup, 
+        marl::WaitGroup& updateGroup,
+        core::SyncObject& syncObject,
+        const core::Time& time) {
+
+        // Schedule the render
+        renderGroup.add();
+        marl::Task task([this, frame, renderGroup, &syncObject]() {
+            defer(renderGroup.done());
+            Render(frame, syncObject);
+        }, marl::Task::Flags::SameThread);
+        marl::schedule(std::move(task));
+
+        // Schedule the updates of resource managers
+        mGeometryManager.ScheduleBackend(updateGroup);
+        mTextureManager.ScheduleBackend(updateGroup);
+        mBaseMaterialManager.ScheduleBackend(updateGroup);
+    }
+
     void BasicRenderer::EndExecute(core::Frame* frame) {
     }
 
     void BasicRenderer::Shutdown() {
+        mSceneGlobals = DynamicUniformBuffer<SceneGlobals>();
+        mInstanceData = DynamicUniformBuffer<StaticInstanceData>();
         mStaticMeshPipeline = StaticMeshPipeline();
 
         mDefaultTexture.Release();

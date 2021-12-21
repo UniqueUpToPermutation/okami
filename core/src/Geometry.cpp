@@ -42,7 +42,7 @@ using namespace entt;
 
 namespace okami::core {
 
-    Geometry Geometry::Prefabs::MaterialBall(const VertexLayout& layout) {
+    Geometry Geometry::Prefabs::MaterialBall(const VertexFormat& layout) {
 		return Geometry(layout, 
 			Geometry::DataSource
 				<uint32_t, float, float, float>(
@@ -56,7 +56,7 @@ namespace okami::core {
 				matball::mBitangents));
 	}
 
-	Geometry Geometry::Prefabs::Box(const VertexLayout& layout) {
+	Geometry Geometry::Prefabs::Box(const VertexFormat& layout) {
 		return Geometry(layout, 
 			Geometry::DataSource
 				<uint32_t, float, float, float>(
@@ -70,7 +70,7 @@ namespace okami::core {
 				box::mBitangents));
 	}
 
-	Geometry Geometry::Prefabs::Sphere(const VertexLayout& layout) {
+	Geometry Geometry::Prefabs::Sphere(const VertexFormat& layout) {
 		return Geometry(layout, 
 			Geometry::DataSource
 				<uint32_t, float, float, float>(
@@ -84,7 +84,7 @@ namespace okami::core {
 				sphere::mBitangents));
 	}
 
-	Geometry Geometry::Prefabs::BlenderMonkey(const VertexLayout& layout) {
+	Geometry Geometry::Prefabs::BlenderMonkey(const VertexFormat& layout) {
 		return Geometry(layout, 
 			Geometry::DataSource
 				<uint32_t, float, float, float>(
@@ -98,7 +98,7 @@ namespace okami::core {
 				monkey::mBitangents));
 	}
 
-	Geometry Geometry::Prefabs::Torus(const VertexLayout& layout) {
+	Geometry Geometry::Prefabs::Torus(const VertexFormat& layout) {
 		return Geometry(layout, 
 			Geometry::DataSource
 				<uint32_t, float, float, float>(
@@ -112,7 +112,7 @@ namespace okami::core {
 				torus::mBitangents));
 	}
 
-	Geometry Geometry::Prefabs::Plane(const VertexLayout& layout) {
+	Geometry Geometry::Prefabs::Plane(const VertexFormat& layout) {
 		return Geometry(layout, 
 			Geometry::DataSource
 				<uint32_t, float, float, float>(
@@ -126,7 +126,7 @@ namespace okami::core {
 				plane::mBitangents));
 	}
 
-	Geometry Geometry::Prefabs::StanfordBunny(const VertexLayout& layout) {
+	Geometry Geometry::Prefabs::StanfordBunny(const VertexFormat& layout) {
 		return Geometry(layout, 
 			Geometry::DataSource
 				<uint32_t, float, float, float>(
@@ -140,7 +140,7 @@ namespace okami::core {
 				bunny::mBitangents));
 	}
 
-	Geometry Geometry::Prefabs::UtahTeapot(const VertexLayout& layout) {
+	Geometry Geometry::Prefabs::UtahTeapot(const VertexFormat& layout) {
 		return Geometry(layout, 
 			Geometry::DataSource
 				<uint32_t, float, float, float>(
@@ -197,7 +197,7 @@ namespace okami::core {
 
     void ComputeLayoutProperties(
 		size_t vertex_count,
-		const VertexLayout& layout,
+		const VertexFormat& layout,
 		std::vector<size_t>& offsets,
 		std::vector<size_t>& strides,
 		std::vector<size_t>& channel_sizes) {
@@ -271,7 +271,7 @@ namespace okami::core {
 	}
 
     PackIndexing PackIndexing::From(
-        const VertexLayout& layout,
+        const VertexFormat& layout,
         size_t vertex_count) {
 
         std::vector<size_t> offsets;
@@ -341,7 +341,7 @@ namespace okami::core {
 
     Geometry::RawData Geometry::RawData::Load(
         const std::filesystem::path& path,
-        const VertexLayout& layout) {
+        const VertexFormat& layout) {
 
         Assimp::Importer importer;
 
@@ -389,7 +389,7 @@ namespace okami::core {
 
     Geometry Geometry::Load(
         const std::filesystem::path& path, 
-        const VertexLayout& layout) {
+        const VertexFormat& layout) {
         auto data = Geometry::RawData::Load(path, layout);
         return Geometry(std::move(data));
     }

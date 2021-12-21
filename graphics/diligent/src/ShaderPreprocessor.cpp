@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <fstream>
 
+#include <regex>
+
 namespace okami::graphics {
 
 	std::string ShaderPreprocessorConfig::Stringify(const ShaderPreprocessorConfig* overrides) const {
@@ -134,5 +136,7 @@ namespace okami::graphics {
 			bAddLineNumbers, &alreadyVisited);
 
 		output->mContent = streamOut.str();
+		output->mContent = std::regex_replace(
+			output->mContent, std::regex("#pragma[^\n]*\n"), "\n");
 	}
 }
