@@ -526,8 +526,6 @@ namespace okami::graphics {
         // Bind pipeline state
         immediateContext->SetPipelineState(mStaticMeshPipeline.mState);
 
-        auto staticMeshes = registry.view<core::StaticMesh>();
-
         // Iterate through all static meshes
         for (auto call : renderCalls) {
 

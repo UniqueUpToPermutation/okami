@@ -1,4 +1,26 @@
 {
+	"C_Cpp.default.includePath": [
+		"${workspaceFolder}/core/include",
+		"${workspaceFolder}/core/",
+		"${workspaceFolder}/ext/assimp/include",
+		"${workspaceFolder}/ext/marl/include",
+		"${workspaceFolder}/ext/cereal/include",
+		"${workspaceFolder}/ext/entt/single_include",
+		"${workspaceFolder}/ext/glm",
+		"${workspaceFolder}/graphics/interface",
+		"${workspaceFolder}/graphics/diligent/include",
+		"${workspaceFolder}/ext/DiligentEngine/DiligentSamples/ThirdParty/glfw/include",
+		"${workspaceFolder}/ext/DiligentEngine/DiligentCore/Common/interface",
+		"${workspaceFolder}/ext/DiligentEngine/DiligentCore/Graphics/GraphicsEngine/interface",
+		"${workspaceFolder}/ext/DiligentEngine/DiligentCore/Graphics/GraphicsEngineVulkan/interface",
+		"${workspaceFolder}/ext/DiligentEngine/DiligentCore/Graphics/GraphicsEngineOpenGL/interface",
+		"${workspaceFolder}/ext/DiligentEngine/DiligentCore/Platforms/Linux/interface",
+		"${workspaceFolder}/ext/DiligentEngine/DiligentCore/Platforms/Apple/interface",
+		"${workspaceFolder}/ext/lodepng",
+		"${workspaceFolder}/graphics/diligent",
+		"${workspaceFolder}/ext/DiligentEngine/DiligentCore/Graphics/GraphicsTools/interface"
+    ],
+
 	"files.associations": {
 		"*.fxh": "cpp",
 		"any": "cpp",

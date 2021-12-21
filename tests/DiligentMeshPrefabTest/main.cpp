@@ -99,7 +99,7 @@ int main() {
     scheduler.bind();
     defer(scheduler.unbind());
 
-#if VULKAN_SUPPORTED
+#if VULKAN_SUPPORTED && !PLATFORM_MACOS
     TestBackend(GraphicsBackend::VULKAN);
 #endif
 

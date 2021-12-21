@@ -58,7 +58,7 @@ int main() {
     TestBackend(GraphicsBackend::OPENGL);
 #endif
 
-#if VULKAN_SUPPORTED
+#if VULKAN_SUPPORTED && !PLATFORM_MACOS
     TestBackend(GraphicsBackend::VULKAN);
 #endif
 

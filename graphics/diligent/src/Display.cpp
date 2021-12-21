@@ -8,11 +8,19 @@ extern void* GetNSWindowView(GLFWwindow* wnd);
 
 #include <GLFW/glfw3native.h>
 
+#include <iostream>
+
+void HandleGLFWError(int code, const char* msg) {
+    std::cerr << "ERROR (GLFW code " << code << "): " << msg << std::endl;
+}
+
 namespace okami::graphics {
     void DisplayGLFW::Startup(const RealtimeGraphicsParams& params) {
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize glfw!");
         }
+
+        glfwSetErrorCallback(&HandleGLFWError);
 
         int glfwApiHint = GLFW_NO_API;
 
@@ -23,9 +31,16 @@ namespace okami::graphics {
         glfwWindowHint(GLFW_CLIENT_API, glfwApiHint);
         if (glfwApiHint == GLFW_OPENGL_API)
         {
-            // We need compute shaders, so request OpenGL 4.2 at least
+            glfwWindowHint(GLFW_SRGB_CAPABLE, GLFW_FALSE);
+
+#if PLATFORM_MACOS
+            // MacOS only supports OpenGL 4.1
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+#else
             glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
             glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+#endif
         }
 
         GLFWwindow* window = glfwCreateWindow(
