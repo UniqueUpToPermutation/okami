@@ -31,7 +31,7 @@ namespace okami::graphics {
         glfwWindowHint(GLFW_CLIENT_API, glfwApiHint);
         if (glfwApiHint == GLFW_OPENGL_API)
         {
-            glfwWindowHint(GLFW_SRGB_CAPABLE, GLFW_FALSE);
+            glfwWindowHint(GLFW_SRGB_CAPABLE, GLFW_TRUE);
 
 #if PLATFORM_MACOS
             // MacOS only supports OpenGL 4.1
@@ -59,8 +59,10 @@ namespace okami::graphics {
         mWindow = window;
         mParams = params;
 
-        if (mParams.mDeviceType == GraphicsBackend::OPENGL)
+        if (mParams.mDeviceType == GraphicsBackend::OPENGL) {
 			glfwMakeContextCurrent(mWindow);
+            
+        }
     }
 
     void DisplayGLFW::Startup(marl::WaitGroup& waitGroup) {

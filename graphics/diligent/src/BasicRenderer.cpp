@@ -18,7 +18,7 @@ namespace okami::graphics {
         DG::RENDER_DEVICE_TYPE DeviceType, 
         DG::EngineCreateInfo& EngineCI, 
         DG::SwapChainDesc& SCDesc) {
-		SCDesc.ColorBufferFormat            = TEX_FORMAT_RGBA8_UNORM;
+		SCDesc.ColorBufferFormat            = TEX_FORMAT_RGBA8_UNORM_SRGB;
         EngineCI.Features.GeometryShaders   = DEVICE_FEATURE_STATE_ENABLED;
         EngineCI.Features.Tessellation 		= DEVICE_FEATURE_STATE_ENABLED;
     
@@ -514,7 +514,7 @@ namespace okami::graphics {
 
         // Clear screen
         ITextureView* backBuffers[] = {backBufferRTV};
-        float color[] = { 0.5f, 0.5f, 0.5f, 1.0f };
+        float color[] = { 0.3f, 0.3f, 0.3f, 1.0f };
         immediateContext->SetRenderTargets(1, backBuffers, depthBufferDSV, 
             RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         immediateContext->ClearRenderTarget(backBufferRTV, color, 
