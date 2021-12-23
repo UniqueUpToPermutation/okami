@@ -26,8 +26,10 @@ namespace okami::core {
         virtual void Shutdown() = 0;
 
         // Load all underlying resources for the specified frame.
-        virtual void LoadResources(Frame* frame, 
-            marl::WaitGroup& waitGroup) = 0;
+        virtual void LoadResources(marl::WaitGroup& waitGroup) = 0;
+
+        // Set the current frame of the system.
+        virtual void SetFrame(Frame& frame) = 0;
 
         // Called at the beginning of every frame execution before BeginExecute.
         // Use this to request reads and writes to different component types.
@@ -37,7 +39,7 @@ namespace okami::core {
         // Gauranteed to be called from the main thread.
         // You should offload work into marl tasks as opposed
         // to performing operations in the function definition.
-        virtual void BeginExecute(Frame* frame, 
+        virtual void BeginExecute(Frame& frame, 
             marl::WaitGroup& renderGroup, 
             marl::WaitGroup& updateGroup,
             SyncObject& syncObject,
@@ -45,7 +47,7 @@ namespace okami::core {
 
         // Ends the execution of this system's update proceedure.
         // Gauranteed to be called from the main thread.
-        virtual void EndExecute(Frame* frame) = 0;
+        virtual void EndExecute(Frame& frame) = 0;
 
         virtual ~ISystem() = default;
     };
@@ -84,6 +86,12 @@ namespace okami::core {
             std::unique_ptr<marl::mutex>, TypeHash> mWriteMutexes;
 
     public:
+        SyncObject() = default;
+        SyncObject(SyncObject&&) = default;
+        SyncObject& operator=(SyncObject&&) = default;
+        SyncObject(const SyncObject&) = delete;
+        SyncObject& operator=(const SyncObject&) = delete;
+
         marl::WaitGroup Read(const entt::meta_type& type, bool bCreateIfNotFound = false) {
             auto it = mReadWaits.find(type);
 
@@ -160,7 +168,7 @@ namespace okami::core {
 
         template <typename SystemT, typename ... Args>
         ISystem* Add(Args&&... args) {
-            return mSystems.emplace(std::make_unique<SystemT>(std::forward(args...))).first->get();
+            return mSystems.emplace_back(std::make_unique<SystemT>(std::forward<Args>(args)...)).get();
         }
 
         inline ISystem* Add(std::unique_ptr<ISystem>&& system) {
@@ -171,12 +179,80 @@ namespace okami::core {
             mRenderGroup.wait();
         }
 
-        void BeginExecute(Frame* frame, const Time& time);
+        void BeginExecute(const Time& time);
         void EndExecute();
         void Startup();
         void Shutdown();
-        void LoadResources(Frame* frame);
+        void LoadResources();
+        void SetFrame(Frame& frame);
     };
 
 	void PrintWarning(const std::string& str);
+
+    template <typename ... Types>
+    struct UpdaterReads;
+
+    template <typename Type1, typename ... Types>
+    struct UpdaterReads<Type1, Types...> {
+        static void RequestSync(SyncObject& obj) {
+            obj.Read<Type1>().add();
+            UpdaterReads<Types...>::RequestSync(obj);
+        }
+    };
+
+    template <>
+    struct UpdaterReads<> {
+        static void RequestSync(SyncObject& obj) {
+        }
+    };
+
+    template <typename ... Types>
+    struct UpdaterWrites;
+
+    template <typename Type1, typename ... Types>
+    struct UpdaterWrites<Type1, Types...> {
+        static void RequestSync(SyncObject& obj) {
+            obj.RequireWrite<Type1>();
+            UpdaterWrites<Types...>::RequestSync(obj);
+        }
+    };
+
+    template <>
+    struct UpdaterWrites<> {
+        static void RequestSync(SyncObject& obj) {
+        }
+    };
+
+    typedef void(*updater_system_t)(
+            Frame& frame,
+            SyncObject& syncObject,
+            const Time& time);
+
+    template <updater_system_t UpdaterFunc,
+        typename Reads,
+        typename Writes>
+    class Updater : public ISystem {
+        void Startup(marl::WaitGroup& waitGroup) override { }
+        void RegisterInterfaces(InterfaceCollection& interfaces) override { }
+        void Shutdown() override { }
+        void LoadResources(marl::WaitGroup& waitGroup) override { }
+        void SetFrame(Frame& frame) override { }
+        void EndExecute(Frame& frame) override { }
+        void RequestSync(SyncObject& syncObject) override {
+            Reads::RequestSync(syncObject);
+            Writes::RequestSync(syncObject);
+        }
+        void BeginExecute(Frame& frame, 
+            marl::WaitGroup& renderGroup, 
+            marl::WaitGroup& updateGroup,
+            SyncObject& syncObject,
+            const Time& time) override {
+
+            updateGroup.add();
+            marl::schedule([&frame, &syncObject, time, updateGroup]() {
+                (*UpdaterFunc)(frame, syncObject, time);
+                updateGroup.done();
+            }); 
+        }
+    };
 }

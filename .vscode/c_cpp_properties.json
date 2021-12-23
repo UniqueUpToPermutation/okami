@@ -10,7 +10,8 @@
                 "VULKAN_SUPPORTED",
                 "GL_SUPPORTED",
                 "DILIGENT_DEVELOPMENT",
-				"USE_GLFW"
+				"USE_GLFW",
+                "OKAMI"
             ],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "gnu17",
@@ -28,7 +29,8 @@
                 "VULKAN_SUPPORTED",
                 "GL_SUPPORTED",
                 "DILIGENT_DEVELOPMENT",
-				"USE_GLFW"
+				"USE_GLFW",
+                "OKAMI"
             ],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "gnu17",

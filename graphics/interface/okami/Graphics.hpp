@@ -35,11 +35,8 @@ namespace okami::graphics {
 
     std::unique_ptr<core::ISystem> CreateGLFWDisplay(
         const RealtimeGraphicsParams& params = RealtimeGraphicsParams());
-    inline std::unique_ptr<core::ISystem> CreateDisplay(
-        const RealtimeGraphicsParams& params  = RealtimeGraphicsParams()) {
-        return CreateGLFWDisplay(params);
-    }
-
+    std::unique_ptr<core::ISystem> CreateDisplay(
+        const RealtimeGraphicsParams& params = RealtimeGraphicsParams());
     std::unique_ptr<core::ISystem> CreateRenderer(
         core::ISystem* displaySystem, 
         core::ResourceInterface& resources);

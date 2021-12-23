@@ -13,9 +13,9 @@
 #   include <MacOSNativeWindow.h>
 #endif
 
-namespace DG = Diligent;
+namespace okami::graphics::diligent {
+    namespace DG = Diligent;
 
-namespace okami::graphics {
 #if PLATFORM_WIN32
     typedef DG::Win32NativeWindow NativeWindow;
 #endif
@@ -37,7 +37,7 @@ namespace okami::graphics {
 #if USE_GLFW
 #include <GLFW/glfw3.h>
 
-namespace okami::graphics {
+namespace okami::graphics::diligent {
 
     class DisplayGLFW : 
         public core::ISystem, 
@@ -58,15 +58,15 @@ namespace okami::graphics {
         void RegisterInterfaces(core::InterfaceCollection& interfaces) override;
         void Startup(marl::WaitGroup& waitGroup) override;
         void Shutdown() override;
-        void LoadResources(core::Frame* frame, 
-            marl::WaitGroup& waitGroup) override;
+        void LoadResources(marl::WaitGroup& waitGroup) override;
+        void SetFrame(core::Frame& frame) override;
         void RequestSync(core::SyncObject& syncObject) override;
-        void BeginExecute(core::Frame* frame, 
+        void BeginExecute(core::Frame& frame, 
             marl::WaitGroup& renderGroup, 
             marl::WaitGroup& updateGroup,
             core::SyncObject& syncObject,
             const core::Time& time) override;
-        void EndExecute(core::Frame* frame) override;
+        void EndExecute(core::Frame& frame) override;
 
         NativeWindow GetWindow() override;
         void GLMakeContextCurrent() override;

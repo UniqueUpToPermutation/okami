@@ -2,7 +2,7 @@
 #include <okami/Graphics.hpp>
 #include <okami/Geometry.hpp>
 #include <okami/Transform.hpp>
-#include <okami/StaticMesh.hpp>
+#include <okami/GraphicsComponents.hpp>
 
 #include <iostream>
 #include <marl/defer.h>
@@ -58,11 +58,12 @@ void TestBackend(GraphicsBackend backend) {
         frame.Emplace<StaticMesh>(entity, StaticMesh{geo});
 
         // Geometry is a available to use after this is called
-        systems.LoadResources(&frame);
+        systems.SetFrame(frame);
+        systems.LoadResources();
         
         Clock clock;
         while (!displayInterface->ShouldClose()) {
-            systems.BeginExecute(&frame, clock.GetTime());
+            systems.BeginExecute(clock.GetTime());
             systems.EndExecute();
         }
     }

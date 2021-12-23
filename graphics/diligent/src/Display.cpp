@@ -1,4 +1,4 @@
-#include <okami/Display.hpp>
+#include <okami/diligent/Display.hpp>
 
 #if USE_GLFW
 
@@ -14,7 +14,7 @@ void HandleGLFWError(int code, const char* msg) {
     std::cerr << "ERROR (GLFW code " << code << "): " << msg << std::endl;
 }
 
-namespace okami::graphics {
+namespace okami::graphics::diligent {
     void DisplayGLFW::Startup(const RealtimeGraphicsParams& params) {
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize glfw!");
@@ -83,14 +83,16 @@ namespace okami::graphics {
         glfwTerminate();
     }
 
-    void DisplayGLFW::LoadResources(core::Frame* frame, 
-        marl::WaitGroup& waitGroup) {
+    void DisplayGLFW::SetFrame(core::Frame& frame) {
+    }
+
+    void DisplayGLFW::LoadResources(marl::WaitGroup& waitGroup) {
     }
 
     void DisplayGLFW::RequestSync(core::SyncObject& syncObject) {
     }
 
-    void DisplayGLFW::BeginExecute(core::Frame* frame, 
+    void DisplayGLFW::BeginExecute(core::Frame& frame, 
         marl::WaitGroup& renderGroup, 
         marl::WaitGroup& updateGroup,
         core::SyncObject& syncObject,
@@ -98,15 +100,11 @@ namespace okami::graphics {
         glfwPollEvents();
     }
 
-    void DisplayGLFW::EndExecute(core::Frame* frame) {
+    void DisplayGLFW::EndExecute(core::Frame& frame) {
     }
 
     DisplayGLFW::DisplayGLFW(const RealtimeGraphicsParams& params) :
         mParams(params) {
-    }
-
-    std::unique_ptr<core::ISystem> CreateGLFWDisplay(const RealtimeGraphicsParams& params) {
-        return std::make_unique<DisplayGLFW>(params);
     }
 
     NativeWindow DisplayGLFW::GetWindow() {

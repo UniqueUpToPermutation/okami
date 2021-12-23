@@ -1,7 +1,6 @@
 #pragma once
 
-#include <okami/ShaderPreprocessor.hpp>
-#include <string>
+#include <okami/diligent/ShaderPreprocessor.hpp>
 
 #include <EngineFactory.h>
 #include <RefCntAutoPtr.hpp>
@@ -10,9 +9,11 @@
 #include <SwapChain.h>
 #include <BasicMath.hpp>
 
-namespace DG = Diligent;
+#include <string>
 
-namespace okami::graphics {
+namespace okami::graphics::diligent {
+	namespace DG = Diligent;
+
 	class RawShader;
 
 	struct ShaderParams {

@@ -184,7 +184,7 @@ namespace okami::core {
 
 		Frame();
 		~Frame() = default;
-
+		
 		inline void Orphan(entt::entity ent) {
 			HierarchyData::Orphan(mRegistry, ent);
 		}

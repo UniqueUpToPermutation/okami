@@ -17,16 +17,16 @@ int main() {
     SystemCollection systems;
     systems.Add(CreateDisplay());
 
-    Frame frame;
-
     systems.Startup();
     {
         auto window = systems.QueryInterface<IDisplay>();
 
-        systems.LoadResources(&frame);
+        Frame frame;
+        systems.SetFrame(frame);
+        systems.LoadResources();
         
         while (!window->ShouldClose()) {
-            systems.BeginExecute(&frame, Time{0.0, 0.0});
+            systems.BeginExecute(Time{0.0, 0.0});
             systems.EndExecute();
         }
     }

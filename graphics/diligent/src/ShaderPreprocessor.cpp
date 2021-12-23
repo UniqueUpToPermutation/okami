@@ -1,4 +1,4 @@
-#include <okami/ShaderPreprocessor.hpp>
+#include <okami/diligent/ShaderPreprocessor.hpp>
 
 #include <sstream>
 #include <iostream>
@@ -7,7 +7,7 @@
 
 #include <regex>
 
-namespace okami::graphics {
+namespace okami::graphics::diligent {
 
 	std::string ShaderPreprocessorConfig::Stringify(const ShaderPreprocessorConfig* overrides) const {
 		std::stringstream ss;

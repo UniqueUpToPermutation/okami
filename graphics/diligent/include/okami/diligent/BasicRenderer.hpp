@@ -7,8 +7,10 @@
 #include <okami/Texture.hpp>
 #include <okami/Material.hpp>
 #include <okami/Graphics.hpp>
-#include <okami/Display.hpp>
-#include <okami/UniformBuffer.hpp>
+
+#include <okami/diligent/Display.hpp>
+#include <okami/diligent/Buffers.hpp>
+#include <okami/diligent/SpriteModule.hpp>
 
 #include <RenderDevice.h>
 #include <SwapChain.h>
@@ -18,9 +20,9 @@
 
 #include <shaders/BasicTypes.hlsl>
 
-namespace DG = Diligent;
+namespace okami::graphics::diligent {
+    namespace DG = Diligent;
 
-namespace okami::graphics {
     class BasicRenderer : 
         public core::ISystem,
         public core::IResourceManager<core::Geometry>,
@@ -68,25 +70,27 @@ namespace okami::graphics {
                 mDefaultBinding;
         } mStaticMeshPipeline;
 
+        SpriteModule                                mSpriteModule;
+
         core::ResourceManager<core::Geometry>       mGeometryManager;
         core::ResourceManager<core::Texture>        mTextureManager;
         core::ResourceManager<core::BaseMaterial>   mBaseMaterialManager;
 
-        DynamicUniformBuffer<SceneGlobals>          mSceneGlobals;
-        DynamicUniformBuffer<StaticInstanceData>    mInstanceData;
+        DynamicUniformBuffer<HLSL::SceneGlobals>          mSceneGlobals;
+        DynamicUniformBuffer<HLSL::StaticInstanceData>    mInstanceData;
 
         std::unique_ptr<GeometryImpl>       MoveToGPU(const core::Geometry& geometry);
         std::unique_ptr<TextureImpl>        MoveToGPU(const core::Texture& texture);
         std::unique_ptr<BaseMaterialImpl>   MoveToGPU(const core::BaseMaterial& material);
 
-        StaticMeshPipeline CreateStaticMeshPipeline();
+        StaticMeshPipeline CreateStaticMeshPipeline(core::IVirtualFileSystem* fileLoader);
 
     public:
         BasicRenderer(
             core::ISystem* displaySystem, 
             core::ResourceInterface& resources);
 
-        void Render(core::Frame* frame,
+        void Render(core::Frame& frame,
             core::SyncObject& syncObject);
 
         void Startup(marl::WaitGroup& waitGroup) override;
@@ -94,15 +98,15 @@ namespace okami::graphics {
 
         void RegisterInterfaces(
             core::InterfaceCollection& interfaces) override;
-        void LoadResources(core::Frame* frame, 
-            marl::WaitGroup& waitGroup) override;
+        void SetFrame(core::Frame& frame) override;
+        void LoadResources(marl::WaitGroup& waitGroup) override;
         void RequestSync(core::SyncObject& syncObject) override;
-        void BeginExecute(core::Frame* frame, 
+        void BeginExecute(core::Frame& frame, 
             marl::WaitGroup& renderGroup, 
             marl::WaitGroup& updateGroup,
             core::SyncObject& syncObject,
             const core::Time& time) override;
-        void EndExecute(core::Frame* frame) override;
+        void EndExecute(core::Frame& frame) override;
 
         const core::VertexFormat& GetVertexLayout(
             const entt::meta_type& type) const override;

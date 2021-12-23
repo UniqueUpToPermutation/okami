@@ -16,6 +16,9 @@ list(APPEND SOURCE
     src/GraphicsUtils.cpp
     src/ShaderPreprocessor.cpp
     src/Shader.cpp
+    src/Graphics.cpp
+    src/SpriteBatch.cpp
+    src/SpriteModule.cpp
     shader_rc.cpp
 )
 
@@ -24,12 +27,14 @@ if(PLATFORM_MACOS)
 endif()
 
 list(APPEND INCLUDE
-    include/okami/Display.hpp
-    include/okami/BasicRenderer.hpp
-    include/okami/GraphicsUtils.hpp
-    include/okami/ShaderPreprocessor.hpp
-    include/okami/Shader.hpp
-    include/okami/UniformBuffer.hpp
+    include/okami/diligent/Display.hpp
+    include/okami/diligent/BasicRenderer.hpp
+    include/okami/diligent/GraphicsUtils.hpp
+    include/okami/diligent/ShaderPreprocessor.hpp
+    include/okami/diligent/Shader.hpp
+    include/okami/diligent/Buffers.hpp
+    include/okami/diligent/SpriteBatch.hpp
+    include/okami/diligent/SpriteModule.hpp
 )
 
 add_library(okami-graphics-diligent STATIC ${SOURCE} ${INCLUDE})

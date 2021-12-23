@@ -1,6 +1,6 @@
-#include <okami/Shader.hpp>
+#include <okami/diligent/Shader.hpp>
 
-namespace okami::graphics {
+namespace okami::graphics::diligent {
 	DG::IShader* RawShader::ToDiligent(DG::IRenderDevice* device) {
 		DG::IShader* shader = nullptr;
 		mCreateInfo.Source = mShaderSource.c_str();

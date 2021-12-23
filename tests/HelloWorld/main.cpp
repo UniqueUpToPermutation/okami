@@ -17,13 +17,17 @@ int main() {
     SystemCollection systems;
     systems.Add(FrameSystemFactory(resources));
 
-    Frame frame;
-    auto entity = frame.CreateEntity(frame.GetRoot());
-    frame.Emplace<Transform>(entity, Transform());
-
     systems.Startup();
-    systems.LoadResources(&frame);
-    systems.BeginExecute(&frame, Time{0.0, 0.0});
-    systems.EndExecute();
+    {
+        Frame frame;
+        auto entity = frame.CreateEntity(frame.GetRoot());
+        frame.Emplace<Transform>(entity, Transform());
+
+        systems.SetFrame(frame);
+        systems.LoadResources();
+    
+        systems.BeginExecute(Time{0.0, 0.0});
+        systems.EndExecute();
+    }
     systems.Shutdown();
 }

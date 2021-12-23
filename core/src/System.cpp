@@ -17,8 +17,8 @@ namespace okami::core {
         Shutdown();
     }
 
-    void SystemCollection::BeginExecute(Frame* frame, const Time& time) {
-        mFrame = frame;
+    void SystemCollection::BeginExecute(const Time& time) {
+
         mFrame->SetUpdating(true);
 
         for (auto& system : mSystems) {
@@ -26,7 +26,7 @@ namespace okami::core {
         }
 
         for (auto& system : mSystems) {
-            system->BeginExecute(frame, mRenderGroup, mUpdateGroup, mSyncObject, time);
+            system->BeginExecute(*mFrame, mRenderGroup, mUpdateGroup, mSyncObject, time);
         }
     }
 
@@ -34,11 +34,10 @@ namespace okami::core {
         mUpdateGroup.wait();
 
         for (auto& system : mSystems) {
-            system->EndExecute(mFrame);
+            system->EndExecute(*mFrame);
         }
 
         mFrame->SetUpdating(false);
-        mFrame = nullptr;
     }
 
     void SystemCollection::Startup() {
@@ -67,13 +66,21 @@ namespace okami::core {
         mSystems.clear();
     }
 
-    void SystemCollection::LoadResources(Frame* frame) {
+    void SystemCollection::LoadResources() {
         marl::WaitGroup group;
 
         for (auto& system : mSystems) {
-            system->LoadResources(frame, group);
+            system->LoadResources(group);
         }
 
         group.wait();
+    }
+
+    void SystemCollection::SetFrame(Frame& frame) {
+        mFrame = &frame;
+
+        for (auto& system : mSystems) {
+            system->SetFrame(frame);
+        }
     }
 }

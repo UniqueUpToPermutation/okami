@@ -1,5 +1,5 @@
-#include <okami/GraphicsUtils.hpp>
-#include <okami/Display.hpp>
+#include <okami/diligent/GraphicsUtils.hpp>
+#include <okami/diligent/Display.hpp>
 
 #include <RenderDevice.h>
 #include <SwapChain.h>
@@ -24,7 +24,7 @@
 
 using namespace Diligent;
 
-namespace okami::graphics {
+namespace okami::graphics::diligent {
     void CreateDeviceAndSwapChain(
         IDisplay* display,
         INativeWindowProvider* windowProvider,

@@ -8,7 +8,7 @@
 #include <okami/Embed.hpp>
 #include <okami/Hashers.hpp>
 
-namespace okami::graphics {
+namespace okami::graphics::diligent {
 	struct ShaderPreprocessorConfig {
 		std::unordered_map<std::string, std::string> mDefines;
 

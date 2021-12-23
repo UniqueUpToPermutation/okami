@@ -37,10 +37,11 @@ void TestBackend(GraphicsBackend backend) {
         Frame frame;
 
         auto window = systems.QueryInterface<IDisplay>();
-        systems.LoadResources(&frame);
+        systems.SetFrame(frame);
+        systems.LoadResources();
         
         while (!window->ShouldClose()) {
-            systems.BeginExecute(&frame, Time{0.0, 0.0});
+            systems.BeginExecute(Time{0.0, 0.0});
             systems.EndExecute();
         }
     }
@@ -54,12 +55,12 @@ int main() {
     scheduler.bind();
     defer(scheduler.unbind());
 
-#if GL_SUPPORTED
-    TestBackend(GraphicsBackend::OPENGL);
-#endif
-
 #if VULKAN_SUPPORTED && !PLATFORM_MACOS
     TestBackend(GraphicsBackend::VULKAN);
+#endif
+
+#if GL_SUPPORTED
+    TestBackend(GraphicsBackend::OPENGL);
 #endif
 
 #if D3D11_SUPPORTED

@@ -1,6 +1,7 @@
 #pragma once
 
-#include <okami/Display.hpp>
+#include <okami/diligent/Display.hpp>
+
 #include <okami/VertexFormat.hpp>
 #include <okami/Texture.hpp>
 #include <okami/Camera.hpp>
@@ -12,10 +13,10 @@
 #include <SwapChain.h>
 #include <BasicMath.hpp>
 
-namespace DG = Diligent;
+namespace okami::graphics::diligent {
 
-namespace okami::graphics {
-
+    namespace DG = Diligent;
+    
     inline DG::float2 ToDiligent(const glm::vec2& v) {
         return DG::float2(v.x, v.y);
     }

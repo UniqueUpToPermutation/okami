@@ -1,18 +1,23 @@
-#include <okami/BasicRenderer.hpp>
-#include <okami/Display.hpp>
+
 #include <okami/Transform.hpp>
-#include <okami/GraphicsUtils.hpp>
-#include <okami/StaticMesh.hpp>
+#include <okami/GraphicsComponents.hpp>
 #include <okami/Embed.hpp>
-#include <okami/Shader.hpp>
-#include <okami/StaticMesh.hpp>
+
+#include <okami/diligent/BasicRenderer.hpp>
+#include <okami/diligent/Display.hpp>
+#include <okami/diligent/Shader.hpp>
+#include <okami/diligent/GraphicsUtils.hpp>
 
 using namespace Diligent;
 
 // Load shader locations in TEXT into a lookup
 void MakeShaderMap(okami::core::file_map_t* map);
 
-namespace okami::graphics {
+namespace okami::graphics::diligent {
+
+    inline DG::ITexture* GetDiligentTextureImpl(void* backend) {
+        return reinterpret_cast<BasicRenderer::TextureImpl*>(backend)->mTexture;
+    }
 
     void GetEngineInitializationAttribs(
         DG::RENDER_DEVICE_TYPE DeviceType, 
@@ -114,7 +119,7 @@ namespace okami::graphics {
     }
 
     void BasicRenderer::OnDestroy(core::Texture* tex) {
-        auto impl = reinterpret_cast<TextureImpl*>(tex->GetBackend());
+        auto impl = reinterpret_cast<BasicRenderer::TextureImpl*>(tex->GetBackend());
         delete impl;
         delete tex;
     }
@@ -176,7 +181,7 @@ namespace okami::graphics {
         DG::ITexture* albedo;
         if (data.mAlbedo) {
             data.mAlbedo->OnLoadEvent().wait();
-            albedo = reinterpret_cast<TextureImpl*>(data.mAlbedo->GetBackend())->mTexture;
+            albedo = GetDiligentTextureImpl(data.mAlbedo->GetBackend());
         } else
             albedo = mDefaultTexture;
        
@@ -203,9 +208,9 @@ namespace okami::graphics {
         delete material;
     }
 
-    BasicRenderer::StaticMeshPipeline BasicRenderer::CreateStaticMeshPipeline() {
-        // Load shaders
-        core::EmbeddedFileLoader fileLoader(&MakeShaderMap);
+    BasicRenderer::StaticMeshPipeline 
+        BasicRenderer::CreateStaticMeshPipeline(
+            core::IVirtualFileSystem* fileLoader) {
 
         ShaderParams paramsStaticMeshVS(
             "BasicVert.vsh", DG::SHADER_TYPE_VERTEX, "Static Mesh VS");
@@ -217,9 +222,9 @@ namespace okami::graphics {
         BasicRenderer::StaticMeshPipeline pipeline;
 
         pipeline.mVS.Attach(CompileEmbeddedShader(
-            mDevice, paramsStaticMeshVS, &fileLoader, bAddLineNumbers));
+            mDevice, paramsStaticMeshVS, fileLoader, bAddLineNumbers));
         pipeline.mPS.Attach(CompileEmbeddedShader(
-            mDevice, paramsStaticMeshPS, &fileLoader, bAddLineNumbers));
+            mDevice, paramsStaticMeshPS, fileLoader, bAddLineNumbers));
 
         // Create pipeline
         GraphicsPipelineStateCreateInfo PSOCreateInfo;
@@ -277,6 +282,9 @@ namespace okami::graphics {
     }
 
     void BasicRenderer::Startup(marl::WaitGroup& waitGroup) {
+        // Load shaders
+        core::EmbeddedFileLoader fileLoader(&MakeShaderMap);
+
         core::InterfaceCollection displayInterfaces(mDisplaySystem);
         auto windowProvider = displayInterfaces.Query<INativeWindowProvider>();
         auto display = displayInterfaces.Query<IDisplay>();
@@ -320,27 +328,30 @@ namespace okami::graphics {
         mVertexLayouts.Register<core::StaticMesh>(core::VertexFormat::PositionUV());
 
         // Create globals buffer
-        mSceneGlobals = DynamicUniformBuffer<SceneGlobals>(mDevice);
-        mInstanceData = DynamicUniformBuffer<StaticInstanceData>(mDevice);
+        mSceneGlobals = DynamicUniformBuffer<HLSL::SceneGlobals>(mDevice);
+        mInstanceData = DynamicUniformBuffer<HLSL::StaticInstanceData>(mDevice);
 
-        mStaticMeshPipeline = CreateStaticMeshPipeline();
+        mStaticMeshPipeline = CreateStaticMeshPipeline(&fileLoader);
         auto basicTexture = core::Texture::Prefabs::SolidColor(
             16, 16, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         mDefaultTexture = MoveToGPU(basicTexture)->mTexture;
         mStaticMeshPipeline.mDefaultBinding = 
             MoveToGPU(core::BaseMaterial())->mBinding;
+
+        mSpriteModule.Startup(mDevice, mSwapChain, mSceneGlobals, &fileLoader);
     }
 
     void BasicRenderer::RegisterInterfaces(core::InterfaceCollection& interfaces) {
         interfaces.Add<core::IVertexLayoutProvider>(this);
     }
 
-    void BasicRenderer::LoadResources(core::Frame* frame, 
-        marl::WaitGroup& waitGroup) {
-
+    void BasicRenderer::LoadResources(marl::WaitGroup& waitGroup) {
         mGeometryManager.ScheduleBackend(waitGroup, true);
         mTextureManager.ScheduleBackend(waitGroup, true);
         mBaseMaterialManager.ScheduleBackend(waitGroup, true);
+    }
+
+    void BasicRenderer::SetFrame(core::Frame& frame) {
     }
 
     core::Handle<core::Geometry> BasicRenderer::Load(
@@ -444,9 +455,11 @@ namespace okami::graphics {
         syncObject.Read<core::Transform>().add();
         syncObject.Read<core::Camera>().add();
         syncObject.Read<core::StaticMesh>().add();
+
+        mSpriteModule.RequestSync(syncObject);
     }
 
-    void BasicRenderer::Render(core::Frame* frame,
+    void BasicRenderer::Render(core::Frame& frame,
         core::SyncObject& syncObject) {
 
         struct RenderCall {
@@ -454,13 +467,13 @@ namespace okami::graphics {
             core::StaticMesh mStaticMesh;
         };
 
-        auto& registry = frame->Registry();
+        auto& registry = frame.Registry();
 
         // Queue up render calls and compute transforms
         std::vector<RenderCall> renderCalls;
-        SceneGlobals globals;
-        globals.mView = DG::float4x4::Identity();
-        globals.mViewProj = DG::float4x4::Identity();
+        HLSL::SceneGlobals globals;
+        globals.mCamera.mView = DG::float4x4::Identity();
+        globals.mCamera.mViewProj = DG::float4x4::Identity();
 
         {
             auto staticMeshes = registry.view<core::StaticMesh>();
@@ -493,16 +506,16 @@ namespace okami::graphics {
                     viewTransform = ToMatrix(*transform).Inverse();
                 }
 
-                globals.mView = viewTransform;
-                globals.mViewProj = viewTransform * projTransform;
+                globals.mCamera.mView = viewTransform;
+                globals.mCamera.mViewProj = viewTransform * projTransform;
             }
 
             syncObject.Read<core::Transform>().done();
             syncObject.Read<core::Camera>().done();
             syncObject.Read<core::StaticMesh>().done();
 
-            globals.mInvView = globals.mView.Inverse();
-            globals.mInvViewProj = globals.mViewProj.Inverse();
+            globals.mCamera.mInvView = globals.mCamera.mView.Inverse();
+            globals.mCamera.mInvViewProj = globals.mCamera.mViewProj.Inverse();
         }
 
         auto backBufferRTV = mSwapChain->GetCurrentBackBufferRTV();
@@ -557,7 +570,7 @@ namespace okami::graphics {
 
             // Submit instance data to the GPU
             mInstanceData.Write(immediateContext, 
-                StaticInstanceData{call.mWorldTransform});
+                HLSL::StaticInstanceData{call.mWorldTransform});
             
             // Submit draw call to GPU
             const auto& geoDesc = call.mStaticMesh.mGeometry->GetDesc();
@@ -574,6 +587,9 @@ namespace okami::graphics {
             }
         }
 
+        // Draw sprites
+        mSpriteModule.Render<&GetDiligentTextureImpl>(immediateContext, frame, syncObject);
+
         if (mBackend == GraphicsBackend::OPENGL) {
             // For OpenGL with GLFW, we need to call glfwSwapBuffers.
             mNativeWindowProvider->GLSwapBuffers();
@@ -582,7 +598,7 @@ namespace okami::graphics {
         }
     }
 
-    void BasicRenderer::BeginExecute(core::Frame* frame, 
+    void BasicRenderer::BeginExecute(core::Frame& frame, 
         marl::WaitGroup& renderGroup, 
         marl::WaitGroup& updateGroup,
         core::SyncObject& syncObject,
@@ -590,7 +606,7 @@ namespace okami::graphics {
 
         // Schedule the render
         renderGroup.add();
-        marl::Task task([this, frame, renderGroup, &syncObject]() {
+        marl::Task task([this, &frame, renderGroup, &syncObject]() {
             defer(renderGroup.done());
             Render(frame, syncObject);
         }, marl::Task::Flags::SameThread);
@@ -602,22 +618,19 @@ namespace okami::graphics {
         mBaseMaterialManager.ScheduleBackend(updateGroup);
     }
 
-    void BasicRenderer::EndExecute(core::Frame* frame) {
+    void BasicRenderer::EndExecute(core::Frame& frame) {
     }
 
     void BasicRenderer::Shutdown() {
-        mSceneGlobals = DynamicUniformBuffer<SceneGlobals>();
-        mInstanceData = DynamicUniformBuffer<StaticInstanceData>();
+        mSceneGlobals = DynamicUniformBuffer<HLSL::SceneGlobals>();
+        mInstanceData = DynamicUniformBuffer<HLSL::StaticInstanceData>();
         mStaticMeshPipeline = StaticMeshPipeline();
 
+        mSpriteModule.Shutdown();
         mDefaultTexture.Release();
         mSwapChain.Release();
         mContexts.clear();
         mDevice.Release();
         mEngineFactory.Release();
-    }
-
-    std::unique_ptr<core::ISystem> CreateRenderer(core::ISystem* displaySystem, core::ResourceInterface& resources) {
-        return std::make_unique<BasicRenderer>(displaySystem, resources);
     }
 }

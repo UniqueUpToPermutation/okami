@@ -26,11 +26,13 @@ namespace okami::core {
     void FrameSystem::RequestSync(SyncObject& syncObject) {
     }
 
-    void FrameSystem::LoadResources(Frame* frame, 
-        marl::WaitGroup& waitGroup) {
+    void FrameSystem::LoadResources(marl::WaitGroup& waitGroup) {
     }
 
-    void FrameSystem::BeginExecute(Frame* frame, 
+    void FrameSystem::SetFrame(Frame& frame) {
+    }
+
+    void FrameSystem::BeginExecute(Frame& frame, 
         marl::WaitGroup& renderGroup, 
         marl::WaitGroup& updateGroup,
         SyncObject& syncObject,
@@ -45,7 +47,7 @@ namespace okami::core {
         marl::schedule(std::move(managerUpdate));
     }
 
-    void FrameSystem::EndExecute(Frame* frame) {
+    void FrameSystem::EndExecute(Frame& frame) {
     }
 
     Handle<Frame> FrameSystem::Load(

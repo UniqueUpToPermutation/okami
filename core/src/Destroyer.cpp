@@ -10,17 +10,18 @@ namespace okami::core {
     }
     void Destroyer::RequestSync(SyncObject& syncObject) {
     }
-    void Destroyer::LoadResources(Frame* frame, 
-        marl::WaitGroup& waitGroup) {
+    void Destroyer::LoadResources(marl::WaitGroup& waitGroup) {
     }
-    void Destroyer::BeginExecute(Frame* frame, 
+    void Destroyer::SetFrame(Frame& frame) {
+    }
+    void Destroyer::BeginExecute(Frame& frame, 
         marl::WaitGroup& renderGroup, 
         marl::WaitGroup& updateGroup,
         SyncObject& syncObject,
         const Time& time) {
     }
-    void Destroyer::EndExecute(Frame* frame) {
-        auto& registry = frame->Registry();
+    void Destroyer::EndExecute(Frame& frame) {
+        auto& registry = frame.Registry();
         auto toDelete = registry.view<DestroyTag>();
 
         // Destroy everything with the destroy tag.

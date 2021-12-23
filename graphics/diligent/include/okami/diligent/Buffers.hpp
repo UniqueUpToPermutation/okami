@@ -5,9 +5,9 @@
 
 #include <cstring>
 
-namespace DG = Diligent;
+namespace okami::graphics::diligent {
+	namespace DG = Diligent;
 
-namespace okami::graphics {
     template <typename T>
 	class StaticUniformBuffer {
 	private:

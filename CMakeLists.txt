@@ -7,6 +7,8 @@ option(BUILD_TESTS "Compile and build the tests" ON)
 option(BUILD_OKAMI_DILIGENT "Compile and build the DiligentEngine okami module" ON)
 option(USE_GLFW "Use GLFW for windowing" ON)
 
+add_compile_definitions(OKAMI)
+
 add_subdirectory(ext)
 add_subdirectory(tools)
 

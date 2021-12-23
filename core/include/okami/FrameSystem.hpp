@@ -18,16 +18,16 @@ namespace okami::core {
         void RegisterInterfaces(InterfaceCollection& interfaces) override;
 	 	void Startup(marl::WaitGroup& waitGroup) override;
         void Shutdown() override;
-        void LoadResources(Frame* frame, 
-            marl::WaitGroup& waitGroup) override;
+        void LoadResources(marl::WaitGroup& waitGroup) override;
+        void SetFrame(Frame& frame) override;
         void RequestSync(SyncObject& syncObject) override;
 
-        void BeginExecute(Frame* frame, 
+        void BeginExecute(Frame& frame, 
             marl::WaitGroup& renderGroup, 
             marl::WaitGroup& updateGroup,
             SyncObject& syncObject,
             const Time& time) override;
-        void EndExecute(Frame* frame) override;
+        void EndExecute(Frame& frame) override;
 
 		Handle<Frame> Load(
             const std::filesystem::path& path, 

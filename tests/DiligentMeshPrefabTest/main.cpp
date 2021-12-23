@@ -2,7 +2,7 @@
 #include <okami/Graphics.hpp>
 #include <okami/Geometry.hpp>
 #include <okami/Transform.hpp>
-#include <okami/StaticMesh.hpp>
+#include <okami/GraphicsComponents.hpp>
 #include <okami/Camera.hpp>
 
 #include <iostream>
@@ -64,7 +64,8 @@ void TestBackend(GraphicsBackend backend) {
         auto& camera = frame.Emplace<Camera>(cameraEntity);
     
         // Geometry and texture are available to use after this is called.
-        systems.LoadResources(&frame);
+        systems.SetFrame(frame);
+        systems.LoadResources();
 
         // Apply a transformation based on the bounding box to make sure that
         // the camera is a good distance away from the model
@@ -85,7 +86,7 @@ void TestBackend(GraphicsBackend backend) {
             // Rotate the mesh
             meshTransform.mRotation = 
                 glm::angleAxis(time.mTotalTime, glm::dvec3(0.0, 1.0, 0.0));
-            systems.BeginExecute(&frame, time);
+            systems.BeginExecute(time);
             systems.EndExecute();
         }
     }

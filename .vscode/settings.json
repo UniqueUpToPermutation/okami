@@ -121,6 +121,7 @@
 		"span": "cpp",
 		"stack": "cpp",
 		"stop_token": "cpp",
-		"*.hlsl": "cpp"
+		"*.hlsl": "hlsl",
+		"*.gsh" : "hlsl"
 	}
 }

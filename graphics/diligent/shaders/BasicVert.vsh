@@ -21,7 +21,7 @@ struct PSInput {
 void main(in VSInput vs_input,
           out PSInput vs_output) 
 {
-    vs_output.Pos    = mul(gGlobals.mViewProj, 
+    vs_output.Pos    = mul(gGlobals.mCamera.mViewProj, 
         mul(gInstanceData.mWorld, float4(vs_input.Pos, 1.0)));
     vs_output.UV     = vs_input.UV;
 }
