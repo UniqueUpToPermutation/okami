@@ -72,6 +72,7 @@ namespace okami::graphics::diligent {
     void DisplayGLFW::RegisterInterfaces(core::InterfaceCollection& interfaces) {
         interfaces.Add<IDisplay>(this);
         interfaces.Add<INativeWindowProvider>(this);
+        interfaces.Add<IGLFWWindowProvider>(this);
     }
 
     bool DisplayGLFW::ShouldClose() const {
@@ -92,19 +93,24 @@ namespace okami::graphics::diligent {
     void DisplayGLFW::RequestSync(core::SyncObject& syncObject) {
     }
 
-    void DisplayGLFW::BeginExecute(core::Frame& frame, 
-        marl::WaitGroup& renderGroup, 
-        marl::WaitGroup& updateGroup,
+    void DisplayGLFW::Fork(core::Frame& frame, 
         core::SyncObject& syncObject,
         const core::Time& time) {
         glfwPollEvents();
     }
 
-    void DisplayGLFW::EndExecute(core::Frame& frame) {
+    void DisplayGLFW::Join(core::Frame& frame) {
+    }
+
+    void DisplayGLFW::Wait() {
     }
 
     DisplayGLFW::DisplayGLFW(const RealtimeGraphicsParams& params) :
         mParams(params) {
+    }
+
+    GLFWwindow* DisplayGLFW::GetWindowGLFW() const {
+        return mWindow;
     }
 
     NativeWindow DisplayGLFW::GetWindow() {

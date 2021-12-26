@@ -17,7 +17,7 @@ namespace okami::core {
         Shutdown();
     }
 
-    void SystemCollection::BeginExecute(const Time& time) {
+    void SystemCollection::Fork(const Time& time) {
 
         mFrame->SetUpdating(true);
 
@@ -26,15 +26,13 @@ namespace okami::core {
         }
 
         for (auto& system : mSystems) {
-            system->BeginExecute(*mFrame, mRenderGroup, mUpdateGroup, mSyncObject, time);
+            system->Fork(*mFrame, mSyncObject, time);
         }
     }
 
-    void SystemCollection::EndExecute() {
-        mUpdateGroup.wait();
-
+    void SystemCollection::Join() {
         for (auto& system : mSystems) {
-            system->EndExecute(*mFrame);
+            system->Join(*mFrame);
         }
 
         mFrame->SetUpdating(false);
@@ -57,13 +55,15 @@ namespace okami::core {
     }
 
     void SystemCollection::Shutdown() {
-        
         // Shutdown systems in reverse order
         for (auto it = mSystems.rbegin(); it != mSystems.rend(); ++it) {
             it->get()->Shutdown();
         }
 
-        mSystems.clear();
+        // Free systems in reverse order
+        while (mSystems.size()) {
+            mSystems.pop_back();
+        }
     }
 
     void SystemCollection::LoadResources() {

@@ -145,8 +145,8 @@ void TestBackend(GraphicsBackend backend) {
             camera.mOrthoSize = displayInterface->GetFramebufferSize();
             
             auto time = clock.GetTime();
-            systems.BeginExecute(time);
-            systems.EndExecute();
+            systems.Fork(time);
+            systems.Join();
         }
     }
     systems.Shutdown();

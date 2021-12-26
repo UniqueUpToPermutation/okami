@@ -26,8 +26,8 @@ int main() {
         systems.LoadResources();
         
         while (!window->ShouldClose()) {
-            systems.BeginExecute(Time{0.0, 0.0});
-            systems.EndExecute();
+            systems.Fork(Time{0.0, 0.0});
+            systems.Join();
         }
     }
     systems.Shutdown();

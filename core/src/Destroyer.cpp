@@ -14,13 +14,13 @@ namespace okami::core {
     }
     void Destroyer::SetFrame(Frame& frame) {
     }
-    void Destroyer::BeginExecute(Frame& frame, 
-        marl::WaitGroup& renderGroup, 
-        marl::WaitGroup& updateGroup,
+    void Destroyer::Fork(Frame& frame,
         SyncObject& syncObject,
         const Time& time) {
     }
-    void Destroyer::EndExecute(Frame& frame) {
+    void Destroyer::Wait() {
+    }
+    void Destroyer::Join(Frame& frame) {
         auto& registry = frame.Registry();
         auto toDelete = registry.view<DestroyTag>();
 

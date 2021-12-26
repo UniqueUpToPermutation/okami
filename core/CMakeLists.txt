@@ -40,6 +40,7 @@ list(APPEND INCLUDE
     include/okami/Texture.hpp
     include/okami/Material.hpp
     include/okami/Clock.hpp
+    include/okami/Event.hpp
 )
 
 add_library(okami-core STATIC ${SOURCE} ${INCLUDE})

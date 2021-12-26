@@ -63,8 +63,8 @@ void TestBackend(GraphicsBackend backend) {
         
         Clock clock;
         while (!displayInterface->ShouldClose()) {
-            systems.BeginExecute(clock.GetTime());
-            systems.EndExecute();
+            systems.Fork(clock.GetTime());
+            systems.Join();
         }
     }
     systems.Shutdown();

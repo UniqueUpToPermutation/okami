@@ -2,6 +2,8 @@
 
 #include <entt/entt.hpp>
 #include <marl/waitgroup.h>
+#include <marl/event.h>
+#include <marl/defer.h>
 
 #include <okami/Frame.hpp>
 #include <okami/Hashers.hpp>
@@ -31,7 +33,7 @@ namespace okami::core {
         // Set the current frame of the system.
         virtual void SetFrame(Frame& frame) = 0;
 
-        // Called at the beginning of every frame execution before BeginExecute.
+        // Called at the beginning of every frame execution before Fork.
         // Use this to request reads and writes to different component types.
         virtual void RequestSync(SyncObject& syncObject) = 0;
 
@@ -39,15 +41,17 @@ namespace okami::core {
         // Gauranteed to be called from the main thread.
         // You should offload work into marl tasks as opposed
         // to performing operations in the function definition.
-        virtual void BeginExecute(Frame& frame, 
-            marl::WaitGroup& renderGroup, 
-            marl::WaitGroup& updateGroup,
+        virtual void Fork(Frame& frame,
             SyncObject& syncObject,
             const Time& time) = 0;
 
         // Ends the execution of this system's update proceedure.
         // Gauranteed to be called from the main thread.
-        virtual void EndExecute(Frame& frame) = 0;
+        // Should block until the proceedures invoked from Fork are finished
+        virtual void Join(Frame& frame) = 0;
+
+        // Waits on this system to join
+        virtual void Wait() = 0;
 
         virtual ~ISystem() = default;
     };
@@ -145,9 +149,6 @@ namespace okami::core {
     private:
         std::vector<std::unique_ptr<ISystem>> mSystems;
         SyncObject mSyncObject;
-
-        marl::WaitGroup mRenderGroup;
-        marl::WaitGroup mUpdateGroup;
         Frame* mFrame;
 
         InterfaceCollection mInterfaces;
@@ -168,19 +169,19 @@ namespace okami::core {
 
         template <typename SystemT, typename ... Args>
         ISystem* Add(Args&&... args) {
-            return mSystems.emplace_back(std::make_unique<SystemT>(std::forward<Args>(args)...)).get();
+            auto ptr = std::make_unique<SystemT>(std::forward<Args>(args)...);
+            ptr->RegisterInterfaces(mInterfaces);
+            return mSystems.emplace_back(std::move(ptr)).get();
         }
 
         inline ISystem* Add(std::unique_ptr<ISystem>&& system) {
+            system->RegisterInterfaces(mInterfaces);
             return mSystems.emplace_back(std::move(system)).get();
         }
 
-        inline void WaitOnRender() {
-            mRenderGroup.wait();
-        }
+        void Fork(const Time& time);
+        void Join();
 
-        void BeginExecute(const Time& time);
-        void EndExecute();
         void Startup();
         void Shutdown();
         void LoadResources();
@@ -232,27 +233,39 @@ namespace okami::core {
         typename Reads,
         typename Writes>
     class Updater : public ISystem {
+    private:
+        marl::Event mFinishedEvent;
+
+    public:
         void Startup(marl::WaitGroup& waitGroup) override { }
         void RegisterInterfaces(InterfaceCollection& interfaces) override { }
         void Shutdown() override { }
         void LoadResources(marl::WaitGroup& waitGroup) override { }
         void SetFrame(Frame& frame) override { }
-        void EndExecute(Frame& frame) override { }
+        
+        void Join(Frame& frame) override { 
+            Wait();
+        }
+
         void RequestSync(SyncObject& syncObject) override {
             Reads::RequestSync(syncObject);
             Writes::RequestSync(syncObject);
         }
-        void BeginExecute(Frame& frame, 
-            marl::WaitGroup& renderGroup, 
-            marl::WaitGroup& updateGroup,
+        void Fork(Frame& frame, 
             SyncObject& syncObject,
             const Time& time) override {
 
-            updateGroup.add();
-            marl::schedule([&frame, &syncObject, time, updateGroup]() {
+            mFinishedEvent.clear();
+            marl::schedule([&frame, &syncObject, 
+                time, 
+                finishedEvent = mFinishedEvent]() {
+                defer(finishedEvent.signal());
                 (*UpdaterFunc)(frame, syncObject, time);
-                updateGroup.done();
             }); 
+        }
+
+        void Wait() override {
+            mFinishedEvent.wait();
         }
     };
 }

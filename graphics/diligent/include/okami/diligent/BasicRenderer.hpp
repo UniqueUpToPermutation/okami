@@ -11,6 +11,7 @@
 #include <okami/diligent/Display.hpp>
 #include <okami/diligent/Buffers.hpp>
 #include <okami/diligent/SpriteModule.hpp>
+#include <okami/diligent/RenderModule.hpp>
 
 #include <RenderDevice.h>
 #include <SwapChain.h>
@@ -23,12 +24,13 @@
 namespace okami::graphics::diligent {
     namespace DG = Diligent;
 
-    class BasicRenderer : 
+    class BasicRenderer final : 
         public core::ISystem,
         public core::IResourceManager<core::Geometry>,
         public core::IResourceManager<core::Texture>,
         public core::IResourceManager<core::BaseMaterial>,
-        public core::IVertexLayoutProvider {
+        public core::IVertexLayoutProvider,
+        public IRenderer {
     public:
       struct GeometryImpl {
         std::vector<DG::RefCntAutoPtr<DG::IBuffer>>
@@ -58,8 +60,11 @@ namespace okami::graphics::diligent {
         INativeWindowProvider*                      mNativeWindowProvider;
         IDisplay*                                   mDisplay;
         GraphicsBackend                             mBackend;
+        marl::WaitGroup                             mRenderFinished;
 
         DG::RefCntAutoPtr<DG::ITexture>             mDefaultTexture;
+
+        std::set<IRenderModule*>                    mOverlays;
         struct StaticMeshPipeline {
             DG::RefCntAutoPtr<DG::IShader>          mVS;
             DG::RefCntAutoPtr<DG::IShader>          mPS;
@@ -76,8 +81,8 @@ namespace okami::graphics::diligent {
         core::ResourceManager<core::Texture>        mTextureManager;
         core::ResourceManager<core::BaseMaterial>   mBaseMaterialManager;
 
-        DynamicUniformBuffer<HLSL::SceneGlobals>          mSceneGlobals;
-        DynamicUniformBuffer<HLSL::StaticInstanceData>    mInstanceData;
+        DynamicUniformBuffer<HLSL::SceneGlobals>            mSceneGlobals;
+        DynamicUniformBuffer<HLSL::StaticInstanceData>      mInstanceData;
 
         std::unique_ptr<GeometryImpl>       MoveToGPU(const core::Geometry& geometry);
         std::unique_ptr<TextureImpl>        MoveToGPU(const core::Texture& texture);
@@ -101,12 +106,11 @@ namespace okami::graphics::diligent {
         void SetFrame(core::Frame& frame) override;
         void LoadResources(marl::WaitGroup& waitGroup) override;
         void RequestSync(core::SyncObject& syncObject) override;
-        void BeginExecute(core::Frame& frame, 
-            marl::WaitGroup& renderGroup, 
-            marl::WaitGroup& updateGroup,
+        void Fork(core::Frame& frame,
             core::SyncObject& syncObject,
             const core::Time& time) override;
-        void EndExecute(core::Frame& frame) override;
+        void Join(core::Frame& frame) override;
+        void Wait() override;
 
         const core::VertexFormat& GetVertexLayout(
             const entt::meta_type& type) const override;
@@ -149,5 +153,10 @@ namespace okami::graphics::diligent {
         core::Handle<core::BaseMaterial> Add(core::BaseMaterial&& obj, 
             const std::filesystem::path& path, 
             core::resource_id_t newResId) override;
+
+        void AddModule(std::unique_ptr<IGraphicsObject>&&) override;
+        void AddOverlay(IGraphicsObject* object) override;
+        void RemoveOverlay(IGraphicsObject* object) override;
+        glm::i32vec2 GetRenderArea() const override;
     };
 }

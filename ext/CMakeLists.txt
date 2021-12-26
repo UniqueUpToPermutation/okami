@@ -21,6 +21,9 @@ if (BUILD_OKAMI_DILIGENT)
         CACHE INTERNAL
         "DILIGENT_INCLUDE_PATHS"
     )
+
+    SET(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/DiligentEngine/DiligentTools/ThirdParty/imgui
+        CACHE INTERNAL "IMGUI_DIR")
 endif()
 
 add_subdirectory(assimp)

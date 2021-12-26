@@ -339,10 +339,15 @@ namespace okami::graphics::diligent {
             MoveToGPU(core::BaseMaterial())->mBinding;
 
         mSpriteModule.Startup(mDevice, mSwapChain, mSceneGlobals, &fileLoader);
+
+        for (auto overlay : mOverlays) {
+            overlay->Startup(mDevice, mSwapChain);
+        }
     }
 
     void BasicRenderer::RegisterInterfaces(core::InterfaceCollection& interfaces) {
         interfaces.Add<core::IVertexLayoutProvider>(this);
+        interfaces.Add<IRenderer>(this);
     }
 
     void BasicRenderer::LoadResources(marl::WaitGroup& waitGroup) {
@@ -590,6 +595,11 @@ namespace okami::graphics::diligent {
         // Draw sprites
         mSpriteModule.Render<&GetDiligentTextureImpl>(immediateContext, frame, syncObject);
 
+        // Draw overlays (i.e., ImGui, etc.)
+        for (auto overlay : mOverlays) {
+            overlay->QueueCommands(immediateContext);
+        }
+
         if (mBackend == GraphicsBackend::OPENGL) {
             // For OpenGL with GLFW, we need to call glfwSwapBuffers.
             mNativeWindowProvider->GLSwapBuffers();
@@ -598,30 +608,37 @@ namespace okami::graphics::diligent {
         }
     }
 
-    void BasicRenderer::BeginExecute(core::Frame& frame, 
-        marl::WaitGroup& renderGroup, 
-        marl::WaitGroup& updateGroup,
+    void BasicRenderer::Fork(core::Frame& frame, 
         core::SyncObject& syncObject,
         const core::Time& time) {
 
         // Schedule the render
-        renderGroup.add();
-        marl::Task task([this, &frame, renderGroup, &syncObject]() {
-            defer(renderGroup.done());
+        mRenderFinished.add();
+        marl::Task task([this, &frame, renderFinished = mRenderFinished, &syncObject]() {
+            defer(renderFinished.done());
             Render(frame, syncObject);
         }, marl::Task::Flags::SameThread);
         marl::schedule(std::move(task));
 
         // Schedule the updates of resource managers
-        mGeometryManager.ScheduleBackend(updateGroup);
-        mTextureManager.ScheduleBackend(updateGroup);
-        mBaseMaterialManager.ScheduleBackend(updateGroup);
+        mGeometryManager.ScheduleBackend(mRenderFinished);
+        mTextureManager.ScheduleBackend(mRenderFinished);
+        mBaseMaterialManager.ScheduleBackend(mRenderFinished);
     }
 
-    void BasicRenderer::EndExecute(core::Frame& frame) {
+    void BasicRenderer::Join(core::Frame& frame) {
+        Wait();
+    }
+
+    void BasicRenderer::Wait() {
+        mRenderFinished.wait();
     }
 
     void BasicRenderer::Shutdown() {
+        for (auto overlay : mOverlays) {
+            overlay->Shutdown();
+        }
+
         mSceneGlobals = DynamicUniformBuffer<HLSL::SceneGlobals>();
         mInstanceData = DynamicUniformBuffer<HLSL::StaticInstanceData>();
         mStaticMeshPipeline = StaticMeshPipeline();
@@ -632,5 +649,34 @@ namespace okami::graphics::diligent {
         mContexts.clear();
         mDevice.Release();
         mEngineFactory.Release();
+    }
+
+    void BasicRenderer::AddModule(std::unique_ptr<IGraphicsObject>&&) {
+        throw std::runtime_error("Not implemented!");
+    }
+
+    void BasicRenderer::AddOverlay(IGraphicsObject* object) {
+        auto renderModule = dynamic_cast<IRenderModule*>(object);
+
+        if (renderModule) {
+            mOverlays.emplace(renderModule);
+        } else {
+            throw std::runtime_error("Overlay is not IRenderModule!");
+        }
+    }
+
+    void BasicRenderer::RemoveOverlay(IGraphicsObject* object) {
+        auto renderModule = dynamic_cast<IRenderModule*>(object);
+
+        if (renderModule) {
+            mOverlays.erase(renderModule);
+        } else {
+            throw std::runtime_error("Overlay is not IRenderModule!");
+        }
+    }
+    glm::i32vec2 BasicRenderer::GetRenderArea() const {
+        return glm::i32vec2(
+            mSwapChain->GetDesc().Width, 
+            mSwapChain->GetDesc().Height);
     }
 }

@@ -19,7 +19,9 @@ list(APPEND SOURCE
     src/Graphics.cpp
     src/SpriteBatch.cpp
     src/SpriteModule.cpp
+    src/ImGuiSystem.cpp
     shader_rc.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
 )
 
 if(PLATFORM_MACOS)
@@ -35,6 +37,8 @@ list(APPEND INCLUDE
     include/okami/diligent/Buffers.hpp
     include/okami/diligent/SpriteBatch.hpp
     include/okami/diligent/SpriteModule.hpp
+    include/okami/diligent/ImGuiSystem.hpp
+    include/okami/diligent/RenderModule.hpp
 )
 
 add_library(okami-graphics-diligent STATIC ${SOURCE} ${INCLUDE})

@@ -86,8 +86,8 @@ void TestBackend(GraphicsBackend backend) {
             // Rotate the mesh
             meshTransform.mRotation = 
                 glm::angleAxis(time.mTotalTime, glm::dvec3(0.0, 1.0, 0.0));
-            systems.BeginExecute(time);
-            systems.EndExecute();
+            systems.Fork(time);
+            systems.Join();
         }
     }
     systems.Shutdown();

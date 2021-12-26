@@ -32,22 +32,25 @@ namespace okami::core {
     void FrameSystem::SetFrame(Frame& frame) {
     }
 
-    void FrameSystem::BeginExecute(Frame& frame, 
-        marl::WaitGroup& renderGroup, 
-        marl::WaitGroup& updateGroup,
+    void FrameSystem::Fork(Frame& frame, 
         SyncObject& syncObject,
         const Time& time) {
 
-        updateGroup.add();
-        marl::Task managerUpdate([manager = &mManager, updateGroup] {
-            defer(updateGroup.done());
+        mUpdateFinished.clear();
+        marl::Task managerUpdate([manager = &mManager, updateFinished = mUpdateFinished] {
+            defer(updateFinished.signal());
             manager->RunBackend();
         }, marl::Task::Flags::SameThread);
 
         marl::schedule(std::move(managerUpdate));
     }
 
-    void FrameSystem::EndExecute(Frame& frame) {
+    void FrameSystem::Join(Frame& frame) {
+        Wait();
+    }
+
+    void FrameSystem::Wait() {
+        mUpdateFinished.wait();
     }
 
     Handle<Frame> FrameSystem::Load(

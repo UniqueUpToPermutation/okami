@@ -18,7 +18,9 @@
 		"${workspaceFolder}/ext/DiligentEngine/DiligentCore/Platforms/Apple/interface",
 		"${workspaceFolder}/ext/lodepng",
 		"${workspaceFolder}/graphics/diligent",
-		"${workspaceFolder}/ext/DiligentEngine/DiligentCore/Graphics/GraphicsTools/interface"
+		"${workspaceFolder}/ext/DiligentEngine/DiligentCore/Graphics/GraphicsTools/interface",
+		"${workspaceFolder}/ext/DiligentEngine/DiligentTools/Imgui/interface",
+		"${workspaceFolder}/ext/DiligentEngine/DiligentTools/ThirdParty/imgui/",
     ],
 
 	"files.associations": {

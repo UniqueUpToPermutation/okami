@@ -39,10 +39,16 @@ namespace okami::graphics::diligent {
 
 namespace okami::graphics::diligent {
 
-    class DisplayGLFW : 
+    class IGLFWWindowProvider {
+    public:
+        virtual GLFWwindow* GetWindowGLFW() const = 0;
+    };
+
+    class DisplayGLFW final : 
         public core::ISystem, 
         public IDisplay,
-        public INativeWindowProvider {
+        public INativeWindowProvider,
+        public IGLFWWindowProvider {
     private:
         GLFWwindow* mWindow = nullptr;
 		RealtimeGraphicsParams mParams;
@@ -54,24 +60,22 @@ namespace okami::graphics::diligent {
         DisplayGLFW(const RealtimeGraphicsParams& params);
 
         bool ShouldClose() const override;
-
         void RegisterInterfaces(core::InterfaceCollection& interfaces) override;
         void Startup(marl::WaitGroup& waitGroup) override;
         void Shutdown() override;
         void LoadResources(marl::WaitGroup& waitGroup) override;
         void SetFrame(core::Frame& frame) override;
         void RequestSync(core::SyncObject& syncObject) override;
-        void BeginExecute(core::Frame& frame, 
-            marl::WaitGroup& renderGroup, 
-            marl::WaitGroup& updateGroup,
+        void Fork(core::Frame& frame, 
             core::SyncObject& syncObject,
             const core::Time& time) override;
-        void EndExecute(core::Frame& frame) override;
-
+        void Join(core::Frame& frame) override;
+        void Wait() override;
+        
+        GLFWwindow* GetWindowGLFW() const override;
         NativeWindow GetWindow() override;
         void GLMakeContextCurrent() override;
         void GLSwapBuffers(int swapInterval) override;
-
         glm::i32vec2 GetFramebufferSize() const override;
         bool GetIsFullscreen() const override;
         GraphicsBackend GetRequestedBackend() const override;

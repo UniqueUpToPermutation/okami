@@ -9,6 +9,7 @@ namespace okami::core {
 	class FrameSystem final : public ISystem, public IResourceManager<Frame> {
 	private:
 		ResourceManager<Frame> mManager;
+        marl::Event mUpdateFinished;
 
 	public:
         void OnDestroy(Frame* frame);
@@ -22,12 +23,11 @@ namespace okami::core {
         void SetFrame(Frame& frame) override;
         void RequestSync(SyncObject& syncObject) override;
 
-        void BeginExecute(Frame& frame, 
-            marl::WaitGroup& renderGroup, 
-            marl::WaitGroup& updateGroup,
+        void Fork(Frame& frame,
             SyncObject& syncObject,
             const Time& time) override;
-        void EndExecute(Frame& frame) override;
+        void Join(Frame& frame) override;
+        void Wait() override;
 
 		Handle<Frame> Load(
             const std::filesystem::path& path, 

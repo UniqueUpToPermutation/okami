@@ -14,11 +14,10 @@ namespace okami::core {
         void LoadResources(marl::WaitGroup& waitGroup) override;
         void SetFrame(Frame& frame) override;
         void RequestSync(SyncObject& syncObject) override;
-        void BeginExecute(Frame& frame, 
-            marl::WaitGroup& renderGroup, 
-            marl::WaitGroup& updateGroup,
+        void Fork(Frame& frame, 
             SyncObject& syncObject,
             const Time& time) override;
-        void EndExecute(Frame& frame) override;
+        void Join(Frame& frame) override;
+        void Wait() override;
     };
 }

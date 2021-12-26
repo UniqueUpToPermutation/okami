@@ -1,8 +1,15 @@
 #include <okami/Okami.hpp>
 #include <okami/Graphics.hpp>
+#include <okami/Geometry.hpp>
+#include <okami/Transform.hpp>
+#include <okami/GraphicsComponents.hpp>
+#include <okami/Camera.hpp>
 
 #include <iostream>
+#include <random>
+
 #include <marl/defer.h>
+#include <imgui.h>
 
 using namespace okami::core;
 using namespace okami::graphics;
@@ -14,16 +21,16 @@ void TestBackend(GraphicsBackend backend) {
 
     switch (backend) {
         case GraphicsBackend::VULKAN:
-            params.mWindowTitle = "okami Diligent-Engine Test (Vulkan)";
+            params.mWindowTitle = "okami Diligent-Engine Sprite Test (Vulkan)";
             break;
         case GraphicsBackend::OPENGL:
-            params.mWindowTitle = "okami Diligent-Engine Test (OpenGL)";
+            params.mWindowTitle = "okami Diligent-Engine Sprite Test (OpenGL)";
             break;
         case GraphicsBackend::D3D11:
-            params.mWindowTitle = "okami Diligent-Engine Test (D3D11)";
+            params.mWindowTitle = "okami Diligent-Engine Sprite Test (D3D11)";
             break;
         case GraphicsBackend::D3D12:
-            params.mWindowTitle = "okami Diligent-Engine Test (D3D12)";
+            params.mWindowTitle = "okami Diligent-Engine Sprite Test (D3D12)";
             break;
     }
 
@@ -31,17 +38,32 @@ void TestBackend(GraphicsBackend backend) {
     SystemCollection systems;
     auto display = systems.Add(CreateDisplay(params));
     auto renderer = systems.Add(CreateRenderer(display, resources));
+    
+    auto rendererInterface = systems.QueryInterface<IRenderer>();
+    auto displayInterface = systems.QueryInterface<IDisplay>();
+
+    systems.Add(CreateImGui(rendererInterface, display));
+
+    bool bShowDemoWindow = true;
+
+    auto imguiInterface = systems.QueryInterface<IImGuiCallback>();
+    imguiInterface->Add([&bShowDemoWindow]() {
+        if (bShowDemoWindow)
+            ImGui::ShowDemoWindow(&bShowDemoWindow);
+    });
 
     systems.Startup();
     {
         Frame frame;
 
-        auto window = systems.QueryInterface<IDisplay>();
+        // Geometry and texture are available to use after this is called.
         systems.SetFrame(frame);
         systems.LoadResources();
-        
-        while (!window->ShouldClose()) {
-            systems.Fork(Time{0.0, 0.0});
+
+        Clock clock;
+        while (!displayInterface->ShouldClose()) {
+            auto time = clock.GetTime();
+            systems.Fork(time);
             systems.Join();
         }
     }
