@@ -299,7 +299,7 @@ namespace okami::core {
         for (auto& uv : layout.mUVs) {
             auto& uvAttrib = layoutElements[uv];
             verifyAttrib(uvAttrib);
-            indexing.mUVOffsets.emplace_back(offsets[uv]);
+            indexing.mUVOffsets.emplace_back((int)offsets[uv]);
             indexing.mUVChannels.emplace_back(uvAttrib.mBufferSlot);
             indexing.mUVStrides.emplace_back(strides[uv]);
         }
@@ -350,7 +350,7 @@ namespace okami::core {
             aiProcess_GenUVCoords | aiProcess_CalcTangentSpace | 
             aiProcess_ConvertToLeftHanded | aiProcessPreset_TargetRealtime_Quality;
 
-        const aiScene* scene = importer.ReadFile(path.c_str(), flags);
+        const aiScene* scene = importer.ReadFile(path.string().c_str(), flags);
         
         if (!scene) {
             std::cout << importer.GetErrorString() << std::endl;

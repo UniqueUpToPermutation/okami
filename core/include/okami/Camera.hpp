@@ -1,5 +1,7 @@
 #pragma once
 
+#include <okami/PlatformDefs.hpp>
+
 #include <glm/vec3.hpp>
 #include <glm/matrix.hpp>
 #include <glm/gtc/constants.hpp>

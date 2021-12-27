@@ -1,5 +1,6 @@
 #pragma once
 
+#include <okami/PlatformDefs.hpp>
 #include <okami/VertexFormat.hpp>
 #include <okami/Resource.hpp>
 #include <okami/ResourceInterface.hpp>
@@ -649,7 +650,7 @@ namespace okami::core {
 		auto indexing = PackIndexing::From(layout, vertex_count);
 
 		auto& channel_sizes = indexing.mChannelSizes;
-		uint channelCount = channel_sizes.size();
+		uint channelCount = (uint)channel_sizes.size();
 	
 		std::vector<std::vector<uint8_t>> vert_buffers(channelCount);
 		for (uint i = 0; i < channelCount; ++i)
@@ -753,16 +754,16 @@ namespace okami::core {
 
 		for (uint i = 0; i < channelCount; ++i) {
 			BufferDesc vertexBufferDesc;
-			vertexBufferDesc.mSizeInBytes = vert_buffers[i].size();
+			vertexBufferDesc.mSizeInBytes = (uint32_t)vert_buffers[i].size();
 			bufferDescs.emplace_back(vertexBufferDesc);
 		}
 
 		BufferDesc indexBufferDesc;
-		indexBufferDesc.mSizeInBytes = indx_buffer_raw.size();
+		indexBufferDesc.mSizeInBytes = (uint32_t)indx_buffer_raw.size();
 
 		IndexedAttribs indexedAttribs;
 		indexedAttribs.mIndexType = ValueType::UINT32;
-		indexedAttribs.mNumIndices = indx_buffer_raw.size() / sizeof(uint32_t);
+		indexedAttribs.mNumIndices = (uint32_t)(indx_buffer_raw.size() / sizeof(uint32_t));
 		
 		Attribs attribs;
 		attribs.mNumVertices = vertex_count;

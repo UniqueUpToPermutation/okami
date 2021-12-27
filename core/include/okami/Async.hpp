@@ -5,6 +5,7 @@
 
 #include <marl/event.h>
 #include <okami/Resource.hpp>
+#include <okami/PlatformDefs.hpp>
 
 namespace okami::core {
     template <typename T>

@@ -5,6 +5,7 @@
 #include <marl/event.h>
 #include <marl/defer.h>
 
+#include <okami/PlatformDefs.hpp>
 #include <okami/Frame.hpp>
 #include <okami/Hashers.hpp>
 #include <okami/Clock.hpp>

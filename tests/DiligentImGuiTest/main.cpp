@@ -21,16 +21,16 @@ void TestBackend(GraphicsBackend backend) {
 
     switch (backend) {
         case GraphicsBackend::VULKAN:
-            params.mWindowTitle = "okami Diligent-Engine Sprite Test (Vulkan)";
+            params.mWindowTitle = "okami Diligent-Engine ImGui Test (Vulkan)";
             break;
         case GraphicsBackend::OPENGL:
-            params.mWindowTitle = "okami Diligent-Engine Sprite Test (OpenGL)";
+            params.mWindowTitle = "okami Diligent-Engine ImGui Test (OpenGL)";
             break;
         case GraphicsBackend::D3D11:
-            params.mWindowTitle = "okami Diligent-Engine Sprite Test (D3D11)";
+            params.mWindowTitle = "okami Diligent-Engine ImGui Test (D3D11)";
             break;
         case GraphicsBackend::D3D12:
-            params.mWindowTitle = "okami Diligent-Engine Sprite Test (D3D12)";
+            params.mWindowTitle = "okami Diligent-Engine ImGui Test (D3D12)";
             break;
     }
 

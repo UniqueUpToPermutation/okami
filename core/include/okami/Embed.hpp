@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <functional>
 
+#include <okami/PlatformDefs.hpp>
 #include <okami/Hashers.hpp>
 
 namespace okami::core {

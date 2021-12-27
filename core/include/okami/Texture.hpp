@@ -1,5 +1,6 @@
 #pragma once
 
+#include <okami/PlatformDefs.hpp>
 #include <okami/Resource.hpp>
 #include <okami/ResourceInterface.hpp>
 #include <okami/VertexFormat.hpp>

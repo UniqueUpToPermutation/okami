@@ -1,5 +1,7 @@
 #pragma once
 
+#include <okami/PlatformDefs.hpp>
+
 #include <chrono>
 
 namespace okami::core {

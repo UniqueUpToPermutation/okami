@@ -1,5 +1,6 @@
 #pragma once
 
+#include <okami/PlatformDefs.hpp>
 #include <okami/Frame.hpp>
 #include <okami/ResourceManager.hpp>
 #include <okami/ResourceInterface.hpp>

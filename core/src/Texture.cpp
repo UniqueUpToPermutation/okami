@@ -164,7 +164,7 @@ namespace okami::core {
 			}
 		}
 
-        return currentOffset;
+        return (uint32_t)currentOffset;
     }
 
     Texture::Data Texture::Data::Alloc(const Texture::Desc& desc) {
@@ -217,8 +217,8 @@ namespace okami::core {
 				uint coarseWidth = std::max<uint>(1u, mDesc.mWidth >> i);
 				uint coarseHeight = std::max<uint>(1u, mDesc.mHeight >> i);
 
-				uint fineStride = fineWidth * pixelSize;
-				uint coarseStride = coarseWidth * pixelSize;
+				uint fineStride = (uint)(fineWidth * pixelSize);
+				uint coarseStride = (uint)(coarseWidth * pixelSize);
 
 				mip_generator_2d_t mip_gen;
 
@@ -294,7 +294,7 @@ namespace okami::core {
         Texture::Data data;
 		std::vector<uint8_t> image;
 		uint32_t width, height;
-		uint32_t error = lodepng::decode(image, width, height, path);
+		uint32_t error = lodepng::decode(image, width, height, path.string());
 
 		//if there's an error, display it
 		if (error)

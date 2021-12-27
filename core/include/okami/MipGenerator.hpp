@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include <okami/PlatformDefs.hpp>
+
 namespace okami::core {
 	typedef void (*mip_generator_2d_t)(uint32_t NumChannels,
 		bool IsSRGB,

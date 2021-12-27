@@ -5,6 +5,8 @@
 
 #include <marl/event.h>
 
+#include <okami/PlatformDefs.hpp>
+
 namespace okami::core {
     typedef int64_t ref_count_t;
 	typedef int64_t resource_id_t;

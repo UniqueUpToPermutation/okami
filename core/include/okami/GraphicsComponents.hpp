@@ -1,5 +1,6 @@
 #pragma once
 
+#include <okami/PlatformDefs.hpp>
 #include <okami/Geometry.hpp>
 #include <okami/Material.hpp>
 

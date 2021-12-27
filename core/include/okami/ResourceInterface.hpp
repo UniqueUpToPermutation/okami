@@ -6,6 +6,7 @@
 
 #include <entt/entt.hpp>
 
+#include <okami/PlatformDefs.hpp>
 #include <okami/Resource.hpp>
 #include <okami/Async.hpp>
 #include <okami/Hashers.hpp>

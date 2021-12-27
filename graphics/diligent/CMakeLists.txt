@@ -4,11 +4,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+add_subdirectory(shaders)
+
 # Embed shaders (LINUX)
 add_custom_command(
 	OUTPUT shader_rc.cpp
 	COMMAND embedfile ${CMAKE_CURRENT_SOURCE_DIR}/shaders shader_rc.cpp MakeShaderMap
-	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*)
+	DEPENDS OkamiDiligentShaders)
 
 list(APPEND SOURCE
     src/Display.cpp

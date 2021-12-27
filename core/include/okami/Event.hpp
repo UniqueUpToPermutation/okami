@@ -3,6 +3,8 @@
 #include <functional>
 #include <unordered_map>
 
+#include <okami/PlatformDefs.hpp>
+
 namespace okami::core {
 
     typedef uint32_t delegate_handle_t;
