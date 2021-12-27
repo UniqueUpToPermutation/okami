@@ -6,6 +6,8 @@ struct CameraAttribs {
     float4x4 mViewProj;
     float4x4 mInvView;
     float4x4 mInvViewProj;
+    float2 mViewport;
+    float2 mPadding0;
 };
 
 struct SceneGlobals {

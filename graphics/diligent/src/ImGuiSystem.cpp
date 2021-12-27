@@ -6,7 +6,10 @@
 
 namespace okami::graphics::diligent {
 
-    void ImGuiRenderOverlay::Startup(DG::IRenderDevice* device, DG::ISwapChain* swapChain) {
+    void ImGuiRenderOverlay::Startup(
+        core::ISystem* renderer,
+        DG::IRenderDevice* device, 
+        DG::ISwapChain* swapChain) {
         auto rtv = swapChain->GetCurrentBackBufferRTV();
         auto dsv = swapChain->GetDepthBufferDSV();
 
@@ -14,12 +17,14 @@ namespace okami::graphics::diligent {
             rtv->GetDesc().Format, dsv->GetDesc().Format);
         mSurfaceTransform = swapChain->GetDesc().PreTransform;
     }
+
     void ImGuiRenderOverlay::QueueCommands(DG::IDeviceContext* context) {
         if (bDraw)
             mImGuiImpl->Render(context);
 
         bDraw = false;
     }
+    
     void ImGuiRenderOverlay::Shutdown() {
         mImGuiImpl.reset();
     }
@@ -35,12 +40,12 @@ namespace okami::graphics::diligent {
         mRenderer->RemoveOverlay(&mOverlay);
     }
 
-    core::delegate_handle_t ImGuiSystem::Add(imgui_update_callback_t callback) {
+    core::delegate_handle_t ImGuiSystem::Add(immedate_callback_t callback) {
         return mOnUpdate.Add(std::move(callback));
     }
 
     void ImGuiSystem::Remove(core::delegate_handle_t handle) {
-        return mOnUpdate.Remove(handle);
+        mOnUpdate.Remove(handle);
     }
 
     marl::WaitGroup& ImGuiSystem::GetUpdateWaitGroup() {

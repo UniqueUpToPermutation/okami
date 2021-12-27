@@ -1,0 +1,23 @@
+#if !defined(POINTS) && !defined(LINES) && !defined(TRIANGLES)
+	#error No primitive type defined
+#endif
+
+#include "Types.hlsl"
+#include "../BasicTypes.hlsl"
+
+void main(in VS_OUTPUT input, out float4 result : SV_TARGET): SV_Target
+{
+    result = input.m_color;
+
+    #if   defined(LINES)
+        float d = abs(input.m_edgeDistance) / input.m_size;
+        d = smoothstep(1.0, 1.0 - (kAntialiasing / input.m_size), d);
+        result.a *= d;
+        
+    #elif defined(POINTS)
+        float d = length(input.m_uv - float2(0.5, 0.5));
+        d = smoothstep(0.5, 0.5 - (kAntialiasing / input.m_size), d);
+        result.a *= d;
+        
+    #endif
+}

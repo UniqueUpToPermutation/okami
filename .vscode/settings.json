@@ -21,6 +21,7 @@
 		"${workspaceFolder}/ext/DiligentEngine/DiligentCore/Graphics/GraphicsTools/interface",
 		"${workspaceFolder}/ext/DiligentEngine/DiligentTools/Imgui/interface",
 		"${workspaceFolder}/ext/DiligentEngine/DiligentTools/ThirdParty/imgui/",
+		"${workspaceFolder}/ext/im3d/"
     ],
 
 	"files.associations": {

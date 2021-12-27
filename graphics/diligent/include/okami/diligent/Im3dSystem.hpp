@@ -2,43 +2,47 @@
 
 #include <okami/System.hpp>
 #include <okami/Graphics.hpp>
+#include <okami/Event.hpp>
 #include <okami/diligent/Display.hpp>
 #include <okami/diligent/RenderModule.hpp>
-#include <okami/Event.hpp>
+#include <okami/diligent/Im3dModule.hpp>
 
 #include <RefCntAutoPtr.hpp>
-#include <ImGuiImplDiligent.hpp>
+#include <im3d.h>
 
 namespace okami::graphics::diligent {
 
-    class ImGuiRenderOverlay final :
+    class Im3dRenderOverlay final :
         public IRenderModule {
     public:
         DG::SURFACE_TRANSFORM mSurfaceTransform;
         bool bDraw = false;
-        std::unique_ptr<DG::ImGuiImplDiligent> mImGuiImpl;
+        
+        Im3dShaders mShaders;
+        Im3dPipeline mPipeline;
+        Im3dModule mModule;
 
-        void Startup(core::ISystem* renderer,
+        void Startup(
+            core::ISystem* renderer,
             DG::IRenderDevice* device, 
             DG::ISwapChain* swapChain) override;
         void QueueCommands(DG::IDeviceContext* context) override;
         void Shutdown() override;
     };
 
-    class ImGuiSystem final : 
+    class Im3dSystem final :
         public core::ISystem,
-        public IImGuiCallback {
+        public IIm3dCallback {
     private:
-        ImGuiRenderOverlay mOverlay;
+        Im3dRenderOverlay mOverlay;
         IRenderer* mRenderer;
-        core::ISystem* mInputSystem;
         core::Event<> mOnUpdate;
         marl::WaitGroup mUpdateWaitGroup;
         marl::Event mUpdateFinished;
 
     public:
-        ImGuiSystem(IRenderer* renderer, core::ISystem* input);
-        ~ImGuiSystem();
+        Im3dSystem(IRenderer* renderer);
+        ~Im3dSystem();
 
         core::delegate_handle_t Add(immedate_callback_t callback) override;
         void Remove(core::delegate_handle_t handle) override;

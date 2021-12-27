@@ -19,3 +19,6 @@
 [submodule "ext/lodepng"]
 	path = ext/lodepng
 	url = https://github.com/lvandeve/lodepng.git
+[submodule "ext/im3d"]
+	path = ext/im3d
+	url = https://github.com/john-chapman/im3d.git

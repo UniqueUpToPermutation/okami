@@ -1,4 +1,4 @@
-#include "BasicTypes.hlsl"
+#include "Types.hlsl"
 #include "../BasicTypes.hlsl"
 
 cbuffer cbuf_Globals 

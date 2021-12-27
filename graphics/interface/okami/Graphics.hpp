@@ -6,13 +6,19 @@
 
 namespace okami::graphics {
 
-    typedef std::function<void()> imgui_update_callback_t;
+    typedef std::function<void()> immedate_callback_t;
 
-    class IImGuiCallback {
+    class IImmediateModeCallback {
     public:
-        virtual core::delegate_handle_t Add(imgui_update_callback_t callback) = 0;
+        virtual core::delegate_handle_t Add(immedate_callback_t callback) = 0;
         virtual void Remove(core::delegate_handle_t handle) = 0;
         virtual marl::WaitGroup& GetUpdateWaitGroup() = 0;
+    };
+
+    class IImGuiCallback : public IImmediateModeCallback {
+    };
+
+    class IIm3dCallback : public IImmediateModeCallback {
     };
 
     enum class GraphicsBackend {
@@ -68,4 +74,6 @@ namespace okami::graphics {
     std::unique_ptr<core::ISystem> CreateImGui(
         IRenderer* renderer,
         core::ISystem* input);
+    std::unique_ptr<core::ISystem> CreateIm3d(
+        IRenderer* renderer);
 }

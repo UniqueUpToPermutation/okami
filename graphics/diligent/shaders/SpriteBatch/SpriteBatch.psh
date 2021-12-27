@@ -1,4 +1,4 @@
-#include "BasicTypes.hlsl"
+#include "Types.hlsl"
 
 Texture2D mTexture;
 SamplerState mTexture_sampler; // By convention, texture samplers must use the '_sampler' suffix

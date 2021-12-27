@@ -1,4 +1,4 @@
-#include "BasicTypes.hlsl"
+#include "Types.hlsl"
 
 [maxvertexcount(4)]
 void main(point SpriteBatchGSInput input[1], 

@@ -12,14 +12,13 @@
 #include <okami/diligent/Buffers.hpp>
 #include <okami/diligent/SpriteModule.hpp>
 #include <okami/diligent/RenderModule.hpp>
+#include <okami/diligent/SceneGlobals.hpp>
 
 #include <RenderDevice.h>
 #include <SwapChain.h>
 #include <DeviceContext.h>
 #include <RefCntAutoPtr.hpp>
 #include <BasicMath.hpp>
-
-#include <shaders/BasicTypes.hlsl>
 
 namespace okami::graphics::diligent {
     namespace DG = Diligent;
@@ -30,7 +29,8 @@ namespace okami::graphics::diligent {
         public core::IResourceManager<core::Texture>,
         public core::IResourceManager<core::BaseMaterial>,
         public core::IVertexLayoutProvider,
-        public IRenderer {
+        public IRenderer,
+        public IGlobalsBufferProvider {
     public:
       struct GeometryImpl {
         std::vector<DG::RefCntAutoPtr<DG::IBuffer>>
@@ -158,5 +158,8 @@ namespace okami::graphics::diligent {
         void AddOverlay(IGraphicsObject* object) override;
         void RemoveOverlay(IGraphicsObject* object) override;
         glm::i32vec2 GetRenderArea() const override;
+
+        DynamicUniformBuffer<HLSL::SceneGlobals>*
+            GetGlobalsBuffer() override;
     };
 }

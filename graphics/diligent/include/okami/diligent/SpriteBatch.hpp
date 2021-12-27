@@ -4,17 +4,13 @@
 #include <okami/Embed.hpp>
 
 #include <okami/diligent/Buffers.hpp>
+#include <okami/diligent/SceneGlobals.hpp>
 
 #include <RenderDevice.h>
 #include <RefCntAutoPtr.hpp>
 #include <BasicMath.hpp>
 
 #define DEFAULT_SPRITE_BATCH_SIZE 1000
-
-namespace HLSL {
-	using namespace Diligent;
-	#include <shaders/BasicTypes.hlsl>
-}
 
 namespace okami::graphics::diligent {
 

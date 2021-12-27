@@ -24,6 +24,8 @@ if (BUILD_OKAMI_DILIGENT)
 
     SET(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/DiligentEngine/DiligentTools/ThirdParty/imgui
         CACHE INTERNAL "IMGUI_DIR")
+
+    SET(IM3D_DIR "${CMAKE_CURRENT_SOURCE_DIR}/im3d" CACHE INTERNAL "IM3D_INCLUDE_DIR")
 endif()
 
 add_subdirectory(assimp)

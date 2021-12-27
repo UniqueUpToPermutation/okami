@@ -11,7 +11,10 @@ namespace DG = Diligent;
 namespace okami::graphics::diligent {
     class IRenderModule : public IGraphicsObject {
     public:
-        virtual void Startup(DG::IRenderDevice* device, DG::ISwapChain* swapChain) = 0;
+        virtual void Startup(
+            core::ISystem* renderer, 
+            DG::IRenderDevice* device, 
+            DG::ISwapChain* swapChain) = 0;
         virtual void QueueCommands(DG::IDeviceContext* context) = 0;
         virtual void Shutdown() = 0;
     };

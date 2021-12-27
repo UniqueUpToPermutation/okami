@@ -4,13 +4,20 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_subdirectory(shaders)
+file(GLOB_RECURSE shader_SRC CONFIGURE_DEPENDS 
+    "shaders/*.hlsl" 
+    "shaders/*.psh" 
+    "shaders/*.gsh" 
+    "shaders/*.fxh" 
+    "shaders/*.vsh")
+
+message("Embedded Shaders: ${shader_SRC}")
 
 # Embed shaders (LINUX)
 add_custom_command(
 	OUTPUT shader_rc.cpp
 	COMMAND embedfile ${CMAKE_CURRENT_SOURCE_DIR}/shaders shader_rc.cpp MakeShaderMap
-	DEPENDS OkamiDiligentShaders)
+	DEPENDS ${shader_SRC})
 
 list(APPEND SOURCE
     src/Display.cpp
@@ -22,8 +29,11 @@ list(APPEND SOURCE
     src/SpriteBatch.cpp
     src/SpriteModule.cpp
     src/ImGuiSystem.cpp
+    src/Im3dModule.cpp
+    src/Im3dSystem.cpp
     shader_rc.cpp
     ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IM3D_DIR}/im3d.cpp
 )
 
 if(PLATFORM_MACOS)
@@ -41,6 +51,8 @@ list(APPEND INCLUDE
     include/okami/diligent/SpriteModule.hpp
     include/okami/diligent/ImGuiSystem.hpp
     include/okami/diligent/RenderModule.hpp
+    include/okami/diligent/Im3dModule.hpp
+    include/okami/diligent/Im3dSystem.hpp
 )
 
 add_library(okami-graphics-diligent STATIC ${SOURCE} ${INCLUDE})
@@ -64,6 +76,7 @@ target_include_directories(okami-graphics-diligent PUBLIC
     ${OKAMI_CORE_INCLUDE_DEPENDENCES}
     ${OKAMI_DILIGENT_INCLUDE_DEPENDENCES}
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${IM3D_DIR}
 )
 
 target_compile_definitions(okami-graphics-diligent PRIVATE ${GLOBAL_COMPILER_FLAGS})

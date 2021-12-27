@@ -341,13 +341,14 @@ namespace okami::graphics::diligent {
         mSpriteModule.Startup(mDevice, mSwapChain, mSceneGlobals, &fileLoader);
 
         for (auto overlay : mOverlays) {
-            overlay->Startup(mDevice, mSwapChain);
+            overlay->Startup(this, mDevice, mSwapChain);
         }
     }
 
     void BasicRenderer::RegisterInterfaces(core::InterfaceCollection& interfaces) {
         interfaces.Add<core::IVertexLayoutProvider>(this);
         interfaces.Add<IRenderer>(this);
+        interfaces.Add<IGlobalsBufferProvider>(this);
     }
 
     void BasicRenderer::LoadResources(marl::WaitGroup& waitGroup) {
@@ -473,12 +474,14 @@ namespace okami::graphics::diligent {
         };
 
         auto& registry = frame.Registry();
+        const auto& scDesc = mSwapChain->GetDesc();
 
         // Queue up render calls and compute transforms
         std::vector<RenderCall> renderCalls;
         HLSL::SceneGlobals globals;
         globals.mCamera.mView = DG::float4x4::Identity();
         globals.mCamera.mViewProj = DG::float4x4::Identity();
+        globals.mCamera.mViewport = DG::float2(scDesc.Width, scDesc.Height);
 
         {
             auto staticMeshes = registry.view<core::StaticMesh>();
@@ -678,5 +681,10 @@ namespace okami::graphics::diligent {
         return glm::i32vec2(
             mSwapChain->GetDesc().Width, 
             mSwapChain->GetDesc().Height);
+    }
+
+    DynamicUniformBuffer<HLSL::SceneGlobals>*
+        BasicRenderer::GetGlobalsBuffer() {
+        return &mSceneGlobals;
     }
 }
