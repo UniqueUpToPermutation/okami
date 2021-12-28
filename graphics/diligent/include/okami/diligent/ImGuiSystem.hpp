@@ -15,8 +15,9 @@ namespace okami::graphics::diligent {
         public IRenderModule {
     public:
         DG::SURFACE_TRANSFORM mSurfaceTransform;
-        bool bDraw = false;
         std::unique_ptr<DG::ImGuiImplDiligent> mImGuiImpl;
+        marl::Event mRenderReady;
+        marl::Event mRenderFinished;
 
         void Startup(core::ISystem* renderer,
             DG::IRenderDevice* device, 
@@ -34,7 +35,6 @@ namespace okami::graphics::diligent {
         core::ISystem* mInputSystem;
         core::Event<> mOnUpdate;
         marl::WaitGroup mUpdateWaitGroup;
-        marl::Event mUpdateFinished;
 
     public:
         ImGuiSystem(IRenderer* renderer, core::ISystem* input);

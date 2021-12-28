@@ -83,12 +83,52 @@ namespace okami::core {
         }
     };
 
+    struct WaitHandle {
+        marl::WaitGroup* mBefore = nullptr;
+        marl::WaitGroup* mAfter = nullptr;
+        marl::mutex* mWriteMutex = nullptr;
+        bool bFinished = true;
+
+        WaitHandle() = default;
+
+        inline WaitHandle(marl::WaitGroup& after) : 
+            mAfter(&after), bFinished(false) {
+        }
+
+        inline WaitHandle(marl::WaitGroup& before, marl::WaitGroup& after, marl::mutex& mutex) :
+            mBefore(&before), mAfter(&after), mWriteMutex(&mutex) {
+        }
+
+        WaitHandle(const WaitHandle&) = delete;
+        WaitHandle(WaitHandle&& other) = default;
+
+        WaitHandle& operator=(const WaitHandle&) = delete;
+        WaitHandle& operator=(WaitHandle&& other) = default;
+
+        inline void Release() {
+            if (!bFinished) {
+                mAfter->done();
+                bFinished = true;
+            }
+        }
+
+        inline bool IsRead() const {
+            return mWriteMutex == nullptr;
+        }
+
+        inline bool IsWrite() const {
+            return mWriteMutex != nullptr;
+        }
+    };
+
     class SyncObject {
     private:
         std::unordered_map<entt::meta_type, 
             marl::WaitGroup, TypeHash> mReadWaits;
         std::unordered_map<entt::meta_type, 
             std::unique_ptr<marl::mutex>, TypeHash> mWriteMutexes;
+        std::unordered_map<entt::meta_type,
+            marl::WaitGroup, TypeHash> mWriteWaits;
 
     public:
         SyncObject() = default;
@@ -97,52 +137,75 @@ namespace okami::core {
         SyncObject(const SyncObject&) = delete;
         SyncObject& operator=(const SyncObject&) = delete;
 
-        marl::WaitGroup Read(const entt::meta_type& type, bool bCreateIfNotFound = false) {
+        marl::WaitGroup* ReadWaitGroup(const entt::meta_type& type, bool bCreateIfNotFound = false) {
             auto it = mReadWaits.find(type);
 
             if (it == mReadWaits.end()) {
                 if (bCreateIfNotFound) {
                     auto waitGroup = marl::WaitGroup();
-                    mReadWaits.emplace_hint(it, 
+                    it = mReadWaits.emplace_hint(it, 
                         std::pair<entt::meta_type, marl::WaitGroup>(type, std::move(waitGroup)));
-                    return waitGroup;
                 } else {
-                    throw std::runtime_error("Read wait group not available!");
+                    return nullptr;
                 }
             }
 
-            return it->second;
+            return &it->second;
         }
 
-        marl::mutex& Write(const entt::meta_type& type, bool bCreateIfNotFound = false) {
+        marl::WaitGroup* WriteWaitGroup(const entt::meta_type& type, bool bCreateIfNotFound = false) {
+            auto it = mWriteWaits.find(type);
+
+            if (it == mWriteWaits.end()) {
+                if (bCreateIfNotFound) {
+                    auto waitGroup = marl::WaitGroup();
+                    it = mWriteWaits.emplace_hint(it, 
+                        std::pair<entt::meta_type, marl::WaitGroup>(type, std::move(waitGroup)));
+                } else {
+                    return nullptr;
+                }
+            }
+
+            return &it->second;
+        }
+
+        marl::mutex* WriteMutex(const entt::meta_type& type, bool bCreateIfNotFound = false) {
             auto it = mWriteMutexes.find(type);
 
             if (it == mWriteMutexes.end()) {
                 if (bCreateIfNotFound) {
                     std::pair<entt::meta_type, std::unique_ptr<marl::mutex>> mutexPair(type, 
                         std::make_unique<marl::mutex>());
-                    return *mWriteMutexes.emplace_hint(it, std::move(mutexPair))->second;
+                    return mWriteMutexes.emplace_hint(it, std::move(mutexPair))->second.get();
                 } else {
-                    throw std::runtime_error("Read wait group not available!");
+                    throw nullptr;
                 }
             }
 
-            return *it->second;
+            return it->second.get();
         }
 
         template <typename T>
-        inline marl::WaitGroup Read(bool bCreateIfNotFound = true) {
-            return Read(entt::resolve<T>(), bCreateIfNotFound);
+        void WaitUntilFinished() {
+            auto group = WriteWaitGroup(entt::resolve<T>(), false);
+            if (group)
+                group->wait();
         }
 
         template <typename T>
-        inline marl::mutex& Write(bool bCreateIfNotFound = false) {
-            return Write(entt::resolve<T>(), bCreateIfNotFound);
+        WaitHandle ReadHandle() {
+            auto group = ReadWaitGroup(entt::resolve<T>(), true);
+            group->add();
+            return WaitHandle(*group);
         }
 
         template <typename T>
-        inline void RequireWrite() {
-            Write<T>(true);
+        WaitHandle WriteHandle() {
+            auto readgroup = ReadWaitGroup(entt::resolve<T>(), true);
+            auto writegroup = WriteWaitGroup(entt::resolve<T>(), true);
+            auto mutex = WriteMutex(entt::resolve<T>(), true);
+            writegroup->add();
+            return WaitHandle(*readgroup, *writegroup, *mutex);
         }
     };
 
@@ -192,50 +255,153 @@ namespace okami::core {
 	void PrintWarning(const std::string& str);
 
     template <typename ... Types>
-    struct UpdaterReads;
+    class UpdaterReads;
+
+    struct ReadLock {
+        WaitHandle* mReadWait = nullptr;
+
+        ReadLock(const ReadLock&) = delete;
+        ReadLock& operator=(const ReadLock&) = delete;
+
+        ReadLock(ReadLock&& lock) = default;
+        ReadLock& operator=(ReadLock&& lock) = default;
+
+        ReadLock(WaitHandle& handle) : mReadWait(&handle) {
+            assert(handle.IsRead());
+            if (handle.bFinished) {
+                throw std::runtime_error("Handle has already been consumed!");
+            }
+        }
+
+        ~ReadLock() {
+            if (mReadWait) {
+                mReadWait->Release();
+            }
+        }
+    };
+
+    struct WriteLock : private marl::lock {
+        WaitHandle* mWriteWait = nullptr;
+
+        WriteLock(const WriteLock&) = delete;
+        WriteLock& operator=(const WriteLock&) = delete;
+
+        WriteLock(WriteLock&& lock) = default;
+        WriteLock& operator=(WriteLock&& lock) = default;
+
+        inline WriteLock(WaitHandle& handle) : 
+            marl::lock(*handle.mWriteMutex),
+            mWriteWait(&handle) {
+            mWriteWait->mBefore->wait();
+            if (handle.bFinished) {
+                throw std::runtime_error("Handle has already been consumed!");
+            }
+        }
+
+        ~WriteLock() {
+            if (mWriteWait) {
+                mWriteWait->Release();
+            }
+        }
+    };
 
     template <typename Type1, typename ... Types>
-    struct UpdaterReads<Type1, Types...> {
-        static void RequestSync(SyncObject& obj) {
-            obj.Read<Type1>().add();
-            UpdaterReads<Types...>::RequestSync(obj);
+    class UpdaterReads<Type1, Types...> {
+    private:
+        WaitHandle mHandle;
+        UpdaterReads<Types...> mRemaining;
+    
+    public:
+        void RequestSync(SyncObject& obj) {
+            mHandle = obj.ReadHandle<Type1>();
+            mRemaining.RequestSync(obj);
+        }
+
+        void ReleaseHandles() {
+            mHandle.Release();
+            mRemaining.ReleaseHandles();
+        }
+
+        template <typename T>
+        ReadLock Read() {
+            if constexpr (std::is_same_v<T, Type1>)
+                return ReadLock(mHandle);
+            else 
+                return mRemaining.template Read<T>();
         }
     };
 
     template <>
-    struct UpdaterReads<> {
-        static void RequestSync(SyncObject& obj) {
+    class UpdaterReads<> {
+    public:
+        void RequestSync(SyncObject& obj) {
+        }
+
+        void ReleaseHandles() {
+        }
+
+        template <typename T>
+        ReadLock Read() {
+            throw std::runtime_error("UpdaterReads does not have requested type!");
         }
     };
 
     template <typename ... Types>
-    struct UpdaterWrites;
+    class UpdaterWrites;
 
     template <typename Type1, typename ... Types>
-    struct UpdaterWrites<Type1, Types...> {
-        static void RequestSync(SyncObject& obj) {
-            obj.RequireWrite<Type1>();
-            UpdaterWrites<Types...>::RequestSync(obj);
+    class UpdaterWrites<Type1, Types...> {
+    private:
+        WaitHandle mHandle;
+        UpdaterWrites<Types...> mRemaining;
+
+    public:
+        void RequestSync(SyncObject& obj) {
+            mHandle = obj.WriteHandle<Type1>();
+            RequestSync(obj);
+        }
+
+        void ReleaseHandles() {
+            mHandle.Release();
+            mRemaining.ReleaseHandles();
+        }
+
+        template <typename T>
+        WriteLock Write() {
+            if constexpr (std::is_same_v<T, Type1>)
+                return WriteLock(mHandle);
+            else 
+                return mRemaining.template Write<T>();
         }
     };
 
     template <>
-    struct UpdaterWrites<> {
-        static void RequestSync(SyncObject& obj) {
+    class UpdaterWrites<> {
+    public:
+        void RequestSync(SyncObject& obj) {
+        }
+
+        void ReleaseHandles() {
+        }
+
+        template <typename T>
+        WriteLock Write() {
+            throw std::runtime_error("UpdaterWrites does not have requested type!");
         }
     };
 
-    typedef void(*updater_system_t)(
-            Frame& frame,
-            SyncObject& syncObject,
-            const Time& time);
+    template <typename Reads, typename Writes>
+    using updater_system_t = void(*)(Frame& frame, Reads& reads, Writes& writes, const Time& time); 
 
-    template <updater_system_t UpdaterFunc,
+    template <
         typename Reads,
-        typename Writes>
+        typename Writes,
+        updater_system_t<Reads, Writes> UpdaterFunc>
     class Updater : public ISystem {
     private:
         marl::Event mFinishedEvent;
+        Reads mReads;
+        Writes mWrites;
 
     public:
         void Startup(marl::WaitGroup& waitGroup) override { }
@@ -249,19 +415,25 @@ namespace okami::core {
         }
 
         void RequestSync(SyncObject& syncObject) override {
-            Reads::RequestSync(syncObject);
-            Writes::RequestSync(syncObject);
+            mReads.RequestSync(syncObject);
+            mWrites.RequestSync(syncObject);
         }
+
         void Fork(Frame& frame, 
             SyncObject& syncObject,
             const Time& time) override {
 
             mFinishedEvent.clear();
-            marl::schedule([&frame, &syncObject, 
+            marl::schedule([&frame, 
+                &syncObject, 
                 time, 
-                finishedEvent = mFinishedEvent]() {
+                finishedEvent = mFinishedEvent,
+                &reads = mReads,
+                &writes = mWrites]() {
+                defer(reads.ReleaseHandles());
+                defer(writes.ReleaseHandles());
                 defer(finishedEvent.signal());
-                (*UpdaterFunc)(frame, syncObject, time);
+                (*UpdaterFunc)(frame, reads, writes, time);
             }); 
         }
 

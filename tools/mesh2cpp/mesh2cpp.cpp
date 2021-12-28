@@ -11,11 +11,11 @@ int main(int argc, const char *argv[]) {
 	if (argc != 3)
 		std::cout << "Incorrect Number of Arguments!" << std::endl;
 
-	LayoutElement elePosition{0, 0, 3, ValueType::FLOAT32};
-	LayoutElement eleUV{1, 1, 2, ValueType::FLOAT32};
-	LayoutElement eleNormal{2, 2, 3, ValueType::FLOAT32};
-	LayoutElement eleTangent{3, 3, 3, ValueType::FLOAT32};
-	LayoutElement eleBitangent{4, 4, 3, ValueType::FLOAT32};
+	LayoutElement elePosition	{0, 0, 3, ValueType::FLOAT32};
+	LayoutElement eleUV			{1, 1, 2, ValueType::FLOAT32};
+	LayoutElement eleNormal		{2, 2, 3, ValueType::FLOAT32};
+	LayoutElement eleTangent	{3, 3, 3, ValueType::FLOAT32};
+	LayoutElement eleBitangent	{4, 4, 3, ValueType::FLOAT32};
 
 	std::vector<LayoutElement> layoutElements = {
 		elePosition,
@@ -37,7 +37,7 @@ int main(int argc, const char *argv[]) {
 
 	ofstream out(argv[2]);
 
-	out << "size_t mVertexCount = " << geo.mPositions.size() / 3<< ";" << std::endl;
+	out << "size_t mVertexCount = " << geo.mPositions.size() / 3 << ";" << std::endl;
 	out << "size_t mIndexCount = " << geo.mIndices.size() << ";" << std::endl;
 	out << std::endl;
 
@@ -53,11 +53,11 @@ int main(int argc, const char *argv[]) {
 		out << std::endl << "};" << std::endl << std::endl;
 	};
 
-	print_buffer("mPositions", geo.mPositions);
-	print_buffer("mUVs", geo.mUVs[0]);
-	print_buffer("mNormals", geo.mNormals);
-	print_buffer("mTangents", geo.mTangents);
-	print_buffer("mBitangents", geo.mBitangents);
+	print_buffer("mPositions", 	geo.mPositions);
+	print_buffer("mUVs", 		geo.mUVs[0]);
+	print_buffer("mNormals", 	geo.mNormals);
+	print_buffer("mTangents", 	geo.mTangents);
+	print_buffer("mBitangents",	geo.mBitangents);
 
 	out << "uint32_t mIndices[] = {" << std::endl;
 	if (geo.mIndices.size() > 0) {

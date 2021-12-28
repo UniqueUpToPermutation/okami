@@ -35,10 +35,9 @@ namespace okami::graphics::diligent {
     }
 
     void Im3dRenderOverlay::QueueCommands(DG::IDeviceContext* context) {
-        if (bDraw) {
-            mModule.Draw(context, mPipeline);
-            bDraw = false;
-        }
+        mRenderReady.wait();
+        mModule.Draw(context, mPipeline);
+        mRenderFinished.signal();
     }
 
     void Im3dRenderOverlay::Shutdown() {
@@ -77,34 +76,31 @@ namespace okami::graphics::diligent {
     void Im3dSystem::SetFrame(core::Frame& frame) {
     }
     void Im3dSystem::RequestSync(core::SyncObject& syncObject) {
+        mOverlay.mRenderReady.clear();
+        mOverlay.mRenderFinished.clear();
     }
     void Im3dSystem::Fork(core::Frame& frame, 
         core::SyncObject& syncObject,
         const core::Time& time) {
-        mUpdateFinished.clear();
         marl::schedule([
             renderer = mRenderer,
             &update = mOnUpdate,
             &overlay = mOverlay,
-            updateWait = mUpdateWaitGroup,
-            updateFinished = mUpdateFinished]() {
-            defer(updateFinished.signal());
+            updateWait = mUpdateWaitGroup]() {
+            defer(overlay.mRenderReady.signal());
 
-            renderer->Wait();
             updateWait.wait();
 
             Im3d::NewFrame();
             update();
             Im3d::EndFrame();
-
-            overlay.bDraw = true;
         });
     }
     void Im3dSystem::Join(core::Frame& frame) {
         Wait();
     }
     void Im3dSystem::Wait() {
-        mUpdateFinished.wait();
+        mOverlay.mRenderFinished.wait();
     }
 }
 

@@ -22,39 +22,36 @@ struct SpriteAnimData {
     float mOscillatorX;
 };
 
-void SpriteAnimator(Frame& frame, SyncObject& syncObj, const Time& time) {
+void SpriteUpdaterFunc(Frame& frame,
+    UpdaterReads<>& reads, 
+    UpdaterWrites<Transform>& writes, 
+    const Time& time) {
 
-    // Wait for all systems to have finished reading from Transform before we write
-    syncObj.Read<Transform>().wait();
-    
-    {
-        marl::lock lock(syncObj.Write<Transform>());
+    auto lock = writes.Write<Transform>();
 
-        auto view = frame.Registry().view<Transform, SpriteAnimData>();
+    auto view = frame.Registry().view<Transform, SpriteAnimData>();
 
-        for (auto e : view) {
-            auto& transform = view.get<Transform>(e);
-            auto& anim = view.get<SpriteAnimData>(e);
+    for (auto e : view) {
+        auto& transform = view.get<Transform>(e);
+        auto& anim = view.get<SpriteAnimData>(e);
 
-            anim.mOscillatorX += anim.mOscillatorVelocity * time.mTimeElapsed;
-            
-            auto position = anim.mPositionBase + std::cos(anim.mOscillatorX) * anim.mOscillatorVector;
+        anim.mOscillatorX += anim.mOscillatorVelocity * time.mTimeElapsed;
+        
+        auto position = anim.mPositionBase + std::cos(anim.mOscillatorX) * anim.mOscillatorVector;
 
-            transform.mTranslation = glm::vec3(position.x, position.y, 0.0);
-            transform.mRotation = transform.mRotation * glm::angleAxis(
-                (float)(anim.mAngularVelocity * time.mTimeElapsed), glm::vec3(0.0f, 0.0f, 1.0f));
-        }
+        transform.mTranslation = glm::vec3(position.x, position.y, 0.0);
+        transform.mRotation = transform.mRotation * glm::angleAxis(
+            (float)(anim.mAngularVelocity * time.mTimeElapsed), glm::vec3(0.0f, 0.0f, 1.0f));
     }
 }
 
 typedef Updater<
-    &SpriteAnimator, 
     UpdaterReads<>, 
-    UpdaterWrites<Transform>> 
+    UpdaterWrites<Transform>,
+    &SpriteUpdaterFunc> 
         SpriteUpdater;
 
 void TestBackend(GraphicsBackend backend) {
-
     RealtimeGraphicsParams params;
     params.mDeviceType = backend;
 

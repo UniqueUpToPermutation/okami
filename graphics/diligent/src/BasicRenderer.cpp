@@ -458,15 +458,15 @@ namespace okami::graphics::diligent {
     }
 
     void BasicRenderer::RequestSync(core::SyncObject& syncObject) {
-        syncObject.Read<core::Transform>().add();
-        syncObject.Read<core::Camera>().add();
-        syncObject.Read<core::StaticMesh>().add();
-
         mSpriteModule.RequestSync(syncObject);
     }
 
     void BasicRenderer::Render(core::Frame& frame,
         core::SyncObject& syncObject) {
+
+        syncObject.WaitUntilFinished<core::Transform>();
+        syncObject.WaitUntilFinished<core::Camera>();
+        syncObject.WaitUntilFinished<core::StaticMesh>();
 
         struct RenderCall {
             DG::float4x4 mWorldTransform;
@@ -483,48 +483,28 @@ namespace okami::graphics::diligent {
         globals.mCamera.mViewProj = DG::float4x4::Identity();
         globals.mCamera.mViewport = DG::float2(scDesc.Width, scDesc.Height);
 
-        {
-            auto staticMeshes = registry.view<core::StaticMesh>();
+        auto cameras = registry.view<core::Camera>();
 
-            for (auto entity : staticMeshes) {
-                auto& staticMesh = staticMeshes.get<core::StaticMesh>(entity);
-                auto transform = registry.try_get<core::Transform>(entity);
-
-                RenderCall call;
-                call.mStaticMesh = staticMesh;
-                if (transform) {
-                    call.mWorldTransform = ToMatrix(*transform);
-                } else {
-                    call.mWorldTransform = DG::float4x4::Identity();
-                }
-                renderCalls.emplace_back(std::move(call));
+        if (!cameras.empty()) {
+            auto cameraEntity = cameras.front();
+            auto camera = cameras.get<core::Camera>(cameraEntity);
+            DG::float4x4 projTransform = GetProjection(camera, mSwapChain, 
+                mBackend == GraphicsBackend::OPENGL);
+            
+            auto transform = registry.try_get<core::Transform>(cameraEntity);
+            DG::float4x4 viewTransform = DG::float4x4::Identity();
+            if (transform) {
+                viewTransform = ToMatrix(*transform).Inverse();
             }
 
-            auto cameras = registry.view<core::Camera>();
-
-            if (!cameras.empty()) {
-                auto cameraEntity = cameras.front();
-                auto camera = cameras.get<core::Camera>(cameraEntity);
-                DG::float4x4 projTransform = GetProjection(camera, mSwapChain, 
-                    mBackend == GraphicsBackend::OPENGL);
-                
-                auto transform = registry.try_get<core::Transform>(cameraEntity);
-                DG::float4x4 viewTransform = DG::float4x4::Identity();
-                if (transform) {
-                    viewTransform = ToMatrix(*transform).Inverse();
-                }
-
-                globals.mCamera.mView = viewTransform;
-                globals.mCamera.mViewProj = viewTransform * projTransform;
-            }
-
-            syncObject.Read<core::Transform>().done();
-            syncObject.Read<core::Camera>().done();
-            syncObject.Read<core::StaticMesh>().done();
-
-            globals.mCamera.mInvView = globals.mCamera.mView.Inverse();
-            globals.mCamera.mInvViewProj = globals.mCamera.mViewProj.Inverse();
+            globals.mCamera.mView = viewTransform;
+            globals.mCamera.mViewProj = viewTransform * projTransform;
         }
+
+        globals.mCamera.mInvView = globals.mCamera.mView.Inverse();
+        globals.mCamera.mInvViewProj = globals.mCamera.mViewProj.Inverse();
+
+        auto staticMeshes = registry.view<core::StaticMesh>();
 
         auto backBufferRTV = mSwapChain->GetCurrentBackBufferRTV();
         auto depthBufferDSV = mSwapChain->GetDepthBufferDSV();
@@ -547,9 +527,18 @@ namespace okami::graphics::diligent {
         // Bind pipeline state
         immediateContext->SetPipelineState(mStaticMeshPipeline.mState);
 
-        // Iterate through all static meshes
-        for (auto call : renderCalls) {
+        for (auto entity : staticMeshes) {
+            auto& staticMesh = staticMeshes.get<core::StaticMesh>(entity);
+            auto transform = registry.try_get<core::Transform>(entity);
 
+            RenderCall call;
+            call.mStaticMesh = staticMesh;
+            if (transform) {
+                call.mWorldTransform = ToMatrix(*transform);
+            } else {
+                call.mWorldTransform = DG::float4x4::Identity();
+            }
+            
             auto geometryImpl = reinterpret_cast<GeometryImpl*>
                 (call.mStaticMesh.mGeometry->GetBackend());
 
@@ -603,6 +592,7 @@ namespace okami::graphics::diligent {
             overlay->QueueCommands(immediateContext);
         }
 
+        // Synchronize if necessary
         if (mBackend == GraphicsBackend::OPENGL) {
             // For OpenGL with GLFW, we need to call glfwSwapBuffers.
             mNativeWindowProvider->GLSwapBuffers();

@@ -36,6 +36,9 @@ namespace okami::graphics::diligent {
             core::Frame& frame,
             core::SyncObject& syncObject) {
 
+            syncObject.WaitUntilFinished<core::Transform>();
+            syncObject.WaitUntilFinished<core::Sprite>();
+
             auto view = frame.Registry().view
                 <core::Transform, core::Sprite>();
 
@@ -57,9 +60,6 @@ namespace okami::graphics::diligent {
 
                 calls.emplace_back(std::move(call));
             }
-
-            syncObject.Read<core::Transform>().done();
-            syncObject.Read<core::Sprite>().done();
 
             std::sort(calls.begin(), calls.end(), 
                 [](const RenderCall& c1, const RenderCall& c2) {

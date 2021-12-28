@@ -39,7 +39,6 @@ namespace okami::graphics {
         virtual void AddOverlay(IGraphicsObject* object) = 0;
         virtual void RemoveOverlay(IGraphicsObject* object) = 0;
         virtual glm::i32vec2 GetRenderArea() const = 0;
-        virtual void Wait() = 0;
     };
 
     class IDisplay {

@@ -21,6 +21,8 @@ namespace okami::graphics::diligent {
         Im3dShaders mShaders;
         Im3dPipeline mPipeline;
         Im3dModule mModule;
+        marl::Event mRenderReady;
+        marl::Event mRenderFinished;
 
         void Startup(
             core::ISystem* renderer,
@@ -38,7 +40,6 @@ namespace okami::graphics::diligent {
         IRenderer* mRenderer;
         core::Event<> mOnUpdate;
         marl::WaitGroup mUpdateWaitGroup;
-        marl::Event mUpdateFinished;
 
     public:
         Im3dSystem(IRenderer* renderer);

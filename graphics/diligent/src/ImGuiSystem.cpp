@@ -19,10 +19,9 @@ namespace okami::graphics::diligent {
     }
 
     void ImGuiRenderOverlay::QueueCommands(DG::IDeviceContext* context) {
-        if (bDraw)
-            mImGuiImpl->Render(context);
-
-        bDraw = false;
+        mRenderReady.wait();
+        mImGuiImpl->Render(context);
+        mRenderFinished.signal();
     }
     
     void ImGuiRenderOverlay::Shutdown() {
@@ -98,19 +97,15 @@ namespace okami::graphics::diligent {
     void ImGuiSystem::Fork(core::Frame& frame, 
         core::SyncObject& syncObject,
         const core::Time& time) {
-        // This will be called by the overlay after renderering is done
-        // May also be called by other systems using ImGui to ensure that
-        // the ImGui update happens last.
-        mUpdateFinished.clear();
+
+        mOverlay.mRenderReady.clear();
         marl::schedule([
             renderer = mRenderer,
             &update = mOnUpdate,
             &overlay = mOverlay,
-            updateWait = mUpdateWaitGroup,
-            updateFinished = mUpdateFinished]() {
-            defer(updateFinished.signal());
-
-            renderer->Wait();
+            updateWait = mUpdateWaitGroup]() {
+            defer(overlay.mRenderReady.signal());
+            
             updateWait.wait();
 
             auto size = renderer->GetRenderArea();
@@ -120,13 +115,11 @@ namespace okami::graphics::diligent {
             overlay.mImGuiImpl->NewFrame(size.x, size.y, overlay.mSurfaceTransform);
             update();
             overlay.mImGuiImpl->EndFrame();
-
-            overlay.bDraw = true;
         });
     }
 
     void ImGuiSystem::Wait() {
-        mUpdateFinished.wait();
+        mOverlay.mRenderFinished.wait();
     }
 
     void ImGuiSystem::Join(core::Frame& frame) {

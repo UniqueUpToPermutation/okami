@@ -25,8 +25,6 @@ namespace okami::graphics::diligent {
     }
 
     void SpriteModule::RequestSync(core::SyncObject& syncObject) {
-        syncObject.Read<core::Transform>().add();
-        syncObject.Read<core::Sprite>().add();
     }
 
     void SpriteModule::Shutdown() {
