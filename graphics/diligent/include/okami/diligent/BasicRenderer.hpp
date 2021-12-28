@@ -30,7 +30,8 @@ namespace okami::graphics::diligent {
         public core::IResourceManager<core::BaseMaterial>,
         public core::IVertexLayoutProvider,
         public IRenderer,
-        public IGlobalsBufferProvider {
+        public IGlobalsBufferProvider,
+        public IEntityPick {
     public:
       struct GeometryImpl {
         std::vector<DG::RefCntAutoPtr<DG::IBuffer>>
@@ -75,20 +76,28 @@ namespace okami::graphics::diligent {
                 mDefaultBinding;
         } mStaticMeshPipeline;
 
+
+        bool                                        bEntityPickEnabled = false;
+        DG::RefCntAutoPtr<DG::ITexture>             mEntityPickBuffer;
+
         SpriteModule                                mSpriteModule;
 
         core::ResourceManager<core::Geometry>       mGeometryManager;
         core::ResourceManager<core::Texture>        mTextureManager;
         core::ResourceManager<core::BaseMaterial>   mBaseMaterialManager;
 
-        DynamicUniformBuffer<HLSL::SceneGlobals>            mSceneGlobals;
-        DynamicUniformBuffer<HLSL::StaticInstanceData>      mInstanceData;
+        DynamicUniformBuffer<
+            HLSL::SceneGlobals>                     mSceneGlobals;
+        DynamicUniformBuffer<
+            HLSL::StaticInstanceData>               mInstanceData;
 
         std::unique_ptr<GeometryImpl>       MoveToGPU(const core::Geometry& geometry);
         std::unique_ptr<TextureImpl>        MoveToGPU(const core::Texture& texture);
         std::unique_ptr<BaseMaterialImpl>   MoveToGPU(const core::BaseMaterial& material);
 
         StaticMeshPipeline CreateStaticMeshPipeline(core::IVirtualFileSystem* fileLoader);
+
+        void UpdateFramebuffers();
 
     public:
         BasicRenderer(
@@ -98,6 +107,7 @@ namespace okami::graphics::diligent {
         void Render(core::Frame& frame,
             core::SyncObject& syncObject);
 
+        void Request(const entt::meta_type&) override;
         void Startup(marl::WaitGroup& waitGroup) override;
         void Shutdown() override;
 
@@ -161,5 +171,7 @@ namespace okami::graphics::diligent {
 
         DynamicUniformBuffer<HLSL::SceneGlobals>*
             GetGlobalsBuffer() override;
+
+        core::Future<entt::entity> Pick(const glm::vec2& position) override;
     };
 }

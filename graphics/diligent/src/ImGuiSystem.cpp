@@ -9,7 +9,8 @@ namespace okami::graphics::diligent {
     void ImGuiRenderOverlay::Startup(
         core::ISystem* renderer,
         DG::IRenderDevice* device, 
-        DG::ISwapChain* swapChain) {
+        DG::ISwapChain* swapChain,
+        const RenderModuleParams& params) {
         auto rtv = swapChain->GetCurrentBackBufferRTV();
         auto dsv = swapChain->GetDepthBufferDSV();
 
@@ -18,7 +19,10 @@ namespace okami::graphics::diligent {
         mSurfaceTransform = swapChain->GetDesc().PreTransform;
     }
 
-    void ImGuiRenderOverlay::QueueCommands(DG::IDeviceContext* context) {
+    void ImGuiRenderOverlay::QueueCommands(DG::IDeviceContext* context, RenderPass pass) {
+
+        assert(pass == RenderPass::OVERLAY);
+
         mRenderReady.wait();
         mImGuiImpl->Render(context);
         mRenderFinished.signal();
@@ -105,7 +109,7 @@ namespace okami::graphics::diligent {
             &overlay = mOverlay,
             updateWait = mUpdateWaitGroup]() {
             defer(overlay.mRenderReady.signal());
-            
+
             updateWait.wait();
 
             auto size = renderer->GetRenderArea();

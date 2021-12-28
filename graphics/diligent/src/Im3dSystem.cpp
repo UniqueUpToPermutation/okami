@@ -8,7 +8,8 @@ void MakeShaderMap(okami::core::file_map_t* map);
 namespace okami::graphics::diligent {
     void Im3dRenderOverlay::Startup(core::ISystem* renderer, 
         DG::IRenderDevice* device, 
-        DG::ISwapChain* swapChain) {
+        DG::ISwapChain* swapChain,
+        const RenderModuleParams& params) {
 
         core::InterfaceCollection interfaces;
         renderer->RegisterInterfaces(interfaces);
@@ -34,7 +35,9 @@ namespace okami::graphics::diligent {
         mModule = Im3dModule(device);
     }
 
-    void Im3dRenderOverlay::QueueCommands(DG::IDeviceContext* context) {
+    void Im3dRenderOverlay::QueueCommands(DG::IDeviceContext* context, RenderPass pass) {
+        assert(pass == RenderPass::OVERLAY);
+
         mRenderReady.wait();
         mModule.Draw(context, mPipeline);
         mRenderFinished.signal();

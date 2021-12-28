@@ -53,6 +53,8 @@ namespace okami::graphics::diligent {
         GLFWwindow* mWindow = nullptr;
 		RealtimeGraphicsParams mParams;
         int mGLSwapInterval = -1;
+        bool bResizeRequested = false;
+        glm::uvec2 mResize;
 
         void Startup(const RealtimeGraphicsParams& params);
 
@@ -71,6 +73,7 @@ namespace okami::graphics::diligent {
             const core::Time& time) override;
         void Join(core::Frame& frame) override;
         void Wait() override;
+        void SetFramebufferSize(uint width, uint height) override;
         
         GLFWwindow* GetWindowGLFW() const override;
         NativeWindow GetWindow() override;

@@ -54,6 +54,15 @@ namespace okami::core {
         // Waits on this system to join
         virtual void Wait() = 0;
 
+        // Request the specified interface type
+        virtual void Request(const entt::meta_type& interfaceType);
+
+        // Request the specified interface type
+        template <typename T>
+        inline void Request() {
+            Request(entt::resolve<T>());
+        }
+
         virtual ~ISystem() = default;
     };
 
@@ -92,11 +101,15 @@ namespace okami::core {
         WaitHandle() = default;
 
         inline WaitHandle(marl::WaitGroup& after) : 
-            mAfter(&after), bFinished(false) {
+            mAfter(&after), 
+            bFinished(false) {
         }
 
         inline WaitHandle(marl::WaitGroup& before, marl::WaitGroup& after, marl::mutex& mutex) :
-            mBefore(&before), mAfter(&after), mWriteMutex(&mutex) {
+            mBefore(&before), 
+            mAfter(&after), 
+            mWriteMutex(&mutex), 
+            bFinished(false) {
         }
 
         WaitHandle(const WaitHandle&) = delete;
@@ -358,7 +371,7 @@ namespace okami::core {
     public:
         void RequestSync(SyncObject& obj) {
             mHandle = obj.WriteHandle<Type1>();
-            RequestSync(obj);
+            mRemaining.RequestSync(obj);
         }
 
         void ReleaseHandles() {

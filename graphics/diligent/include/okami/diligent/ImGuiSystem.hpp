@@ -19,10 +19,14 @@ namespace okami::graphics::diligent {
         marl::Event mRenderReady;
         marl::Event mRenderFinished;
 
-        void Startup(core::ISystem* renderer,
+        void Startup(
+            core::ISystem* renderer,
             DG::IRenderDevice* device, 
-            DG::ISwapChain* swapChain) override;
-        void QueueCommands(DG::IDeviceContext* context) override;
+            DG::ISwapChain* swapChain,
+            const RenderModuleParams& params) override;
+        void QueueCommands(
+            DG::IDeviceContext* context, 
+            RenderPass pass) override;
         void Shutdown() override;
     };
 

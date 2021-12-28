@@ -33,6 +33,11 @@ namespace okami::graphics {
         virtual ~IGraphicsObject() = default;
     };
 
+    class IEntityPick {
+    public:
+        virtual core::Future<entt::entity> Pick(const glm::vec2& position) = 0;
+    };
+
     class IRenderer {
     public:
         virtual void AddModule(std::unique_ptr<IGraphicsObject>&&) = 0;
@@ -45,6 +50,7 @@ namespace okami::graphics {
     public:
         virtual bool ShouldClose() const = 0;
         virtual glm::i32vec2 GetFramebufferSize() const = 0;
+        virtual void SetFramebufferSize(uint width, uint height) = 0;
         virtual bool GetIsFullscreen() const = 0;
         virtual GraphicsBackend GetRequestedBackend() const = 0;
     };

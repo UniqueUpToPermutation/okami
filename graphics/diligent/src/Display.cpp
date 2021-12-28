@@ -97,12 +97,23 @@ namespace okami::graphics::diligent {
         core::SyncObject& syncObject,
         const core::Time& time) {
         glfwPollEvents();
+
+        if (bResizeRequested) {
+            glfwSetWindowSize(mWindow, mResize.x, mResize.y);
+            bResizeRequested = false;
+        }
     }
 
     void DisplayGLFW::Join(core::Frame& frame) {
     }
 
     void DisplayGLFW::Wait() {
+    }
+
+    void DisplayGLFW::SetFramebufferSize(uint width, uint height) {
+        bResizeRequested = true;
+        mResize.x = width;
+        mResize.y = height;
     }
 
     DisplayGLFW::DisplayGLFW(const RealtimeGraphicsParams& params) :

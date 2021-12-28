@@ -281,6 +281,14 @@ namespace okami::graphics::diligent {
         return pipeline;
     }
 
+    void BasicRenderer::Request(const entt::meta_type& interfaceType) {
+        if (interfaceType == entt::resolve<IEntityPick>()) {
+            bEntityPickEnabled = true;
+        } else {
+            throw std::runtime_error("Requested interface not supported!");
+        }
+    }
+
     void BasicRenderer::Startup(marl::WaitGroup& waitGroup) {
         // Load shaders
         core::EmbeddedFileLoader fileLoader(&MakeShaderMap);
@@ -340,8 +348,10 @@ namespace okami::graphics::diligent {
 
         mSpriteModule.Startup(mDevice, mSwapChain, mSceneGlobals, &fileLoader);
 
+        RenderModuleParams params;
+
         for (auto overlay : mOverlays) {
-            overlay->Startup(this, mDevice, mSwapChain);
+            overlay->Startup(this, mDevice, mSwapChain, params);
         }
     }
 
@@ -349,6 +359,9 @@ namespace okami::graphics::diligent {
         interfaces.Add<core::IVertexLayoutProvider>(this);
         interfaces.Add<IRenderer>(this);
         interfaces.Add<IGlobalsBufferProvider>(this);
+
+        if (bEntityPickEnabled)
+            interfaces.Add<IEntityPick>(this);
     }
 
     void BasicRenderer::LoadResources(marl::WaitGroup& waitGroup) {
@@ -461,8 +474,21 @@ namespace okami::graphics::diligent {
         mSpriteModule.RequestSync(syncObject);
     }
 
+    void BasicRenderer::UpdateFramebuffers() {
+        if (mDisplay) {
+            auto sz = mDisplay->GetFramebufferSize();
+            const auto& scDesc = mSwapChain->GetDesc();
+
+            if (sz.x != scDesc.Width || sz.y != scDesc.Height) {
+                mSwapChain->Resize(sz.x, sz.y);
+            }
+        }
+    }
+
     void BasicRenderer::Render(core::Frame& frame,
         core::SyncObject& syncObject) {
+
+        UpdateFramebuffers();
 
         syncObject.WaitUntilFinished<core::Transform>();
         syncObject.WaitUntilFinished<core::Camera>();
@@ -582,6 +608,8 @@ namespace okami::graphics::diligent {
                 attribs.NumVertices = geoDesc.mAttribs.mNumVertices;
                 immediateContext->Draw(attribs);
             }
+
+            DG::ITexture* texture;
         }
 
         // Draw sprites
@@ -589,7 +617,7 @@ namespace okami::graphics::diligent {
 
         // Draw overlays (i.e., ImGui, etc.)
         for (auto overlay : mOverlays) {
-            overlay->QueueCommands(immediateContext);
+            overlay->QueueCommands(immediateContext, RenderPass::OVERLAY);
         }
 
         // Synchronize if necessary
@@ -676,5 +704,9 @@ namespace okami::graphics::diligent {
     DynamicUniformBuffer<HLSL::SceneGlobals>*
         BasicRenderer::GetGlobalsBuffer() {
         return &mSceneGlobals;
+    }
+
+    core::Future<entt::entity> BasicRenderer::Pick(const glm::vec2& position) {
+        throw std::runtime_error("Not implemented!");
     }
 }
