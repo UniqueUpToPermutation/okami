@@ -185,8 +185,6 @@ namespace okami::graphics::diligent {
 		PSOCreateInfo.pPS = shaders.mPointsPS;
 		PSODesc.Name = "Im3d Points Pipeline";
 
-		auto shaderType = shaders.mPointsGS->GetDesc().ShaderType;
-
 		DG::IPipelineState* pipelineStateVertices = nullptr;
 		device->CreateGraphicsPipelineState(PSOCreateInfo, &pipelineStateVertices);
 		mPipelineStateVertices.Attach(pipelineStateVertices);
@@ -273,6 +271,8 @@ namespace okami::graphics::diligent {
 						deviceContext->CommitShaderResources(pipeline.mVertexSRB.RawPtr(), 
 							DG::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 					}
+					break;
+				default:
 					break;
 			}
 

@@ -104,7 +104,7 @@ elseif(PLATFORM_ANDROID)
 elseif(PLATFORM_LINUX)
     target_link_libraries(okami-graphics-diligent PRIVATE XCBKeySyms GL X11)
 elseif(PLATFORM_MACOS OR PLATFORM_IOS)
-
+    set_source_files_properties(${IM3D_DIR}/im3d.cpp PROPERTIES COMPILE_FLAGS -Wno-error)
 endif()
 
 list(APPEND LIB_DEPENDENCIES_LIST
