@@ -15,6 +15,61 @@ void HandleGLFWError(int code, const char* msg) {
 }
 
 namespace okami::graphics::diligent {
+
+    void GLFWKeyCallback(GLFWwindow* window,
+        int key, int scancode, int action, int mods) {
+        auto display = reinterpret_cast<DisplayGLFW*>(
+            glfwGetWindowUserPointer(window));
+        display->OnKeyEvent(window, key, scancode, action, mods);
+    }
+
+    void GLFWCharCallback(GLFWwindow* window, unsigned int codepoint) {
+        auto display = reinterpret_cast<DisplayGLFW*>(
+            glfwGetWindowUserPointer(window));
+        display->OnCharEvent(window, codepoint);
+    }
+
+    void GLFWScrollCallback(GLFWwindow* window, 
+        double xoffset, double yoffset) {
+        auto display = reinterpret_cast<DisplayGLFW*>(
+            glfwGetWindowUserPointer(window));
+        display->OnScrollEvent(window, xoffset, yoffset);
+    }
+
+    void GLFWMouseButtonCallback(GLFWwindow* window,
+        int button, int action, int mods) {
+        auto display = reinterpret_cast<DisplayGLFW*>(
+            glfwGetWindowUserPointer(window));
+        display->OnMouseButtonEvent(window, button, action, mods);
+    }
+
+    void GLFWCursorEnterCallback(GLFWwindow* window, int entered) {
+        auto display = reinterpret_cast<DisplayGLFW*>(
+            glfwGetWindowUserPointer(window));
+        display->OnCursorEnterEvent(window, entered);
+    }
+
+    void GLFWCharModCallback(GLFWwindow* window,
+        unsigned int codepoint, int mods) {
+        auto display = reinterpret_cast<DisplayGLFW*>(
+            glfwGetWindowUserPointer(window));
+        display->OnCharModEvent(window, codepoint, mods);
+    }
+
+    void GLFWDropCallback(GLFWwindow* window, 
+        int path_count, const char* paths[]) {
+        auto display = reinterpret_cast<DisplayGLFW*>(
+            glfwGetWindowUserPointer(window));
+        display->OnDropEvent(window, path_count, paths);
+    }
+
+    void GLFWCursorPosCallback(GLFWwindow* window,
+        double xpos, double ypos) {
+        auto display = reinterpret_cast<DisplayGLFW*>(
+            glfwGetWindowUserPointer(window));
+        display->OnCursorPosEvent(window, xpos, ypos);
+    }
+
     void DisplayGLFW::Startup(const RealtimeGraphicsParams& params) {
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize glfw!");
@@ -61,8 +116,26 @@ namespace okami::graphics::diligent {
 
         if (mParams.mDeviceType == GraphicsBackend::OPENGL) {
 			glfwMakeContextCurrent(mWindow);
-            
         }
+
+        glfwSetWindowUserPointer(mWindow, this);
+
+        mPrevKey = glfwSetKeyCallback(
+            mWindow, &GLFWKeyCallback);
+        mPrevChar = glfwSetCharCallback(
+            mWindow, &GLFWCharCallback);
+        mPrevScroll = glfwSetScrollCallback(
+            mWindow, &GLFWScrollCallback);
+        mPrevMouseButton = glfwSetMouseButtonCallback(
+            mWindow, &GLFWMouseButtonCallback);
+        mPrevCursorEnter = glfwSetCursorEnterCallback(
+            mWindow, &GLFWCursorEnterCallback);
+        mPrevCharMods = glfwSetCharModsCallback(
+            mWindow, &GLFWCharModCallback);
+        mPrevDrop = glfwSetDropCallback(
+            mWindow, &GLFWDropCallback);
+        mPrevCursorPos = glfwSetCursorPosCallback(
+            mWindow, &GLFWCursorPosCallback);
     }
 
     void DisplayGLFW::Startup(marl::WaitGroup& waitGroup) {
@@ -171,6 +244,137 @@ namespace okami::graphics::diligent {
 
     GraphicsBackend DisplayGLFW::GetRequestedBackend() const {
         return mParams.mDeviceType;
+    }
+
+    core::delegate_handle_t 
+        DisplayGLFW::AddMouseButtonCallback(
+            const mouse_button_callback_t& c, CallbackPriority p) {
+        return mMouseButtonEvent.Add(c, (double)p);
+    }
+    core::delegate_handle_t 
+        DisplayGLFW::AddKeyCallback(
+            const key_callback_t& c, CallbackPriority p) {
+        return mKeyEvent.Add(c, (double)p);
+    }
+    core::delegate_handle_t 
+        DisplayGLFW::AddCharCallback(
+            const char_callback_t& c, CallbackPriority p) {
+        return mCharEvent.Add(c, (double)p);
+    }
+    core::delegate_handle_t 
+        DisplayGLFW::AddScrollCallback(
+            const scroll_callback_t& c, CallbackPriority p) {
+        return mScrollEvent.Add(c, (double)p);
+    }
+    core::delegate_handle_t
+        DisplayGLFW::AddCharModCallback(
+            const char_mod_callback_t& c, CallbackPriority p) {
+        return mCharModEvent.Add(c, (double)p);
+    }
+    core::delegate_handle_t
+        DisplayGLFW::AddCursorPosCallback(
+            const cursor_pos_callback_t& c, CallbackPriority p) {
+        return mCursorPosEvent.Add(c, (double)p);
+    }
+    core::delegate_handle_t
+        DisplayGLFW::AddDropCallback(
+            const drop_callback_t& c, CallbackPriority p) {
+        return mDropEvent.Add(c, (double)p);
+    }
+    core::delegate_handle_t
+        DisplayGLFW::AddCursorEnterCallback(
+            const cursor_enter_callback_t& c, CallbackPriority p) {
+        return mCursorEnterEvent.Add(c, (double)p);
+    }
+        
+    void DisplayGLFW::RemoveMouseButtonCallback(core::delegate_handle_t h) {
+        mMouseButtonEvent.Remove(h);
+    }
+    void DisplayGLFW::RemoveKeyCallback(core::delegate_handle_t h) {
+        mKeyEvent.Remove(h);
+    }
+    void DisplayGLFW::RemoveCharCallback(core::delegate_handle_t h) {
+        mCharEvent.Remove(h);
+    }
+    void DisplayGLFW::RemoveScrollCallback(core::delegate_handle_t h) {
+        mScrollEvent.Remove(h);
+    }
+    void DisplayGLFW::RemoveCharModCallback(core::delegate_handle_t h) {
+        mCharModEvent.Remove(h);
+    }
+    void DisplayGLFW::RemoveCursorPosCallback(core::delegate_handle_t h) {
+        mCursorPosEvent.Remove(h);
+    }
+    void DisplayGLFW::RemoveDropCallback(core::delegate_handle_t h) {
+        mDropEvent.Remove(h);
+    }
+    void DisplayGLFW::RemoveCursorEnterCallback(core::delegate_handle_t h) {
+        mCursorEnterEvent.Remove(h);
+    }
+
+    void DisplayGLFW::OnKeyEvent(GLFWwindow* window, 
+        int key, int scancode, int action, int mods) {
+        if (!mKeyEvent(window, key, scancode, action, mods)) {
+            if (mPrevKey) {
+                mPrevKey(window, key, scancode, action, mods);
+            }
+        }
+    }
+    void DisplayGLFW::OnCharEvent(GLFWwindow* window, 
+        unsigned int codepoint) {
+        if (!mCharEvent(window, codepoint)) {
+            if (mPrevChar) {
+                mPrevChar(window, codepoint);
+            }
+        }
+    }
+    void DisplayGLFW::OnScrollEvent(GLFWwindow* window, 
+        double xoffset, double yoffset) {
+        if (!mScrollEvent(window, xoffset, yoffset)) {
+            if (mPrevScroll) {
+                mPrevScroll(window, xoffset, yoffset);
+            }
+        }
+    }
+    void DisplayGLFW::OnMouseButtonEvent(GLFWwindow* window, 
+        int button, int action, int mods) {
+        if (!mMouseButtonEvent(window, button, action, mods)) {
+            if (mPrevMouseButton) {
+                mPrevMouseButton(window, button, action, mods);
+            }
+        }
+    }
+    void DisplayGLFW::OnCharModEvent(GLFWwindow* window,
+        unsigned int codepoint, int mods) {
+        if (!mCharModEvent(window, codepoint, mods)) {
+            if (mPrevCharMods) {
+                mPrevCharMods(window, codepoint, mods);
+            }
+        }
+    }
+    void DisplayGLFW::OnDropEvent(GLFWwindow* window,
+        int path_count, const char* paths[]) {
+        if (!mDropEvent(window, path_count, paths)) {
+            if (mPrevDrop) {
+                mPrevDrop(window, path_count, paths);
+            }
+        }
+    }
+    void DisplayGLFW::OnCursorPosEvent(GLFWwindow* window, 
+        double xpos, double ypos) {
+        if (!mCursorPosEvent(window, xpos, ypos)) {
+            if (mPrevCursorPos) {
+                mPrevCursorPos(window, xpos, ypos);
+            }
+        }
+    }
+    void DisplayGLFW::OnCursorEnterEvent(GLFWwindow* window, 
+        int entered) {
+        if (!mCursorEnterEvent(window, entered)) {
+            if (mPrevCursorEnter) {
+                mPrevCursorEnter(window, entered);
+            }
+        }
     }
 }
 

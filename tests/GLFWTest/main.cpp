@@ -15,7 +15,7 @@ int main() {
     defer(scheduler.unbind());
 
     SystemCollection systems;
-    systems.Add(CreateDisplay());
+    systems.Add(CreateGLFWDisplay());
 
     systems.Startup();
     {

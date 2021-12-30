@@ -70,7 +70,7 @@ namespace okami::core {
         }
 
         inline operator bool() const {
-            return mPtr;
+            return mPtr.get() != nullptr;
         }
     };
 

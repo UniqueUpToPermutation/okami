@@ -42,6 +42,11 @@ namespace okami::graphics::diligent {
         core::Event<> mOnUpdate;
         marl::WaitGroup mUpdateWaitGroup;
 
+        core::delegate_handle_t mMouseButtonCallbackHandle;
+        core::delegate_handle_t mMouseButtonScrollHandle;
+        core::delegate_handle_t mKeyHandle;
+        core::delegate_handle_t mCharHandle;
+
     public:
         ImGuiSystem(IRenderer* renderer, core::ISystem* input);
         ~ImGuiSystem();

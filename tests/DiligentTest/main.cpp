@@ -29,7 +29,7 @@ void TestBackend(GraphicsBackend backend) {
 
     ResourceInterface resources;
     SystemCollection systems;
-    auto display = systems.Add(CreateDisplay(params));
+    auto display = systems.Add(CreateGLFWDisplay(params));
     auto renderer = systems.Add(CreateRenderer(display, resources));
 
     systems.Startup();

@@ -59,16 +59,45 @@ namespace okami::graphics::diligent {
         core::InterfaceCollection interfaces;
         mInputSystem->RegisterInterfaces(interfaces);
 
-        auto displayGLFW = interfaces.Query<IGLFWWindowProvider>();
+        auto glfwInterface = interfaces.Query<IGLFWWindowProvider>();
 
-        if (displayGLFW) {
+        if (glfwInterface) {
             // For high DPI stuff
             float xscale, yscale;
-            glfwGetWindowContentScale(displayGLFW->GetWindowGLFW(), &xscale, &yscale);
+            glfwGetWindowContentScale(glfwInterface->GetWindowGLFW(), &xscale, &yscale);
             ImGui::GetIO().FontGlobalScale = (xscale + yscale) / 2.0;
 
             // We have a glfw display!
-            ImGui_ImplGlfw_InitForOther(displayGLFW->GetWindowGLFW(), true);
+            ImGui_ImplGlfw_InitForOther(glfwInterface->GetWindowGLFW(), false);
+
+            mMouseButtonCallbackHandle = glfwInterface->AddMouseButtonCallback(
+                [](GLFWwindow* window, int button, int action, int mods) {
+                
+                ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+                return ImGui::GetIO().WantCaptureMouse;
+            }, CallbackPriority::GUI);
+
+            mMouseButtonScrollHandle = glfwInterface->AddScrollCallback(
+                [](GLFWwindow* window, double xoffset, double yoffset) {
+                
+                ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+                return ImGui::GetIO().WantCaptureMouse;
+            }, CallbackPriority::GUI);
+
+            mKeyHandle = glfwInterface->AddKeyCallback(
+                [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+
+                ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
+                return ImGui::GetIO().WantCaptureKeyboard;
+            }, CallbackPriority::GUI);
+
+            mCharHandle = glfwInterface->AddCharCallback(
+                [](GLFWwindow* window, unsigned int codepoint) {
+
+                ImGui_ImplGlfw_CharCallback(window, codepoint);
+                return ImGui::GetIO().WantCaptureKeyboard;
+            }, CallbackPriority::GUI);
+
         } else {
             throw std::runtime_error("Input system does not implement any supported interfaces!");
         }
@@ -82,11 +111,17 @@ namespace okami::graphics::diligent {
         core::InterfaceCollection interfaces;
         mInputSystem->RegisterInterfaces(interfaces);
 
-        auto displayGLFW = interfaces.Query<IGLFWWindowProvider>();
+        auto glfwInterface = interfaces.Query<IGLFWWindowProvider>();
 
-        if (displayGLFW) {
+        if (glfwInterface) {
+            glfwInterface->RemoveMouseButtonCallback(mMouseButtonCallbackHandle);
+            glfwInterface->RemoveScrollCallback(mMouseButtonScrollHandle);
+            glfwInterface->RemoveKeyCallback(mKeyHandle);
+            glfwInterface->RemoveCharCallback(mCharHandle);
+
             // We have a glfw display!
             ImGui_ImplGlfw_Shutdown();
+
         } else {
             throw std::runtime_error("Input system does not implement any supported interfaces!");
         }

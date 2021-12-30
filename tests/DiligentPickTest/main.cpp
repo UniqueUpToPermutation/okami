@@ -40,16 +40,19 @@ void TestBackend(GraphicsBackend backend) {
 
     ResourceInterface resources;
     SystemCollection systems;
-    auto display = systems.Add(CreateDisplay(params));
+    auto display = systems.Add(CreateGLFWDisplay(params));
     auto renderer = systems.Add(CreateRenderer(display, resources));
     renderer->Request<IEntityPick>();
-
+    
+    auto glfwInterface = systems.QueryInterface<IGLFWWindowProvider>();
     auto rendererInterface = systems.QueryInterface<IRenderer>();
     auto displayInterface = systems.QueryInterface<IDisplay>();
 
-    systems.Add(CreateImGui(rendererInterface, display));
+    // The order in which these are created determines the order in
+    // which their respective overlays are drawn.
     systems.Add(CreateIm3d(rendererInterface));
-
+    systems.Add(CreateImGui(rendererInterface, display));
+    
     systems.Startup();
     {
         entt::entity selectedEntity = entt::null;
@@ -126,32 +129,27 @@ void TestBackend(GraphicsBackend backend) {
             ImGui::End();
         });
 
-        bool bLastDown = false;
-        bool bCurrentDown = false;
-        bool bRequestSubmited = false;
         Future<entt::entity> queryResult;
-        auto window = systems.QueryInterface<diligent::IGLFWWindowProvider>()->GetWindowGLFW();
+        glfwInterface->AddMouseButtonCallback([&queryResult, &entityPick](
+            GLFWwindow* window, int button, int action, int mods) {
+
+            double xpos, ypos;
+            glfwGetCursorPos(window, &xpos, &ypos);
+            queryResult = entityPick->Pick(xpos, ypos);
+
+            return false;
+        });
 
         Clock clock;
         while (!displayInterface->ShouldClose()) {
             auto time = clock.GetTime();
 
-            bLastDown = bCurrentDown;
-            bCurrentDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
-
-            if (!bLastDown && bCurrentDown) {
-                double xpos, ypos;
-                glfwGetCursorPos(window, &xpos, &ypos);
-                queryResult = entityPick->Pick(xpos, ypos);
-                bRequestSubmited = true;
-            }
-
             systems.Fork(time);
             systems.Join();
 
-            if (bRequestSubmited) {
+            if (queryResult) {
                 selectedEntity = queryResult.Get();
-                bRequestSubmited = false;
+                queryResult = Future<entt::entity>();
             }
         }
     }
