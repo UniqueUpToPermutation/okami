@@ -42,6 +42,8 @@ namespace okami::graphics::diligent {
         core::Event<> mOnUpdate;
         marl::WaitGroup mUpdateWaitGroup;
 
+        std::function<void()> mWaitForInput;
+
         core::delegate_handle_t mMouseButtonCallbackHandle;
         core::delegate_handle_t mMouseButtonScrollHandle;
         core::delegate_handle_t mKeyHandle;

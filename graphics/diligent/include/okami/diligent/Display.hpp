@@ -140,6 +140,8 @@ namespace okami::graphics::diligent {
             RemoveDropCallback(core::delegate_handle_t) = 0;
         virtual void
             RemoveCursorEnterCallback(core::delegate_handle_t) = 0;
+        
+        virtual void WaitForInput() = 0;
     };
 
     class DisplayGLFW final : 
@@ -183,6 +185,8 @@ namespace okami::graphics::diligent {
         GLFWcharfun mPrevChar;
         GLFWcharmodsfun mPrevCharMods;
         GLFWdropfun mPrevDrop;
+
+        marl::Event mWindowPollEvent;
 
     public:
         void OnKeyEvent(GLFWwindow* window, 
@@ -259,6 +263,8 @@ namespace okami::graphics::diligent {
         void RemoveCursorPosCallback(core::delegate_handle_t) override;
         void RemoveDropCallback(core::delegate_handle_t) override;
         void RemoveCursorEnterCallback(core::delegate_handle_t) override;
+    
+        void WaitForInput() override;
     };
 }
 

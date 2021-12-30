@@ -70,6 +70,10 @@ namespace okami::graphics::diligent {
         display->OnCursorPosEvent(window, xpos, ypos);
     }
 
+    DisplayGLFW::DisplayGLFW(const RealtimeGraphicsParams& params) :
+        mParams(params), mWindowPollEvent(marl::Event::Mode::Manual) {
+    }
+
     void DisplayGLFW::Startup(const RealtimeGraphicsParams& params) {
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize glfw!");
@@ -164,17 +168,21 @@ namespace okami::graphics::diligent {
     }
 
     void DisplayGLFW::RequestSync(core::SyncObject& syncObject) {
+        mWindowPollEvent.clear();
     }
 
     void DisplayGLFW::Fork(core::Frame& frame, 
         core::SyncObject& syncObject,
         const core::Time& time) {
-        glfwPollEvents();
-
+        
         if (bResizeRequested) {
             glfwSetWindowSize(mWindow, mResize.x, mResize.y);
             bResizeRequested = false;
         }
+
+        glfwPollEvents();
+
+        mWindowPollEvent.signal();
     }
 
     void DisplayGLFW::Join(core::Frame& frame) {
@@ -187,10 +195,6 @@ namespace okami::graphics::diligent {
         bResizeRequested = true;
         mResize.x = width;
         mResize.y = height;
-    }
-
-    DisplayGLFW::DisplayGLFW(const RealtimeGraphicsParams& params) :
-        mParams(params) {
     }
 
     GLFWwindow* DisplayGLFW::GetWindowGLFW() const {
@@ -310,6 +314,10 @@ namespace okami::graphics::diligent {
     }
     void DisplayGLFW::RemoveCursorEnterCallback(core::delegate_handle_t h) {
         mCursorEnterEvent.Remove(h);
+    }
+
+    void DisplayGLFW::WaitForInput() {
+        mWindowPollEvent.wait();
     }
 
     void DisplayGLFW::OnKeyEvent(GLFWwindow* window, 

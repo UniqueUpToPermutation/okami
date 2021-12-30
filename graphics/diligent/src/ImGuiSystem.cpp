@@ -98,6 +98,10 @@ namespace okami::graphics::diligent {
                 return ImGui::GetIO().WantCaptureKeyboard;
             }, CallbackPriority::GUI);
 
+            mWaitForInput = [glfwInterface]() {
+                glfwInterface->WaitForInput();
+            };
+
         } else {
             throw std::runtime_error("Input system does not implement any supported interfaces!");
         }
@@ -125,6 +129,8 @@ namespace okami::graphics::diligent {
         } else {
             throw std::runtime_error("Input system does not implement any supported interfaces!");
         }
+
+        mWaitForInput = nullptr;
     }
 
     void ImGuiSystem::LoadResources(marl::WaitGroup& waitGroup) {
@@ -142,10 +148,13 @@ namespace okami::graphics::diligent {
             renderer = mRenderer,
             &update = mOnUpdate,
             &overlay = mOverlay,
-            updateWait = mUpdateWaitGroup]() {
+            updateWait = mUpdateWaitGroup,
+            inputWait = mWaitForInput]() {
             defer(overlay.mRenderReady.signal());
 
             updateWait.wait();
+            if (inputWait)
+                inputWait();
 
             auto size = renderer->GetRenderArea();
 
