@@ -31,6 +31,7 @@ list(APPEND SOURCE
     src/ImGuiSystem.cpp
     src/Im3dModule.cpp
     src/Im3dSystem.cpp
+    src/TextureCapture.cpp
     shader_rc.cpp
     ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
     ${IM3D_DIR}/im3d.cpp
@@ -53,6 +54,7 @@ list(APPEND INCLUDE
     include/okami/diligent/RenderModule.hpp
     include/okami/diligent/Im3dModule.hpp
     include/okami/diligent/Im3dSystem.hpp
+    include/okami/diligent/TextureCapture.hpp
 )
 
 add_library(okami-graphics-diligent STATIC ${SOURCE} ${INCLUDE})

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <okami/PlatformDefs.hpp>
+#include <okami/BoundingBox.hpp>
 #include <okami/VertexFormat.hpp>
 #include <okami/Resource.hpp>
 #include <okami/ResourceInterface.hpp>
@@ -27,16 +28,6 @@ namespace okami::core {
         BufferDesc mDesc;
         std::vector<uint8_t> mBytes;
     };
-
-	struct BoundingBox {
-		glm::vec3 mLower;
-		glm::vec3 mUpper;
-	};
-
-	struct BoundingBox2D {
-		glm::vec2 mLower;
-		glm::vec2 mUpper;
-	};
 
     class Geometry final : public Resource {
 	public:

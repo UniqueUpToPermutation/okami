@@ -42,6 +42,9 @@ namespace okami::core {
         static TextureFormat RGB32_FLOAT();
         static TextureFormat RGB32_UINT();
         static TextureFormat RGB32_SINT();
+        static TextureFormat R32_FLOAT();
+        static TextureFormat R32_SINT();
+        static TextureFormat R32_UINT();
         static TextureFormat RG32_FLOAT();
         static TextureFormat RG32_UINT();
         static TextureFormat RG32_SINT();
@@ -50,6 +53,30 @@ namespace okami::core {
         static TextureFormat RGBA8_SINT();
         static TextureFormat RGBA8_SNORM();
         static TextureFormat SRGBA8_UNORM();
+        static TextureFormat R8_SINT();
+        static TextureFormat R8_UINT();
+        static TextureFormat R8_SNORM();
+        static TextureFormat R8_UNORM();
+        static TextureFormat RG8_SINT();
+        static TextureFormat RG8_UINT();
+        static TextureFormat RG8_SNORM();
+        static TextureFormat RG8_UNORM();
+        static TextureFormat RGB8_SINT();
+        static TextureFormat RGB8_UINT();
+        static TextureFormat RGB8_SNORM();
+        static TextureFormat RGB8_UNORM();
+        static TextureFormat R16_SINT();
+        static TextureFormat R16_UINT();
+        static TextureFormat R16_SNORM();
+        static TextureFormat R16_UNORM();
+        static TextureFormat RG16_SINT();
+        static TextureFormat RG16_UINT();
+        static TextureFormat RG16_SNORM();
+        static TextureFormat RG16_UNORM();
+        static TextureFormat RGBA16_SINT();
+        static TextureFormat RGBA16_UINT();
+        static TextureFormat RGBA16_SNORM();
+        static TextureFormat RGBA16_UNORM();
 
         inline uint32_t GetPixelByteSize() const {
             return GetSize(mValueType) * mChannels;
@@ -100,6 +127,8 @@ namespace okami::core {
 		size_t mSrcOffset;
 		size_t mStride;
         size_t mLength;
+        uint mMip;
+        uint mSlice;
 	};
 
     class Texture : public Resource {
@@ -149,9 +178,7 @@ namespace okami::core {
             std::vector<uint8_t> mData;
 
             void GenerateMips();
-
             static Data Alloc(const Desc& desc);
-
             static Data Load(
                 const std::filesystem::path& path,
                 const LoadParams<Texture>& params);

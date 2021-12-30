@@ -13,6 +13,7 @@
 #include <okami/diligent/SpriteModule.hpp>
 #include <okami/diligent/RenderModule.hpp>
 #include <okami/diligent/SceneGlobals.hpp>
+#include <okami/diligent/TextureCapture.hpp>
 
 #include <RenderDevice.h>
 #include <SwapChain.h>
@@ -22,6 +23,11 @@
 
 namespace okami::graphics::diligent {
     namespace DG = Diligent;
+
+    struct EntityPickRequest {
+        glm::vec2 mPosition;
+        core::Promise<entt::entity> mResult;
+    };
 
     class BasicRenderer final : 
         public core::ISystem,
@@ -63,22 +69,37 @@ namespace okami::graphics::diligent {
         GraphicsBackend                             mBackend;
         marl::WaitGroup                             mRenderFinished;
 
+        DG::RefCntAutoPtr<DG::ITexture>             mColorBuffer;
+        DG::RefCntAutoPtr<DG::ITexture>             mDepthBuffer;
         DG::RefCntAutoPtr<DG::ITexture>             mDefaultTexture;
-
         std::set<IRenderModule*>                    mOverlays;
+
         struct StaticMeshPipeline {
             DG::RefCntAutoPtr<DG::IShader>          mVS;
-            DG::RefCntAutoPtr<DG::IShader>          mPS;
-            DG::RefCntAutoPtr<DG::IPipelineState>   mState;
+            DG::RefCntAutoPtr<DG::IShader>          mPSColor;
+            
+            DG::RefCntAutoPtr<DG::IPipelineState>   mStateDepth;
+            DG::RefCntAutoPtr<DG::IPipelineState>   mStateColor;
+            DG::RefCntAutoPtr<DG::IPipelineState>   mStateColorEntityPick;
 
             DG::Uint32                              mAlbedoIdx;
+
             DG::RefCntAutoPtr<DG::IShaderResourceBinding>
-                mDefaultBinding;
+                mDefaultBindingDepth;
+            DG::RefCntAutoPtr<DG::IShaderResourceBinding>
+                mDefaultBindingColor;
+            DG::RefCntAutoPtr<DG::IShaderResourceBinding>
+                mDefaultBindingColorPick;
         } mStaticMeshPipeline;
 
 
         bool                                        bEntityPickEnabled = false;
-        DG::RefCntAutoPtr<DG::ITexture>             mEntityPickBuffer;
+        DG::RefCntAutoPtr<DG::ITexture>             mEntityPickTexture;
+        core::MessagePipe<EntityPickRequest>        mEntityPickRequests;
+        TextureCapturePick                          mEntityPicker;
+        std::vector<entt::id_type>                  mEntityResultBuffer;
+        std::vector<core::Promise<entt::entity>>    mEntityResultPromises;
+        std::vector<glm::vec3>                      mEntityQueryBuffer;
 
         SpriteModule                                mSpriteModule;
 
@@ -95,7 +116,8 @@ namespace okami::graphics::diligent {
         std::unique_ptr<TextureImpl>        MoveToGPU(const core::Texture& texture);
         std::unique_ptr<BaseMaterialImpl>   MoveToGPU(const core::BaseMaterial& material);
 
-        StaticMeshPipeline CreateStaticMeshPipeline(core::IVirtualFileSystem* fileLoader);
+        StaticMeshPipeline CreateStaticMeshPipeline(
+            core::IVirtualFileSystem* fileLoader);
 
         void UpdateFramebuffers();
 

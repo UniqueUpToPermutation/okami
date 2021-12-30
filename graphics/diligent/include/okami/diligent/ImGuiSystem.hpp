@@ -9,6 +9,8 @@
 #include <RefCntAutoPtr.hpp>
 #include <ImGuiImplDiligent.hpp>
 
+#include <imgui.h>
+
 namespace okami::graphics::diligent {
 
     class ImGuiRenderOverlay final :

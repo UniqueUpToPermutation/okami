@@ -16,6 +16,10 @@ struct SceneGlobals {
 
 struct StaticInstanceData {
     float4x4 mWorld;
+    int mEntity;
+    int mPadding0;
+    int mPadding1;
+    int mPadding2;
 };
 
 #endif

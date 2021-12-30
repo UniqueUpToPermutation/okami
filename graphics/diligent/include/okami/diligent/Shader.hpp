@@ -20,7 +20,7 @@ namespace okami::graphics::diligent {
 		std::string mSource;
 		DG::SHADER_TYPE mShaderType;
 		std::string mName;		
-		const ShaderPreprocessorConfig mOverrides;
+		ShaderPreprocessorConfig mOverrides;
 		std::string mEntryPoint;
 		bool bCache = false;
 

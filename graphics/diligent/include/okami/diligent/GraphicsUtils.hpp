@@ -84,4 +84,17 @@ namespace okami::graphics::diligent {
     DG::INPUT_ELEMENT_FREQUENCY ToDiligent(core::InputElementFrequency frequency);
     InputLayoutDiligent ToDiligent(const core::VertexFormat& layout);
     DG::TEXTURE_FORMAT ToDiligent(const core::TextureFormat& format);
+
+    core::ResourceDimension ToOkami(DG::RESOURCE_DIMENSION dim);
+    core::ValueType ToOkami(DG::VALUE_TYPE valueType);
+    core::InputElementFrequency ToOkami(DG::INPUT_ELEMENT_FREQUENCY frequency);
+    core::TextureFormat ToOkami(DG::TEXTURE_FORMAT format);
+
+    uint GetTypeSize(DG::VALUE_TYPE type);
+	DG::VALUE_TYPE GetComponentType(DG::TEXTURE_FORMAT texFormat);
+	int GetComponentCount(DG::TEXTURE_FORMAT texFormat);
+	int GetSize(DG::VALUE_TYPE v);
+	int GetPixelByteSize(DG::TEXTURE_FORMAT format);
+	bool GetIsNormalized(DG::TEXTURE_FORMAT format);
+	bool GetIsSRGB(DG::TEXTURE_FORMAT format);
 }

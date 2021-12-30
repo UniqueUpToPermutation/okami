@@ -11,6 +11,17 @@
 #include <im3d.h>
 
 namespace okami::graphics::diligent {
+    inline Im3d::Vec2 ToIm2d(const glm::vec2& v) {
+        return Im3d::Vec2(v.x, v.y);
+    }
+
+    inline Im3d::Vec3 ToIm3d(const glm::vec3& v) {
+        return Im3d::Vec3(v.x, v.y, v.z);
+    }
+
+    inline Im3d::Vec4 ToIm4d(const glm::vec4& v) {
+        return Im3d::Vec4(v.x, v.y, v.z, v.w);
+    }
 
     class Im3dRenderOverlay final :
         public IRenderModule {

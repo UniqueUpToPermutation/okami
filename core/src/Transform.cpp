@@ -48,5 +48,49 @@ namespace okami::core {
             glm::vec3(1.0f, 1.0f, 1.0f),
             glm::inverse(rot)
         };
-    }   
+    }  
+
+    		BoundingBox Transform::ApplyToAABB(const BoundingBox& box) const {
+			glm::vec3 axes[] = { 
+				{ 1.0f, 0.0f, 0.0f },
+				{ 0.0f, 1.0f, 0.0f },
+				{ 0.0f, 0.0f, 1.0f }
+			};
+
+			for (int i = 0; i < 3; ++i) {
+				axes[i] = ApplyToTangent(axes[i]) * 
+					(box.mUpper[i] - box.mLower[i]);
+			}
+
+			glm::vec3 t_lower = ApplyToPoint(box.mLower);
+			glm::vec3 t_upper = ApplyToPoint(box.mUpper);
+
+			glm::vec3 v[] = {
+				t_lower,
+				t_lower + axes[0],
+				t_lower + axes[1],
+				t_lower + axes[2],
+				t_upper - axes[0],
+				t_upper - axes[1],
+				t_upper - axes[2],
+				t_upper
+			};
+
+			glm::vec3 n_upper(
+				-std::numeric_limits<float>::infinity(),
+				-std::numeric_limits<float>::infinity(),
+				-std::numeric_limits<float>::infinity());
+
+			glm::vec3 n_lower(
+				std::numeric_limits<float>::infinity(),
+				std::numeric_limits<float>::infinity(),
+				std::numeric_limits<float>::infinity());
+
+			for (int i = 0; i < 8; ++i) {
+				n_upper = glm::max(n_upper, v[i]);
+				n_lower = glm::min(n_lower, v[i]);
+			}
+
+			return BoundingBox{n_lower, n_upper};
+		}
 }

@@ -36,6 +36,9 @@ namespace okami::graphics {
     class IEntityPick {
     public:
         virtual core::Future<entt::entity> Pick(const glm::vec2& position) = 0;
+        inline core::Future<entt::entity> Pick(float x, float y) {
+            return Pick(glm::vec2(x, y));
+        }
     };
 
     class IRenderer {

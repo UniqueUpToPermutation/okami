@@ -6,6 +6,8 @@
 void MakeShaderMap(okami::core::file_map_t* map);
 
 namespace okami::graphics::diligent {
+
+
     void Im3dRenderOverlay::Startup(core::ISystem* renderer, 
         DG::IRenderDevice* device, 
         DG::ISwapChain* swapChain,

@@ -23,6 +23,7 @@ namespace okami::graphics::diligent {
         DG::RENDER_DEVICE_TYPE DeviceType, 
         DG::EngineCreateInfo& EngineCI, 
         DG::SwapChainDesc& SCDesc) {
+        
 		SCDesc.ColorBufferFormat            = TEX_FORMAT_RGBA8_UNORM_SRGB;
         EngineCI.Features.GeometryShaders   = DEVICE_FEATURE_STATE_ENABLED;
         EngineCI.Features.Tessellation 		= DEVICE_FEATURE_STATE_ENABLED;
@@ -48,6 +49,25 @@ namespace okami::graphics::diligent {
         resources.Register<core::Geometry>(this);
         resources.Register<core::Texture>(this);
         resources.Register<core::BaseMaterial>(this);
+
+        core::InterfaceCollection displayInterfaces(mDisplaySystem);
+        auto windowProvider = displayInterfaces.Query<INativeWindowProvider>();
+        auto display = displayInterfaces.Query<IDisplay>();
+
+        if (!windowProvider) {
+            throw std::runtime_error("Error: Display does not expose"
+                " INativeWindowProvider interface!");
+        }
+
+        if (!display) {
+            throw std::runtime_error("Error: Display does not expose"
+                " IDisplay interface!");
+        }
+
+        mNativeWindowProvider = windowProvider;
+        mDisplay = display;
+
+        mBackend = mDisplay->GetRequestedBackend();
     }
 
     void BasicRenderer::OnDestroy(core::Geometry* geometry) {
@@ -186,7 +206,7 @@ namespace okami::graphics::diligent {
             albedo = mDefaultTexture;
        
         DG::IShaderResourceBinding* binding = nullptr;
-        mStaticMeshPipeline.mState->CreateShaderResourceBinding(
+        mStaticMeshPipeline.mStateColor->CreateShaderResourceBinding(
             &binding, true);
 
         binding->GetVariableByIndex(DG::SHADER_TYPE_PIXEL, 
@@ -214,8 +234,8 @@ namespace okami::graphics::diligent {
 
         ShaderParams paramsStaticMeshVS(
             "BasicVert.vsh", DG::SHADER_TYPE_VERTEX, "Static Mesh VS");
-        ShaderParams paramsStaticMeshPS(
-            "BasicPixel.psh", DG::SHADER_TYPE_PIXEL, "Static Mesh PS");
+        ShaderParams paramsStaticMeshPSColor(
+            "BasicPixel.psh", DG::SHADER_TYPE_PIXEL, "Static Mesh PS Color");
 
         bool bAddLineNumbers = mBackend != GraphicsBackend::OPENGL;
 
@@ -223,8 +243,8 @@ namespace okami::graphics::diligent {
 
         pipeline.mVS.Attach(CompileEmbeddedShader(
             mDevice, paramsStaticMeshVS, fileLoader, bAddLineNumbers));
-        pipeline.mPS.Attach(CompileEmbeddedShader(
-            mDevice, paramsStaticMeshPS, fileLoader, bAddLineNumbers));
+        pipeline.mPSColor.Attach(CompileEmbeddedShader(
+            mDevice, paramsStaticMeshPSColor, fileLoader, bAddLineNumbers));
 
         // Create pipeline
         GraphicsPipelineStateCreateInfo PSOCreateInfo;
@@ -242,47 +262,98 @@ namespace okami::graphics::diligent {
         PSOCreateInfo.GraphicsPipeline.InputLayout.NumElements = layout.mElements.size();
 
         PSOCreateInfo.pVS = pipeline.mVS;
-        PSOCreateInfo.pPS = pipeline.mPS;
 
-        ShaderResourceVariableDesc Vars[] = {
+        ShaderResourceVariableDesc DepthVars[] = {
+            {SHADER_TYPE_VERTEX, "cbuf_SceneGlobals", 
+                SHADER_RESOURCE_VARIABLE_TYPE_STATIC},
+            {SHADER_TYPE_VERTEX, "cbuf_InstanceData", 
+                SHADER_RESOURCE_VARIABLE_TYPE_STATIC},
+        };
+
+        PSOCreateInfo.PSODesc.ResourceLayout.Variables    = DepthVars;
+        PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(DepthVars);
+        PSOCreateInfo.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+
+        DG::IPipelineState* depthPipeline = nullptr;
+        mDevice->CreateGraphicsPipelineState(PSOCreateInfo, &depthPipeline);
+        pipeline.mStateDepth.Attach(depthPipeline);
+
+        // Create color
+        ShaderResourceVariableDesc ColorVars[] = {
             {SHADER_TYPE_PIXEL, "t_Albedo", 
                 SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE},
             {SHADER_TYPE_VERTEX, "cbuf_SceneGlobals", 
                 SHADER_RESOURCE_VARIABLE_TYPE_STATIC},
             {SHADER_TYPE_VERTEX, "cbuf_InstanceData", 
+                SHADER_RESOURCE_VARIABLE_TYPE_STATIC},
+            {SHADER_TYPE_PIXEL, "cbuf_InstanceData", 
                 SHADER_RESOURCE_VARIABLE_TYPE_STATIC}
         };
         pipeline.mAlbedoIdx = 0;
 
-        PSOCreateInfo.PSODesc.ResourceLayout.Variables    = Vars;
-        PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(Vars);
+        PSOCreateInfo.PSODesc.ResourceLayout.Variables    = ColorVars;
+        PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(ColorVars);
 
         SamplerDesc SamLinearClampDesc {
             FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, 
-            TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP, TEXTURE_ADDRESS_CLAMP
+            TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
         };
         ImmutableSamplerDesc ImtblSamplers[] = {
             {SHADER_TYPE_PIXEL, "t_Albedo", SamLinearClampDesc}
         };
         PSOCreateInfo.PSODesc.ResourceLayout.ImmutableSamplers    = ImtblSamplers;
         PSOCreateInfo.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(ImtblSamplers);
-        PSOCreateInfo.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
 
-        DG::IPipelineState* meshPipeline = nullptr;
-        mDevice->CreateGraphicsPipelineState(PSOCreateInfo, &meshPipeline);
-        pipeline.mState.Attach(meshPipeline);
+        PSOCreateInfo.pPS = pipeline.mPSColor;
+
+        DG::IPipelineState* colorPipeline = nullptr;
+        mDevice->CreateGraphicsPipelineState(PSOCreateInfo, &colorPipeline);
+        pipeline.mStateColor.Attach(colorPipeline);
+
+        if (bEntityPickEnabled) {
+            PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 2;
+            PSOCreateInfo.GraphicsPipeline.RTVFormats[0] = mSwapChain->GetDesc().ColorBufferFormat;
+            PSOCreateInfo.GraphicsPipeline.RTVFormats[1] = DG::TEX_FORMAT_R32_SINT;
+            PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[1].BlendEnable = false;
+            PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[1].LogicOperationEnable = false;
+
+            DG::IPipelineState* colorPipelinePick = nullptr;
+            mDevice->CreateGraphicsPipelineState(PSOCreateInfo, &colorPipelinePick);
+            pipeline.mStateColorEntityPick.Attach(colorPipelinePick);
+        }
 
         // Set the scene globals buffer
-        pipeline.mState->GetStaticVariableByName(
+        pipeline.mStateDepth->GetStaticVariableByName(
             DG::SHADER_TYPE_VERTEX, "cbuf_SceneGlobals")->Set(mSceneGlobals.Get());
-        pipeline.mState->GetStaticVariableByName(
+        pipeline.mStateDepth->GetStaticVariableByName(
             DG::SHADER_TYPE_VERTEX, "cbuf_InstanceData")->Set(mInstanceData.Get());
     
+        pipeline.mStateColor->GetStaticVariableByName(
+            DG::SHADER_TYPE_VERTEX, "cbuf_SceneGlobals")->Set(mSceneGlobals.Get());
+        pipeline.mStateColor->GetStaticVariableByName(
+            DG::SHADER_TYPE_VERTEX, "cbuf_InstanceData")->Set(mInstanceData.Get());
+        pipeline.mStateColor->GetStaticVariableByName(
+            DG::SHADER_TYPE_PIXEL, "cbuf_InstanceData")->Set(mInstanceData.Get());
+    
+        if (bEntityPickEnabled) {
+            pipeline.mStateColorEntityPick->GetStaticVariableByName(
+                DG::SHADER_TYPE_VERTEX, "cbuf_SceneGlobals")->Set(mSceneGlobals.Get());
+            pipeline.mStateColorEntityPick->GetStaticVariableByName(
+                DG::SHADER_TYPE_VERTEX, "cbuf_InstanceData")->Set(mInstanceData.Get());
+            pipeline.mStateColorEntityPick->GetStaticVariableByName(
+                DG::SHADER_TYPE_PIXEL, "cbuf_InstanceData")->Set(mInstanceData.Get());
+        }
+
         return pipeline;
     }
 
     void BasicRenderer::Request(const entt::meta_type& interfaceType) {
         if (interfaceType == entt::resolve<IEntityPick>()) {
+
+            if (mBackend == GraphicsBackend::OPENGL) {
+                throw std::runtime_error("Entity picking not supported in OpenGL!");
+            }
+
             bEntityPickEnabled = true;
         } else {
             throw std::runtime_error("Requested interface not supported!");
@@ -293,22 +364,8 @@ namespace okami::graphics::diligent {
         // Load shaders
         core::EmbeddedFileLoader fileLoader(&MakeShaderMap);
 
-        core::InterfaceCollection displayInterfaces(mDisplaySystem);
-        auto windowProvider = displayInterfaces.Query<INativeWindowProvider>();
-        auto display = displayInterfaces.Query<IDisplay>();
-
-        if (!windowProvider) {
-            throw std::runtime_error("Error: Display does not expose"
-                " INativeWindowProvider interface!");
-        }
-
-        if (!display) {
-            throw std::runtime_error("Error: Display does not expose"
-                " IDisplay interface!");
-        }
-
-        if (display->GetRequestedBackend() == GraphicsBackend::OPENGL)
-            windowProvider->GLMakeContextCurrent();
+        if (mDisplay->GetRequestedBackend() == GraphicsBackend::OPENGL)
+            mNativeWindowProvider->GLMakeContextCurrent();
 
         // Create the graphics device and swap chain
         DG::IEngineFactory* factory = nullptr;
@@ -316,7 +373,7 @@ namespace okami::graphics::diligent {
         std::vector<DG::IDeviceContext*> contexts;
         DG::ISwapChain* swapChain = nullptr;
 
-        CreateDeviceAndSwapChain(display, windowProvider, 
+        CreateDeviceAndSwapChain(mDisplay, mNativeWindowProvider, 
             &factory, &device, contexts, &swapChain, 
             &GetEngineInitializationAttribs);
 
@@ -329,10 +386,6 @@ namespace okami::graphics::diligent {
                 DG::RefCntAutoPtr<DG::IDeviceContext>(context));
         }
 
-        mDisplay = display;
-        mNativeWindowProvider = windowProvider;
-        mBackend = display->GetRequestedBackend();
-
         mVertexLayouts.Register<core::StaticMesh>(core::VertexFormat::PositionUV());
 
         // Create globals buffer
@@ -340,10 +393,12 @@ namespace okami::graphics::diligent {
         mInstanceData = DynamicUniformBuffer<HLSL::StaticInstanceData>(mDevice);
 
         mStaticMeshPipeline = CreateStaticMeshPipeline(&fileLoader);
+
         auto basicTexture = core::Texture::Prefabs::SolidColor(
-            16, 16, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+            16, 16, 
+            glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         mDefaultTexture = MoveToGPU(basicTexture)->mTexture;
-        mStaticMeshPipeline.mDefaultBinding = 
+        mStaticMeshPipeline.mDefaultBindingColor = 
             MoveToGPU(core::BaseMaterial())->mBinding;
 
         mSpriteModule.Startup(mDevice, mSwapChain, mSceneGlobals, &fileLoader);
@@ -352,6 +407,17 @@ namespace okami::graphics::diligent {
 
         for (auto overlay : mOverlays) {
             overlay->Startup(this, mDevice, mSwapChain, params);
+        }
+
+        if (bEntityPickEnabled) {
+            DG::TextureDesc desc;
+            desc.Type = DG::RESOURCE_DIM_TEX_2D;
+            desc.Format = DG::TEX_FORMAT_R32_SINT;
+            mEntityPicker = TextureCapturePick(mDevice, desc, 32);
+
+            mEntityResultBuffer.resize(mEntityPicker.GetMaxQueries());
+            mEntityQueryBuffer.resize(mEntityPicker.GetMaxQueries());
+            mEntityResultPromises.resize(mEntityPicker.GetMaxQueries());
         }
     }
 
@@ -475,13 +541,74 @@ namespace okami::graphics::diligent {
     }
 
     void BasicRenderer::UpdateFramebuffers() {
-        if (mDisplay) {
-            auto sz = mDisplay->GetFramebufferSize();
-            const auto& scDesc = mSwapChain->GetDesc();
+        glm::uvec2 requestedSize;
 
-            if (sz.x != scDesc.Width || sz.y != scDesc.Height) {
-                mSwapChain->Resize(sz.x, sz.y);
+        auto sz = mDisplay->GetFramebufferSize();
+        auto& scDesc = mSwapChain->GetDesc();
+        
+        if (sz.x != scDesc.Width || sz.y != scDesc.Height) {
+            mSwapChain->Resize(sz.x, sz.y);
+        }
+        requestedSize = sz;
+
+        if (bEntityPickEnabled) {
+            if (!mEntityPickTexture || 
+                mEntityPickTexture->GetDesc().Width != requestedSize.x ||
+                mEntityPickTexture->GetDesc().Height != requestedSize.y) {
+
+                DG::TextureDesc desc;
+                desc.Width = requestedSize.x;
+                desc.Height = requestedSize.y;
+                desc.MipLevels = 1;
+                desc.Type = DG::RESOURCE_DIM_TEX_2D;
+                desc.SampleCount = 1;
+                desc.Name = "Entity Pick Buffer";
+                desc.Usage = DG::USAGE_DEFAULT;
+                desc.Format = DG::TEX_FORMAT_R32_SINT;
+                desc.BindFlags = DG::BIND_RENDER_TARGET;
+
+                DG::ITexture* entityPickBuffer = nullptr;
+                mDevice->CreateTexture(desc, nullptr, &entityPickBuffer);
+                mEntityPickTexture.Attach(entityPickBuffer);
             }
+        }
+
+        if (!mColorBuffer ||
+            mColorBuffer->GetDesc().Width != requestedSize.x ||
+            mColorBuffer->GetDesc().Height != requestedSize.y) {
+                DG::TextureDesc desc;
+                desc.Width = requestedSize.x;
+                desc.Height = requestedSize.y;
+                desc.MipLevels = 1;
+                desc.Type = DG::RESOURCE_DIM_TEX_2D;
+                desc.SampleCount = 1;
+                desc.Name = "Color Buffer";
+                desc.Usage = DG::USAGE_DEFAULT;
+                desc.Format = mSwapChain->GetDesc().ColorBufferFormat;
+                desc.BindFlags = DG::BIND_RENDER_TARGET;
+
+                DG::ITexture* entityPickBuffer = nullptr;
+                mDevice->CreateTexture(desc, nullptr, &entityPickBuffer);
+                mColorBuffer.Attach(entityPickBuffer);
+        }
+
+        if (!mDepthBuffer ||
+            mDepthBuffer->GetDesc().Width != requestedSize.x ||
+            mDepthBuffer->GetDesc().Height != requestedSize.y) {
+                DG::TextureDesc desc;
+                desc.Width = requestedSize.x;
+                desc.Height = requestedSize.y;
+                desc.MipLevels = 1;
+                desc.Type = DG::RESOURCE_DIM_TEX_2D;
+                desc.SampleCount = 1;
+                desc.Name = "Depth Buffer";
+                desc.Usage = DG::USAGE_DEFAULT;
+                desc.Format = mSwapChain->GetDesc().DepthBufferFormat;
+                desc.BindFlags = DG::BIND_DEPTH_STENCIL;
+
+                DG::ITexture* entityPickBuffer = nullptr;
+                mDevice->CreateTexture(desc, nullptr, &entityPickBuffer);
+                mDepthBuffer.Attach(entityPickBuffer);
         }
     }
 
@@ -503,7 +630,6 @@ namespace okami::graphics::diligent {
         const auto& scDesc = mSwapChain->GetDesc();
 
         // Queue up render calls and compute transforms
-        std::vector<RenderCall> renderCalls;
         HLSL::SceneGlobals globals;
         globals.mCamera.mView = DG::float4x4::Identity();
         globals.mCamera.mViewProj = DG::float4x4::Identity();
@@ -532,26 +658,46 @@ namespace okami::graphics::diligent {
 
         auto staticMeshes = registry.view<core::StaticMesh>();
 
-        auto backBufferRTV = mSwapChain->GetCurrentBackBufferRTV();
-        auto depthBufferDSV = mSwapChain->GetDepthBufferDSV();
         auto immediateContext = mContexts[0];
+
+        auto colorBufferRTV = mColorBuffer->GetDefaultView(
+            DG::TEXTURE_VIEW_RENDER_TARGET);
+        auto depthBufferDSV = mDepthBuffer->GetDefaultView(
+            DG::TEXTURE_VIEW_DEPTH_STENCIL);
 
         // Move globals to GPU
         mSceneGlobals.Write(immediateContext, globals);
 
-        // Clear screen
-        ITextureView* backBuffers[] = {backBufferRTV};
+        // Set render targets
+        ITextureView* entityPickView = nullptr;
+        std::vector<ITextureView*> rtvs;
+        rtvs.emplace_back(colorBufferRTV);
+        if (bEntityPickEnabled) {
+            entityPickView = mEntityPickTexture->GetDefaultView(
+                DG::TEXTURE_VIEW_RENDER_TARGET);
+            rtvs.emplace_back(entityPickView);
+        }
         float color[] = { 0.3f, 0.3f, 0.3f, 1.0f };
-        immediateContext->SetRenderTargets(1, backBuffers, depthBufferDSV, 
+        immediateContext->SetRenderTargets(rtvs.size(), rtvs.data(), depthBufferDSV, 
             RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-        immediateContext->ClearRenderTarget(backBufferRTV, color, 
+
+        // Clear screen
+        immediateContext->ClearRenderTarget(colorBufferRTV, color, 
             RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         immediateContext->ClearDepthStencil(depthBufferDSV,
             DG::CLEAR_DEPTH_FLAG, 1.0f, 0, 
             DG::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        if (bEntityPickEnabled) {
+            float color[] = { 0.0f, 0.0f, 0.0f, 0.0f };
+            immediateContext->ClearRenderTarget(entityPickView, color, 
+                RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        }
 
         // Bind pipeline state
-        immediateContext->SetPipelineState(mStaticMeshPipeline.mState);
+        auto staticMeshState = mStaticMeshPipeline.mStateColor;
+        if (bEntityPickEnabled)
+            staticMeshState = mStaticMeshPipeline.mStateColorEntityPick;
+        immediateContext->SetPipelineState(staticMeshState);
 
         for (auto entity : staticMeshes) {
             auto& staticMesh = staticMeshes.get<core::StaticMesh>(entity);
@@ -587,13 +733,16 @@ namespace okami::graphics::diligent {
                     RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
             } else {
                 immediateContext->CommitShaderResources(
-                    mStaticMeshPipeline.mDefaultBinding,
+                    mStaticMeshPipeline.mDefaultBindingColor,
                     RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
             }
 
+            HLSL::StaticInstanceData instanceData;
+            instanceData.mWorld = call.mWorldTransform;
+            instanceData.mEntity = (int32_t)entity;
+
             // Submit instance data to the GPU
-            mInstanceData.Write(immediateContext, 
-                HLSL::StaticInstanceData{call.mWorldTransform});
+            mInstanceData.Write(immediateContext, instanceData);
             
             // Submit draw call to GPU
             const auto& geoDesc = call.mStaticMesh.mGeometry->GetDesc();
@@ -613,12 +762,70 @@ namespace okami::graphics::diligent {
         }
 
         // Draw sprites
-        mSpriteModule.Render<&GetDiligentTextureImpl>(immediateContext, frame, syncObject);
+        mSpriteModule.Render<&GetDiligentTextureImpl>(
+            immediateContext, frame, syncObject);
+
+        // Remove entity buffer for the overlays
+        rtvs = { colorBufferRTV };
+        immediateContext->SetRenderTargets(rtvs.size(), rtvs.data(), 
+            depthBufferDSV, 
+            RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
         // Draw overlays (i.e., ImGui, etc.)
         for (auto overlay : mOverlays) {
             overlay->QueueCommands(immediateContext, RenderPass::OVERLAY);
         }
+
+        // Compute any entity pick requests
+        if (bEntityPickEnabled) {
+            mEntityPickRequests.ConsumerCollect();
+            auto sz = mDisplay->GetFramebufferSize();
+
+            // Copy queries from the thread-safe pick request queue
+            size_t queryCount = 0;
+            while (!mEntityPickRequests.ConsumerIsEmpty()) {
+                auto& front = mEntityPickRequests.ConsumerFront();
+
+                if (queryCount < mEntityPicker.GetMaxQueries()) {
+                    mEntityQueryBuffer[queryCount] = 
+                        glm::vec3(front.mPosition.x, 
+                            front.mPosition.y, 
+                            0.0f);
+
+                    mEntityResultPromises[queryCount] = 
+                        std::move(front.mResult);
+
+                    ++queryCount;
+                } else {
+                    front.mResult.Set(entt::null);
+                }
+
+                mEntityPickRequests.ConsumerPop();
+            }
+
+            // Submit pick requests to the GPU 
+            if (queryCount > 0) {
+                mEntityPicker.SubmitCommands(
+                    immediateContext, 
+                    mEntityPickTexture, 
+                    mEntityQueryBuffer.data(),
+                    queryCount);
+            }
+        }
+
+        // Copy/resolve the color and depth buffers
+        auto backBufferRTV = mSwapChain->GetCurrentBackBufferRTV();
+        immediateContext->SetRenderTargets(0, nullptr, nullptr, 
+            RESOURCE_STATE_TRANSITION_MODE_NONE);
+
+        CopyTextureAttribs copyAttribs;
+        copyAttribs.DstTextureTransitionMode = 
+            RESOURCE_STATE_TRANSITION_MODE_TRANSITION;
+        copyAttribs.SrcTextureTransitionMode =
+            RESOURCE_STATE_TRANSITION_MODE_TRANSITION;
+        copyAttribs.pDstTexture = mSwapChain->GetCurrentBackBufferRTV()->GetTexture();
+        copyAttribs.pSrcTexture = mColorBuffer;
+        immediateContext->CopyTexture(copyAttribs);
 
         // Synchronize if necessary
         if (mBackend == GraphicsBackend::OPENGL) {
@@ -626,6 +833,21 @@ namespace okami::graphics::diligent {
             mNativeWindowProvider->GLSwapBuffers();
         } else {
             mSwapChain->Present();
+        }
+
+        // Read the results of the entity pick requests
+        if (bEntityPickEnabled) {
+            auto queryCount = mEntityPicker.GetRequestedQueryCount();
+
+            if (queryCount > 0) {
+                mEntityPicker.GetResults(
+                    immediateContext, 
+                    &mEntityResultBuffer[0]);
+                for (size_t i = 0; i < queryCount; ++i) {
+                    mEntityResultPromises[i].Set(
+                        entt::entity(mEntityResultBuffer[i]));
+                }
+            }
         }
     }
 
@@ -659,6 +881,11 @@ namespace okami::graphics::diligent {
         for (auto overlay : mOverlays) {
             overlay->Shutdown();
         }
+
+        mEntityPicker = TextureCapturePick();
+        mEntityPickTexture.Release();
+        mColorBuffer.Release();
+        mDepthBuffer.Release();
 
         mSceneGlobals = DynamicUniformBuffer<HLSL::SceneGlobals>();
         mInstanceData = DynamicUniformBuffer<HLSL::StaticInstanceData>();
@@ -707,6 +934,11 @@ namespace okami::graphics::diligent {
     }
 
     core::Future<entt::entity> BasicRenderer::Pick(const glm::vec2& position) {
-        throw std::runtime_error("Not implemented!");
+        core::Promise<entt::entity> promise;
+        core::Future<entt::entity> future(promise);
+        mEntityPickRequests.ProducerEnqueue(
+            EntityPickRequest{position, 
+            std::move(promise)});
+        return future;
     }
 }

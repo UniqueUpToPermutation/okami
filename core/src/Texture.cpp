@@ -41,6 +41,21 @@ namespace okami::core {
 			3, ValueType::INT32, false, true
 		};
 	}
+	TextureFormat TextureFormat::R32_FLOAT() {
+		return TextureFormat{
+			1, ValueType::FLOAT32, false, true
+		};
+	}
+	TextureFormat TextureFormat::R32_SINT() {
+		return TextureFormat{
+			1, ValueType::UINT32, false, true
+		};
+	}
+	TextureFormat TextureFormat::R32_UINT() {
+		return TextureFormat{
+			2, ValueType::INT32, false, true
+		};
+	}
     TextureFormat TextureFormat::RG32_FLOAT() {
 		return TextureFormat{
 			2, ValueType::FLOAT32, false, true
@@ -79,6 +94,126 @@ namespace okami::core {
     TextureFormat TextureFormat::SRGBA8_UNORM() {
 		return TextureFormat{
 			4, ValueType::UINT8, true, false
+		};
+	}
+	TextureFormat TextureFormat::R8_SINT() {
+		return TextureFormat{
+			1, ValueType::INT8, false, true 
+		};
+	}
+	TextureFormat TextureFormat::R8_UINT() {
+		return TextureFormat{
+			1, ValueType::UINT8, false, true 
+		};
+	}
+	TextureFormat TextureFormat::R8_SNORM() {
+		return TextureFormat{
+			1, ValueType::INT8, true, true 
+		};
+	}
+	TextureFormat TextureFormat::R8_UNORM() {
+		return TextureFormat{
+			1, ValueType::UINT8, true, true 	
+		};
+	}
+	TextureFormat TextureFormat::RG8_SINT() {
+		return TextureFormat{
+			2, ValueType::INT8, false, true  
+		};
+	}
+	TextureFormat TextureFormat::RG8_UINT() {
+		return TextureFormat{
+			2, ValueType::UINT8, false, true 
+		};
+	}
+	TextureFormat TextureFormat::RG8_SNORM() {
+		return TextureFormat{
+			2, ValueType::INT8, true, true 
+		};
+	}
+	TextureFormat TextureFormat::RG8_UNORM() {
+		return TextureFormat{
+			2, ValueType::UINT8, true, true 	
+		};
+	}
+	TextureFormat TextureFormat::RGB8_SINT() {
+		return TextureFormat{
+			3, ValueType::INT8, false, true  
+		};
+	}
+	TextureFormat TextureFormat::RGB8_UINT() {
+		return TextureFormat{
+			3, ValueType::UINT8, false, true 
+		};
+	}
+	TextureFormat TextureFormat::RGB8_SNORM() {
+		return TextureFormat{
+			3, ValueType::INT8, true, true 
+		};
+	}
+	TextureFormat TextureFormat::RGB8_UNORM() {
+		return TextureFormat{
+			3, ValueType::UINT8, true, true 	
+		};
+	}
+    TextureFormat TextureFormat::R16_SINT() {
+		return TextureFormat{
+			1, ValueType::INT16, false, true 
+		};
+	}
+	TextureFormat TextureFormat::R16_UINT() {
+		return TextureFormat{
+			1, ValueType::UINT16, false, true 
+		};
+	}
+	TextureFormat TextureFormat::R16_SNORM() {
+		return TextureFormat{
+			1, ValueType::INT16, true, true 
+		};
+	}
+	TextureFormat TextureFormat::R16_UNORM() {
+		return TextureFormat{
+			1, ValueType::UINT16, true, true 
+		};
+	}
+	TextureFormat TextureFormat::RG16_SINT() {
+		return TextureFormat{
+			2, ValueType::INT16, false, true 
+		};
+	}
+	TextureFormat TextureFormat::RG16_UINT() {
+		return TextureFormat{
+			2, ValueType::UINT16, false, true 
+		};
+	}
+	TextureFormat TextureFormat::RG16_SNORM() {
+		return TextureFormat{
+			2, ValueType::INT16, true, true 
+		};
+	}
+	TextureFormat TextureFormat::RG16_UNORM() {
+		return TextureFormat{
+			2, ValueType::UINT16, true, true 
+		};
+	}
+	TextureFormat TextureFormat::RGBA16_SINT() {
+		return TextureFormat{
+			4, ValueType::INT16, false, true 
+		};
+	}
+	TextureFormat TextureFormat::RGBA16_UINT() {
+		return TextureFormat{
+			4, ValueType::UINT16, false, true 
+		};
+	}
+	TextureFormat TextureFormat::RGBA16_SNORM() {
+		return TextureFormat{
+			4, ValueType::INT16, true, true 
+		};
+	}
+	TextureFormat TextureFormat::RGBA16_UNORM() {
+		return TextureFormat{
+			4, ValueType::UINT16, true, true 
 		};
 	}
 
@@ -133,6 +268,8 @@ namespace okami::core {
 				subDesc.mDepthStride = mip_width * mip_height * pixelSize * mSampleCount;
 				subDesc.mStride = mip_width * pixelSize * mSampleCount;
 				subDesc.mLength = increment;
+				subDesc.mMip = imip;
+				subDesc.mSlice = iarray;
                 descs.emplace_back(subDesc);
   
 				currentOffset += increment;
@@ -178,7 +315,6 @@ namespace okami::core {
     }
 
     void Texture::Data::GenerateMips() {
-
         size_t mipCount = mDesc.mMipLevels;
 		bool isSRGB = !mDesc.mFormat.bLinear;
 		size_t pixelSize = mDesc.GetPixelByteSize();
