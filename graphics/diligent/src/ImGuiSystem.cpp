@@ -75,28 +75,28 @@ namespace okami::graphics::diligent {
                 
                 ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
                 return ImGui::GetIO().WantCaptureMouse;
-            }, CallbackPriority::GUI);
+            }, CallbackPriority::GUI, this);
 
             mMouseButtonScrollHandle = glfwInterface->AddScrollCallback(
                 [](GLFWwindow* window, double xoffset, double yoffset) {
                 
                 ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
                 return ImGui::GetIO().WantCaptureMouse;
-            }, CallbackPriority::GUI);
+            }, CallbackPriority::GUI, this);
 
             mKeyHandle = glfwInterface->AddKeyCallback(
                 [](GLFWwindow* window, int key, int scancode, int action, int mods) {
 
                 ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
                 return ImGui::GetIO().WantCaptureKeyboard;
-            }, CallbackPriority::GUI);
+            }, CallbackPriority::GUI, this);
 
             mCharHandle = glfwInterface->AddCharCallback(
                 [](GLFWwindow* window, unsigned int codepoint) {
 
                 ImGui_ImplGlfw_CharCallback(window, codepoint);
                 return ImGui::GetIO().WantCaptureKeyboard;
-            }, CallbackPriority::GUI);
+            }, CallbackPriority::GUI, this);
 
             mWaitForInput = [glfwInterface]() {
                 glfwInterface->WaitForInput();
@@ -172,6 +172,13 @@ namespace okami::graphics::diligent {
 
     void ImGuiSystem::Join(core::Frame& frame) {
         Wait();
+    }
+
+    bool ImGuiSystem::ShouldCaptureMouse() const {
+        return ImGui::GetIO().WantCaptureMouse;
+    }  
+    bool ImGuiSystem::ShouldCaptureKeyboard() const {
+        return ImGui::GetIO().WantCaptureKeyboard;
     }
 }
 

@@ -34,7 +34,8 @@ namespace okami::graphics::diligent {
 
     class ImGuiSystem final : 
         public core::ISystem,
-        public IImGuiCallback {
+        public IImGuiCallback,
+        public IInputCapture {
     private:
         ImGuiRenderOverlay mOverlay;
         IRenderer* mRenderer;
@@ -68,5 +69,8 @@ namespace okami::graphics::diligent {
             const core::Time& time) override;
         void Join(core::Frame& frame) override;
         void Wait() override;
+
+        bool ShouldCaptureMouse() const override;
+        bool ShouldCaptureKeyboard() const override;
     };
 }

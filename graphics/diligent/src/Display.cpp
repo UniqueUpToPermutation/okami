@@ -124,21 +124,21 @@ namespace okami::graphics::diligent {
 
         glfwSetWindowUserPointer(mWindow, this);
 
-        mPrevKey = glfwSetKeyCallback(
+        glfwSetKeyCallback(
             mWindow, &GLFWKeyCallback);
-        mPrevChar = glfwSetCharCallback(
+        glfwSetCharCallback(
             mWindow, &GLFWCharCallback);
-        mPrevScroll = glfwSetScrollCallback(
+        glfwSetScrollCallback(
             mWindow, &GLFWScrollCallback);
-        mPrevMouseButton = glfwSetMouseButtonCallback(
+        glfwSetMouseButtonCallback(
             mWindow, &GLFWMouseButtonCallback);
-        mPrevCursorEnter = glfwSetCursorEnterCallback(
+        glfwSetCursorEnterCallback(
             mWindow, &GLFWCursorEnterCallback);
-        mPrevCharMods = glfwSetCharModsCallback(
+        glfwSetCharModsCallback(
             mWindow, &GLFWCharModCallback);
-        mPrevDrop = glfwSetDropCallback(
+        glfwSetDropCallback(
             mWindow, &GLFWDropCallback);
-        mPrevCursorPos = glfwSetCursorPosCallback(
+        glfwSetCursorPosCallback(
             mWindow, &GLFWCursorPosCallback);
     }
 
@@ -180,7 +180,9 @@ namespace okami::graphics::diligent {
             bResizeRequested = false;
         }
 
+        UpdateCaptures();
         glfwPollEvents();
+        UpdateCaptures();
 
         mWindowPollEvent.signal();
     }
@@ -250,139 +252,233 @@ namespace okami::graphics::diligent {
         return mParams.mDeviceType;
     }
 
+    void DisplayGLFW::AddCapture(
+        IInputCapture* capture, CallbackPriority priority) {
+        if (!capture)
+            return;
+
+        for (auto& it : mCaptureObjects) {
+            if (it.mInterface == capture) {
+                it.mRefCount++;
+                it.mPriority = std::max(it.mPriority, priority);
+                return;
+            }
+        }
+
+        mCaptureObjects.emplace_back(
+            CaptureObject{
+                priority,
+                1,
+                capture
+        });
+        
+        bCaptureObjectsDirty = true;
+    }
+
+    void DisplayGLFW::RemoveCapture(IInputCapture* capture) {
+        if (!capture)
+            return;
+
+        for (auto it = mCaptureObjects.begin(); it != mCaptureObjects.end(); ++it) {
+            if (it->mInterface == capture) {
+                it->mRefCount--;
+                if (it->mRefCount == 0) {
+                    mCaptureObjects.erase(it);
+                }
+                return;
+            }
+        }
+    }
+
+    void DisplayGLFW::UpdateCaptures() {
+        if (bCaptureObjectsDirty) {
+            std::sort(mCaptureObjects.begin(),
+                mCaptureObjects.end(),
+                [](const CaptureObject& o1, const CaptureObject& o2) {
+                    return o1.mPriority < o2.mPriority;
+            });
+
+            bCaptureObjectsDirty = false;
+        }
+
+        if (mMouseFocus) {
+            if (!mMouseFocus->ShouldCaptureMouse()) {
+                mMouseFocus = nullptr;
+            }
+        }
+
+        if (mKeyboardFocus) {
+            if (!mKeyboardFocus->ShouldCaptureKeyboard()) {
+                mKeyboardFocus = nullptr;
+            }
+        }
+
+        for (auto& it : mCaptureObjects) {
+            if (!mMouseFocus) {
+                if (it.mInterface->ShouldCaptureMouse()) {
+                    mMouseFocus = it.mInterface;
+                }
+            }
+            if (!mKeyboardFocus) {
+                if (it.mInterface->ShouldCaptureKeyboard()) {
+                    mKeyboardFocus = it.mInterface;
+                }
+            }
+        }
+    }
+
     core::delegate_handle_t 
         DisplayGLFW::AddMouseButtonCallback(
-            const mouse_button_callback_t& c, CallbackPriority p) {
-        return mMouseButtonEvent.Add(c, (double)p);
+            const mouse_button_callback_t& c, 
+            CallbackPriority p,
+            IInputCapture* capture) {
+        AddCapture(capture, p);
+        return mMouseButtonEvent.Add(c, capture, (double)p);
     }
     core::delegate_handle_t 
         DisplayGLFW::AddKeyCallback(
-            const key_callback_t& c, CallbackPriority p) {
-        return mKeyEvent.Add(c, (double)p);
+            const key_callback_t& c, 
+            CallbackPriority p,
+            IInputCapture* capture) {
+        AddCapture(capture, p);
+        return mKeyEvent.Add(c, capture, (double)p);
     }
     core::delegate_handle_t 
         DisplayGLFW::AddCharCallback(
-            const char_callback_t& c, CallbackPriority p) {
-        return mCharEvent.Add(c, (double)p);
+            const char_callback_t& c, 
+            CallbackPriority p,
+            IInputCapture* capture) {
+        AddCapture(capture, p);
+        return mCharEvent.Add(c, capture, (double)p);
     }
     core::delegate_handle_t 
         DisplayGLFW::AddScrollCallback(
-            const scroll_callback_t& c, CallbackPriority p) {
-        return mScrollEvent.Add(c, (double)p);
+            const scroll_callback_t& c, 
+            CallbackPriority p,
+            IInputCapture* capture) {
+        AddCapture(capture, p);
+        return mScrollEvent.Add(c, capture, (double)p);
     }
     core::delegate_handle_t
         DisplayGLFW::AddCharModCallback(
-            const char_mod_callback_t& c, CallbackPriority p) {
-        return mCharModEvent.Add(c, (double)p);
+            const char_mod_callback_t& c, 
+            CallbackPriority p,
+            IInputCapture* capture) {
+        AddCapture(capture, p);
+        return mCharModEvent.Add(c, capture, (double)p);
     }
     core::delegate_handle_t
         DisplayGLFW::AddCursorPosCallback(
-            const cursor_pos_callback_t& c, CallbackPriority p) {
-        return mCursorPosEvent.Add(c, (double)p);
+            const cursor_pos_callback_t& c, 
+            CallbackPriority p,
+            IInputCapture* capture) {
+        AddCapture(capture, p);
+        return mCursorPosEvent.Add(c, capture, (double)p);
     }
     core::delegate_handle_t
         DisplayGLFW::AddDropCallback(
-            const drop_callback_t& c, CallbackPriority p) {
+            const drop_callback_t& c, 
+            CallbackPriority p) {
         return mDropEvent.Add(c, (double)p);
     }
     core::delegate_handle_t
         DisplayGLFW::AddCursorEnterCallback(
-            const cursor_enter_callback_t& c, CallbackPriority p) {
-        return mCursorEnterEvent.Add(c, (double)p);
+            const cursor_enter_callback_t& c, 
+            CallbackPriority p,
+            IInputCapture* capture) {
+        AddCapture(capture, p);
+        return mCursorEnterEvent.Add(c, capture, (double)p);
     }
         
     void DisplayGLFW::RemoveMouseButtonCallback(core::delegate_handle_t h) {
-        mMouseButtonEvent.Remove(h);
+        RemoveCapture(mMouseButtonEvent.Remove(h));
     }
     void DisplayGLFW::RemoveKeyCallback(core::delegate_handle_t h) {
-        mKeyEvent.Remove(h);
+        RemoveCapture(mKeyEvent.Remove(h));
     }
     void DisplayGLFW::RemoveCharCallback(core::delegate_handle_t h) {
-        mCharEvent.Remove(h);
+        RemoveCapture(mCharEvent.Remove(h));
     }
     void DisplayGLFW::RemoveScrollCallback(core::delegate_handle_t h) {
-        mScrollEvent.Remove(h);
+        RemoveCapture(mScrollEvent.Remove(h));
     }
     void DisplayGLFW::RemoveCharModCallback(core::delegate_handle_t h) {
-        mCharModEvent.Remove(h);
+        RemoveCapture(mCharModEvent.Remove(h));
     }
     void DisplayGLFW::RemoveCursorPosCallback(core::delegate_handle_t h) {
-        mCursorPosEvent.Remove(h);
+        RemoveCapture(mCursorPosEvent.Remove(h));
     }
     void DisplayGLFW::RemoveDropCallback(core::delegate_handle_t h) {
         mDropEvent.Remove(h);
     }
     void DisplayGLFW::RemoveCursorEnterCallback(core::delegate_handle_t h) {
-        mCursorEnterEvent.Remove(h);
+        RemoveCapture(mCursorEnterEvent.Remove(h));
     }
 
     void DisplayGLFW::WaitForInput() {
         mWindowPollEvent.wait();
     }
 
-    void DisplayGLFW::OnKeyEvent(GLFWwindow* window, 
-        int key, int scancode, int action, int mods) {
-        if (!mKeyEvent(window, key, scancode, action, mods)) {
-            if (mPrevKey) {
-                mPrevKey(window, key, scancode, action, mods);
+    IInputCapture* DisplayGLFW::GetMouseFocus() {
+        return mMouseFocus;
+    }
+
+    IInputCapture* DisplayGLFW::GetKeyboardFocus() {
+        return mKeyboardFocus;
+    }
+
+    template <typename... Args>
+    void DisplayGLFW::InvokeEvent(IInputCapture*& captureGroup,
+        core::OrderedEvent<IInputCapture, Args...>& event,
+        Args... __args) {
+        if (captureGroup) {
+            event.InvokeOnly(captureGroup, __args...);
+        } else {
+            auto capture = event(__args...);
+            if (capture) {
+                captureGroup = capture;
             }
         }
+    }
+
+    void DisplayGLFW::OnKeyEvent(GLFWwindow* window, 
+        int key, int scancode, int action, int mods) {
+        InvokeEvent(mKeyboardFocus, mKeyEvent, 
+            window, key, scancode, action, mods);
     }
     void DisplayGLFW::OnCharEvent(GLFWwindow* window, 
         unsigned int codepoint) {
-        if (!mCharEvent(window, codepoint)) {
-            if (mPrevChar) {
-                mPrevChar(window, codepoint);
-            }
-        }
+        InvokeEvent(mKeyboardFocus, mCharEvent, 
+            window, codepoint);
     }
     void DisplayGLFW::OnScrollEvent(GLFWwindow* window, 
         double xoffset, double yoffset) {
-        if (!mScrollEvent(window, xoffset, yoffset)) {
-            if (mPrevScroll) {
-                mPrevScroll(window, xoffset, yoffset);
-            }
-        }
+        InvokeEvent(mMouseFocus, mScrollEvent, 
+            window, xoffset, yoffset);
     }
     void DisplayGLFW::OnMouseButtonEvent(GLFWwindow* window, 
         int button, int action, int mods) {
-        if (!mMouseButtonEvent(window, button, action, mods)) {
-            if (mPrevMouseButton) {
-                mPrevMouseButton(window, button, action, mods);
-            }
-        }
+        InvokeEvent(mMouseFocus, mMouseButtonEvent, 
+            window, button, action, mods);
     }
     void DisplayGLFW::OnCharModEvent(GLFWwindow* window,
         unsigned int codepoint, int mods) {
-        if (!mCharModEvent(window, codepoint, mods)) {
-            if (mPrevCharMods) {
-                mPrevCharMods(window, codepoint, mods);
-            }
-        }
+        InvokeEvent(mKeyboardFocus, mCharModEvent,
+            window, codepoint, mods);
     }
     void DisplayGLFW::OnDropEvent(GLFWwindow* window,
         int path_count, const char* paths[]) {
-        if (!mDropEvent(window, path_count, paths)) {
-            if (mPrevDrop) {
-                mPrevDrop(window, path_count, paths);
-            }
-        }
+        mDropEvent(window, path_count, paths);
     }
     void DisplayGLFW::OnCursorPosEvent(GLFWwindow* window, 
         double xpos, double ypos) {
-        if (!mCursorPosEvent(window, xpos, ypos)) {
-            if (mPrevCursorPos) {
-                mPrevCursorPos(window, xpos, ypos);
-            }
-        }
+        InvokeEvent(mMouseFocus, mCursorPosEvent,
+            window, xpos, ypos);
     }
     void DisplayGLFW::OnCursorEnterEvent(GLFWwindow* window, 
         int entered) {
-        if (!mCursorEnterEvent(window, entered)) {
-            if (mPrevCursorEnter) {
-                mPrevCursorEnter(window, entered);
-            }
-        }
+        InvokeEvent(mMouseFocus, mCursorEnterEvent,
+            window, entered);
     }
 }
 

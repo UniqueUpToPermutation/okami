@@ -87,6 +87,14 @@ namespace okami::graphics::diligent {
         GUI = 3
     };
 
+    class DisplayGLFW;
+
+    class IInputCapture {
+    public:
+        virtual bool ShouldCaptureMouse() const = 0;
+        virtual bool ShouldCaptureKeyboard() const = 0;
+    };
+
     class IGLFWWindowProvider {
     public:
         virtual GLFWwindow* GetWindowGLFW() const = 0;
@@ -94,34 +102,41 @@ namespace okami::graphics::diligent {
         virtual core::delegate_handle_t 
             AddMouseButtonCallback(
                 const mouse_button_callback_t& callback, 
-                CallbackPriority priority = CallbackPriority::MEDIUM) = 0;
+                CallbackPriority priority = CallbackPriority::MEDIUM,
+                IInputCapture* inputCapture = nullptr) = 0;
         virtual core::delegate_handle_t 
             AddKeyCallback(
                 const key_callback_t& calback,
-                CallbackPriority priority = CallbackPriority::MEDIUM) = 0;
+                CallbackPriority priority = CallbackPriority::MEDIUM,
+                IInputCapture* inputCapture = nullptr) = 0;
         virtual core::delegate_handle_t 
             AddCharCallback(
                 const char_callback_t& callback, 
-                CallbackPriority priority = CallbackPriority::MEDIUM) = 0;
+                CallbackPriority priority = CallbackPriority::MEDIUM,
+                IInputCapture* inputCapture = nullptr) = 0;
         virtual core::delegate_handle_t 
             AddScrollCallback(
                 const scroll_callback_t& callback,
-                CallbackPriority priority = CallbackPriority::MEDIUM) = 0;
+                CallbackPriority priority = CallbackPriority::MEDIUM,
+                IInputCapture* inputCapture = nullptr) = 0;
         virtual core::delegate_handle_t
             AddCharModCallback(
                 const char_mod_callback_t& callback,
-                CallbackPriority priority = CallbackPriority::MEDIUM) = 0;
+                CallbackPriority priority = CallbackPriority::MEDIUM,
+                IInputCapture* inputCapture = nullptr) = 0;
         virtual core::delegate_handle_t
             AddCursorPosCallback(
                 const cursor_pos_callback_t& callback,
-                CallbackPriority priority = CallbackPriority::MEDIUM) = 0;
-        virtual core::delegate_handle_t
-            AddDropCallback(
-                const drop_callback_t& callback,
-                CallbackPriority priority = CallbackPriority::MEDIUM) = 0;
+                CallbackPriority priority = CallbackPriority::MEDIUM,
+                IInputCapture* inputCapture = nullptr) = 0;
         virtual core::delegate_handle_t
             AddCursorEnterCallback(
                 const cursor_enter_callback_t& callback,
+                CallbackPriority priority = CallbackPriority::MEDIUM,
+                IInputCapture* inputCapture = nullptr) = 0;
+        virtual core::delegate_handle_t
+            AddDropCallback(
+                const drop_callback_t& callback,
                 CallbackPriority priority = CallbackPriority::MEDIUM) = 0;
 
         virtual void
@@ -140,6 +155,9 @@ namespace okami::graphics::diligent {
             RemoveDropCallback(core::delegate_handle_t) = 0;
         virtual void
             RemoveCursorEnterCallback(core::delegate_handle_t) = 0;
+
+        virtual IInputCapture* GetMouseFocus() = 0;
+        virtual IInputCapture* GetKeyboardFocus() = 0;
         
         virtual void WaitForInput() = 0;
     };
@@ -150,6 +168,22 @@ namespace okami::graphics::diligent {
         public INativeWindowProvider,
         public IGLFWWindowProvider {
     private:
+
+        struct CaptureObject {
+            CallbackPriority mPriority;
+            uint mRefCount = 0;
+            IInputCapture* mInterface = nullptr;
+        };
+
+        void AddCapture(IInputCapture* capture, CallbackPriority priority);
+        void RemoveCapture(IInputCapture* capture);
+        void UpdateCaptures();
+
+        std::vector<CaptureObject> mCaptureObjects;
+        bool bCaptureObjectsDirty = false;
+        IInputCapture* mMouseFocus = nullptr;
+        IInputCapture* mKeyboardFocus = nullptr;
+
         GLFWwindow* mWindow = nullptr;
 		RealtimeGraphicsParams mParams;
         int mGLSwapInterval = -1;
@@ -158,35 +192,29 @@ namespace okami::graphics::diligent {
 
         void Startup(const RealtimeGraphicsParams& params);
 
-        core::OrderedEvent<
+        core::OrderedEvent<IInputCapture,
             GLFWwindow*, int, int, int, int> mKeyEvent;
-        core::OrderedEvent<
+        core::OrderedEvent<IInputCapture,
             GLFWwindow*, unsigned int> mCharEvent;
-        core::OrderedEvent<
+        core::OrderedEvent<IInputCapture,
             GLFWwindow*, double, double> mScrollEvent;
-        core::OrderedEvent<
+        core::OrderedEvent<IInputCapture,
             GLFWwindow*, int, int, int> mMouseButtonEvent;
-        core::OrderedEvent<
-            GLFWwindow*, int> mMouseEnterEvent;
-        core::OrderedEvent<
+        core::OrderedEvent<IInputCapture,
             GLFWwindow*, unsigned int, int> mCharModEvent;
-        core::OrderedEvent<
-            GLFWwindow*, int, const char**> mDropEvent;
-        core::OrderedEvent<
+        core::OrderedEvent<IInputCapture,
             GLFWwindow*, double, double> mCursorPosEvent;
-        core::OrderedEvent<
+        core::OrderedEvent<IInputCapture,
             GLFWwindow*, int> mCursorEnterEvent;
-
-        GLFWmousebuttonfun mPrevMouseButton;
-        GLFWcursorposfun mPrevCursorPos;
-        GLFWcursorenterfun mPrevCursorEnter;
-        GLFWscrollfun mPrevScroll;
-        GLFWkeyfun mPrevKey;
-        GLFWcharfun mPrevChar;
-        GLFWcharmodsfun mPrevCharMods;
-        GLFWdropfun mPrevDrop;
+        core::OrderedEvent<void, 
+            GLFWwindow*, int, const char**> mDropEvent;
 
         marl::Event mWindowPollEvent;
+
+        template <typename... Args>
+        void InvokeEvent(IInputCapture*& captureGroup,
+            core::OrderedEvent<IInputCapture, Args...>& event,
+            Args... __args);
 
     public:
         void OnKeyEvent(GLFWwindow* window, 
@@ -232,28 +260,43 @@ namespace okami::graphics::diligent {
 
         core::delegate_handle_t 
             AddMouseButtonCallback(
-                const mouse_button_callback_t&, CallbackPriority) override;
+                const mouse_button_callback_t&, 
+                CallbackPriority,
+                IInputCapture*) override;
         core::delegate_handle_t 
             AddKeyCallback(
-                const key_callback_t&, CallbackPriority) override;
+                const key_callback_t&, 
+                CallbackPriority,
+                IInputCapture*) override;
         core::delegate_handle_t 
             AddCharCallback(
-                const char_callback_t&, CallbackPriority) override;
+                const char_callback_t&, 
+                CallbackPriority,
+                IInputCapture*) override;
         core::delegate_handle_t 
             AddScrollCallback(
-                const scroll_callback_t&, CallbackPriority) override;
+                const scroll_callback_t&, 
+                CallbackPriority,
+                IInputCapture*) override;
         core::delegate_handle_t
             AddCharModCallback(
-                const char_mod_callback_t&, CallbackPriority) override;
+                const char_mod_callback_t&, 
+                CallbackPriority,
+                IInputCapture*) override;
         core::delegate_handle_t
             AddCursorPosCallback(
-                const cursor_pos_callback_t&, CallbackPriority) override;
+                const cursor_pos_callback_t&, 
+                CallbackPriority,
+                IInputCapture*) override;
         core::delegate_handle_t
             AddDropCallback(
-                const drop_callback_t&, CallbackPriority) override;
+                const drop_callback_t&, 
+                CallbackPriority) override;
         core::delegate_handle_t
             AddCursorEnterCallback(
-                const cursor_enter_callback_t&, CallbackPriority) override;
+                const cursor_enter_callback_t&, 
+                CallbackPriority,
+                IInputCapture*) override;
     
         void RemoveMouseButtonCallback(core::delegate_handle_t) override;
         void RemoveKeyCallback(core::delegate_handle_t) override;
@@ -264,6 +307,9 @@ namespace okami::graphics::diligent {
         void RemoveDropCallback(core::delegate_handle_t) override;
         void RemoveCursorEnterCallback(core::delegate_handle_t) override;
     
+        IInputCapture* GetMouseFocus() override;
+        IInputCapture* GetKeyboardFocus() override;
+
         void WaitForInput() override;
     };
 }

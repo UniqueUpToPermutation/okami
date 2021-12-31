@@ -32,19 +32,19 @@ namespace okami::core {
 			const glm::vec3& up);
 
 		inline glm::vec3 ApplyToPoint(const glm::vec3& vec) const {
-			return mRotation * mScale * vec + mTranslation;
+			return mRotation * (mScale * vec) + mTranslation;
 		}
 
 		inline glm::vec3 ApplyToTangent(const glm::vec3& vec) const {
-			return mRotation * mScale * vec;
+			return mRotation * (mScale * vec);
 		}
 
 		inline glm::vec3 ApplyToCotangent(const glm::vec3& vec) const {
-			return mScale * glm::inverse(mRotation) * vec;
+			return mScale * (glm::inverse(mRotation) * vec);
 		}
 
 		inline glm::vec3 ApplyToNormal(const glm::vec3& vec) const {
-			return (1.0f / mScale) * mRotation * vec;
+			return (1.0f / mScale) * (mRotation * vec);
 		}
 
 		inline glm::vec4 Apply(const glm::vec4& vec) const {
