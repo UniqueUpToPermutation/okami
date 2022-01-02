@@ -45,13 +45,12 @@ void TestBackend(GraphicsBackend backend) {
     renderer->Request<IEntityPick>();
     
     auto glfwInterface = systems.QueryInterface<IGLFWWindowProvider>();
-    auto rendererInterface = systems.QueryInterface<IRenderer>();
     auto displayInterface = systems.QueryInterface<IDisplay>();
 
     // The order in which these are created determines the order in
     // which their respective overlays are drawn.
-    systems.Add(CreateIm3d(rendererInterface));
-    systems.Add(CreateImGui(rendererInterface, display));
+    systems.Add(CreateIm3d(renderer));
+    systems.Add(CreateImGui(renderer, display));
     
     systems.Startup();
     {

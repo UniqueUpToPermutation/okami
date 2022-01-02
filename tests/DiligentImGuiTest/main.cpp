@@ -39,10 +39,9 @@ void TestBackend(GraphicsBackend backend) {
     auto display = systems.Add(CreateGLFWDisplay(params));
     auto renderer = systems.Add(CreateRenderer(display, resources));
     
-    auto rendererInterface = systems.QueryInterface<IRenderer>();
     auto displayInterface = systems.QueryInterface<IDisplay>();
 
-    systems.Add(CreateImGui(rendererInterface, display));
+    systems.Add(CreateImGui(renderer, display));
 
     bool bShowDemoWindow = true;
 

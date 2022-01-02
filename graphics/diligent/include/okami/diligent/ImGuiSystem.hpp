@@ -28,7 +28,8 @@ namespace okami::graphics::diligent {
             const RenderModuleParams& params) override;
         void QueueCommands(
             DG::IDeviceContext* context, 
-            RenderPass pass) override;
+            RenderPass pass,
+            const RenderModuleGlobals& globals) override;
         void Shutdown() override;
     };
 
@@ -41,7 +42,6 @@ namespace okami::graphics::diligent {
         IRenderer* mRenderer;
         core::ISystem* mInputSystem;
         core::Event<> mOnUpdate;
-        marl::WaitGroup mUpdateWaitGroup;
 
         std::function<void()> mWaitForInput;
 
@@ -56,7 +56,6 @@ namespace okami::graphics::diligent {
 
         core::delegate_handle_t Add(immedate_callback_t callback) override;
         void Remove(core::delegate_handle_t handle) override;
-        marl::WaitGroup& GetUpdateWaitGroup() override;
 
         void Startup(marl::WaitGroup& waitGroup) override;
         void RegisterInterfaces(core::InterfaceCollection& interfaces) override;

@@ -12,13 +12,16 @@ namespace okami::graphics {
     public:
         virtual core::delegate_handle_t Add(immedate_callback_t callback) = 0;
         virtual void Remove(core::delegate_handle_t handle) = 0;
-        virtual marl::WaitGroup& GetUpdateWaitGroup() = 0;
     };
 
     class IImGuiCallback : public IImmediateModeCallback {
     };
 
     class IIm3dCallback : public IImmediateModeCallback {
+    public:
+        virtual bool SupportsInput() const = 0;
+        virtual core::delegate_handle_t 
+            AddNoDepth(immedate_callback_t callback) = 0;
     };
 
     enum class GraphicsBackend {
@@ -78,8 +81,11 @@ namespace okami::graphics {
         core::ISystem* displaySystem, 
         core::ResourceInterface& resources);
     std::unique_ptr<core::ISystem> CreateImGui(
-        IRenderer* renderer,
+        core::ISystem* renderer,
         core::ISystem* input);
     std::unique_ptr<core::ISystem> CreateIm3d(
-        IRenderer* renderer);
+        core::ISystem* renderer);
+    std::unique_ptr<core::ISystem> CreateIm3d(
+        core::ISystem* renderer,
+        core::ISystem* input);
 }

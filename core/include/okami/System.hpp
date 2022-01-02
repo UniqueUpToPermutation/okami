@@ -93,22 +93,25 @@ namespace okami::core {
     };
 
     struct WaitHandle {
-        marl::WaitGroup* mBefore = nullptr;
-        marl::WaitGroup* mAfter = nullptr;
+        marl::WaitGroup* mPostRead = nullptr;
+        marl::WaitGroup* mPostWrite = nullptr;
         marl::mutex* mWriteMutex = nullptr;
         bool bFinished = true;
 
         WaitHandle() = default;
 
-        inline WaitHandle(marl::WaitGroup& after) : 
-            mAfter(&after), 
+        inline WaitHandle(marl::WaitGroup& postRead) : 
+            mPostRead(&postRead), 
             bFinished(false) {
         }
 
-        inline WaitHandle(marl::WaitGroup& before, marl::WaitGroup& after, marl::mutex& mutex) :
-            mBefore(&before), 
-            mAfter(&after), 
-            mWriteMutex(&mutex), 
+        inline WaitHandle(
+            marl::WaitGroup& postRead, 
+            marl::WaitGroup& postWrite, 
+            marl::mutex& writeMutex) :
+            mPostRead(&postRead), 
+            mPostWrite(&postWrite), 
+            mWriteMutex(&writeMutex), 
             bFinished(false) {
         }
 
@@ -118,19 +121,23 @@ namespace okami::core {
         WaitHandle& operator=(const WaitHandle&) = delete;
         WaitHandle& operator=(WaitHandle&& other) = default;
 
-        inline void Release() {
-            if (!bFinished) {
-                mAfter->done();
-                bFinished = true;
-            }
-        }
-
         inline bool IsRead() const {
             return mWriteMutex == nullptr;
         }
 
         inline bool IsWrite() const {
             return mWriteMutex != nullptr;
+        }
+
+        inline void Release() {
+            if (!bFinished) {
+                if (IsRead()) {
+                    mPostRead->done();
+                } else {
+                    mPostWrite->done();
+                }
+                bFinished = true;
+            }
         }
     };
 
@@ -270,54 +277,6 @@ namespace okami::core {
     template <typename ... Types>
     class UpdaterReads;
 
-    struct ReadLock {
-        WaitHandle* mReadWait = nullptr;
-
-        ReadLock(const ReadLock&) = delete;
-        ReadLock& operator=(const ReadLock&) = delete;
-
-        ReadLock(ReadLock&& lock) = default;
-        ReadLock& operator=(ReadLock&& lock) = default;
-
-        ReadLock(WaitHandle& handle) : mReadWait(&handle) {
-            assert(handle.IsRead());
-            if (handle.bFinished) {
-                throw std::runtime_error("Handle has already been consumed!");
-            }
-        }
-
-        ~ReadLock() {
-            if (mReadWait) {
-                mReadWait->Release();
-            }
-        }
-    };
-
-    struct WriteLock : private marl::lock {
-        WaitHandle* mWriteWait = nullptr;
-
-        WriteLock(const WriteLock&) = delete;
-        WriteLock& operator=(const WriteLock&) = delete;
-
-        WriteLock(WriteLock&& lock) = default;
-        WriteLock& operator=(WriteLock&& lock) = default;
-
-        inline WriteLock(WaitHandle& handle) : 
-            marl::lock(*handle.mWriteMutex),
-            mWriteWait(&handle) {
-            mWriteWait->mBefore->wait();
-            if (handle.bFinished) {
-                throw std::runtime_error("Handle has already been consumed!");
-            }
-        }
-
-        ~WriteLock() {
-            if (mWriteWait) {
-                mWriteWait->Release();
-            }
-        }
-    };
-
     template <typename Type1, typename ... Types>
     class UpdaterReads<Type1, Types...> {
     private:
@@ -325,42 +284,92 @@ namespace okami::core {
         UpdaterReads<Types...> mRemaining;
     
     public:
-        void RequestSync(SyncObject& obj) {
+        inline void RequestSync(SyncObject& obj) {
             mHandle = obj.ReadHandle<Type1>();
             mRemaining.RequestSync(obj);
         }
 
-        void ReleaseHandles() {
+        inline void ReleaseHandles() {
             mHandle.Release();
             mRemaining.ReleaseHandles();
         }
 
         template <typename T>
-        ReadLock Read() {
+        inline WaitHandle* ReadHandle() {
             if constexpr (std::is_same_v<T, Type1>)
-                return ReadLock(mHandle);
+                return &mHandle;
             else 
-                return mRemaining.template Read<T>();
+                return mRemaining.template ReadHandle<T>();
+        }
+
+        template <typename T, typename LambdaT>
+        inline void Read(LambdaT lambda) {
+            auto handle = ReadHandle<T>();
+            lambda();
+            handle->Release();
         }
     };
 
     template <>
     class UpdaterReads<> {
     public:
-        void RequestSync(SyncObject& obj) {
+        inline void RequestSync(SyncObject& obj) {
         }
 
-        void ReleaseHandles() {
+        inline void ReleaseHandles() {
         }
 
         template <typename T>
-        ReadLock Read() {
+        inline WaitHandle* Read() {
             throw std::runtime_error("UpdaterReads does not have requested type!");
         }
     };
 
     template <typename ... Types>
     class UpdaterWrites;
+
+    template <typename ... Types>
+    struct UpdaterWaitImpl;
+
+    template <typename Type1, typename ... Types>
+    struct UpdaterWaitImpl<Type1, Types...> {
+        inline static void Wait(SyncObject* obj) {
+            obj->WaitUntilFinished<Type1>();
+            UpdaterWaitImpl<Types...>::Wait(obj);
+        }
+    };
+
+    template <>
+    struct UpdaterWaitImpl<> {
+        inline static void Wait(SyncObject* obj) {
+        }
+    };
+
+    template <typename ... Types>
+    class UpdaterWaits;
+
+    template <typename Type1, typename ... Types>
+    class UpdaterWaits<Type1, Types...> {
+    private:
+        SyncObject* mObject = nullptr;
+
+    public:
+        inline void RequestSync(SyncObject& obj) {
+            mObject = &obj;
+        }
+
+        template <typename _Type1, typename ... _Types>
+        inline void Wait() {
+            UpdaterWaitImpl<_Type1, _Types...>::Wait(mObject);
+        }
+    };
+
+    template <>
+    class UpdaterWaits<> {
+    public:
+        inline void RequestSync(SyncObject& obj) {
+        }
+    };
 
     template <typename Type1, typename ... Types>
     class UpdaterWrites<Type1, Types...> {
@@ -369,54 +378,78 @@ namespace okami::core {
         UpdaterWrites<Types...> mRemaining;
 
     public:
-        void RequestSync(SyncObject& obj) {
+        inline void RequestSync(SyncObject& obj) {
             mHandle = obj.WriteHandle<Type1>();
             mRemaining.RequestSync(obj);
         }
 
-        void ReleaseHandles() {
+        inline void ReleaseHandles() {
             mHandle.Release();
             mRemaining.ReleaseHandles();
         }
 
         template <typename T>
-        WriteLock Write() {
+        inline WaitHandle* WriteHandle() {
             if constexpr (std::is_same_v<T, Type1>)
-                return WriteLock(mHandle);
+                return &mHandle;
             else 
-                return mRemaining.template Write<T>();
+                return mRemaining.template WriteHandle<T>();
+        }
+
+        template <typename T, typename LambdaT>
+        inline void Write(LambdaT lambda) {
+            auto handle = WriteHandle<T>();
+            handle->mPostRead->wait();
+            marl::lock lock(*handle->mWriteMutex);
+            lambda();
+            handle->Release();
         }
     };
 
     template <>
     class UpdaterWrites<> {
     public:
-        void RequestSync(SyncObject& obj) {
+        inline void RequestSync(SyncObject& obj) {
         }
 
-        void ReleaseHandles() {
+        inline void ReleaseHandles() {
         }
 
         template <typename T>
-        WriteLock Write() {
+        inline WaitHandle* Write() {
             throw std::runtime_error("UpdaterWrites does not have requested type!");
         }
     };
 
-    template <typename Reads, typename Writes>
-    using updater_system_t = void(*)(Frame& frame, Reads& reads, Writes& writes, const Time& time); 
+    template <typename Reads, typename Writes, typename Waits>
+    using updater_system_func_t = 
+        std::function<void(Frame& frame, 
+            Reads& reads, 
+            Writes& writes,
+            Waits& waits, 
+            const Time& time)>;
 
-    template <
-        typename Reads,
-        typename Writes,
-        updater_system_t<Reads, Writes> UpdaterFunc>
+     template <typename Reads, typename Writes, typename Waits>
+    using updater_system_func_ptr_t = 
+        void(*)(Frame& frame, 
+            Reads& reads, 
+            Writes& writes, 
+            Waits& waits, const Time& time);
+
+    template <typename Reads, typename Writes, typename Waits>
     class Updater : public ISystem {
     private:
         marl::Event mFinishedEvent;
         Reads mReads;
         Writes mWrites;
+        Waits mWaits;
+        updater_system_func_t<Reads, Writes, Waits> mUpdaterFunc;
 
     public:
+        Updater(updater_system_func_t<Reads, Writes, Waits> func) :
+            mUpdaterFunc(std::move(func)) {
+        }
+
         void Startup(marl::WaitGroup& waitGroup) override { }
         void RegisterInterfaces(InterfaceCollection& interfaces) override { }
         void Shutdown() override { }
@@ -430,6 +463,7 @@ namespace okami::core {
         void RequestSync(SyncObject& syncObject) override {
             mReads.RequestSync(syncObject);
             mWrites.RequestSync(syncObject);
+            mWaits.RequestSync(syncObject);
         }
 
         void Fork(Frame& frame, 
@@ -442,11 +476,13 @@ namespace okami::core {
                 time, 
                 finishedEvent = mFinishedEvent,
                 &reads = mReads,
-                &writes = mWrites]() {
+                &writes = mWrites,
+                &waits = mWaits,
+                &updater = mUpdaterFunc]() {
                 defer(reads.ReleaseHandles());
                 defer(writes.ReleaseHandles());
                 defer(finishedEvent.signal());
-                (*UpdaterFunc)(frame, reads, writes, time);
+                updater(frame, reads, writes, waits, time);
             }); 
         }
 
@@ -454,4 +490,17 @@ namespace okami::core {
             mFinishedEvent.wait();
         }
     };
+
+    template <typename Reads, typename Writes, typename Waits>
+    std::unique_ptr<ISystem> CreateUpdaterSystem(
+        updater_system_func_t<Reads, Writes, Waits> func) {
+        return std::make_unique<Updater<Reads, Writes, Waits>>(std::forward(func));
+    }
+
+    template <typename Reads, typename Writes, typename Waits>
+    std::unique_ptr<ISystem> CreateUpdaterSystem(
+        updater_system_func_ptr_t<Reads, Writes, Waits> func) {
+        updater_system_func_t<Reads, Writes, Waits> conv(func);
+        return std::make_unique<Updater<Reads, Writes, Waits>>(conv);
+    }
 }

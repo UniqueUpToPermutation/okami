@@ -43,6 +43,7 @@ list(APPEND INCLUDE
     include/okami/Event.hpp
     include/okami/PlatformDefs.hpp
     include/okami/BoundingBox.hpp
+    include/okami/Observer.hpp
 )
 
 add_library(okami-core STATIC ${SOURCE} ${INCLUDE})

@@ -127,7 +127,8 @@ namespace okami::graphics::diligent {
             core::ResourceInterface& resources);
 
         void Render(core::Frame& frame,
-            core::SyncObject& syncObject);
+            core::SyncObject& syncObject,
+            const core::Time& time);
 
         void Request(const entt::meta_type&) override;
         void Startup(marl::WaitGroup& waitGroup) override;

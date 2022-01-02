@@ -38,11 +38,9 @@ void TestBackend(GraphicsBackend backend) {
     SystemCollection systems;
     auto display = systems.Add(CreateGLFWDisplay(params));
     auto renderer = systems.Add(CreateRenderer(display, resources));
-    
-    auto rendererInterface = systems.QueryInterface<IRenderer>();
     auto displayInterface = systems.QueryInterface<IDisplay>();
 
-    systems.Add(CreateIm3d(rendererInterface));
+    systems.Add(CreateIm3d(renderer));
 
     auto im3dInterface = systems.QueryInterface<IIm3dCallback>();
     im3dInterface->Add([]() {
@@ -89,7 +87,6 @@ int main() {
     marl::Scheduler scheduler(marl::Scheduler::Config::allCores());
     scheduler.bind();
     defer(scheduler.unbind());
-
 
 #if VULKAN_SUPPORTED && !PLATFORM_MACOS
     TestBackend(GraphicsBackend::VULKAN);

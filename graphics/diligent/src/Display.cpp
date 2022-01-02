@@ -140,6 +140,11 @@ namespace okami::graphics::diligent {
             mWindow, &GLFWDropCallback);
         glfwSetCursorPosCallback(
             mWindow, &GLFWCursorPosCallback);
+
+        float scaleX, scaleY;
+        glfwGetWindowContentScale(mWindow, &scaleX, &scaleY);
+
+        mContentScale = (scaleX + scaleY) / 2.0;
     }
 
     void DisplayGLFW::Startup(marl::WaitGroup& waitGroup) {
@@ -425,6 +430,10 @@ namespace okami::graphics::diligent {
 
     IInputCapture* DisplayGLFW::GetKeyboardFocus() {
         return mKeyboardFocus;
+    }
+
+    float DisplayGLFW::GetContentScale() const {
+        return mContentScale;
     }
 
     template <typename... Args>

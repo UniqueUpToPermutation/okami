@@ -242,8 +242,16 @@ namespace okami::core {
 			return mRegistry.replace<T>(e, std::move(obj));
 		}
 		template <typename T, typename... Args>
-		inline T& Emplace(entt::entity e, Args&&... args) {
+		inline T& Emplace(entt::entity e, Args... args) {
 			return mRegistry.emplace<T>(e, std::forward<Args>(args)...);
+		}
+		template <typename T>
+		inline void AddTag(entt::entity e) {
+			mRegistry.emplace<T>(e);
+		}
+		template <typename T>
+		inline void RemoveTag(entt::entity e) {
+			mRegistry.remove<T>(e);
 		}
 
 		entt::meta_type GetType() const override;

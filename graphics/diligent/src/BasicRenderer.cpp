@@ -613,7 +613,8 @@ namespace okami::graphics::diligent {
     }
 
     void BasicRenderer::Render(core::Frame& frame,
-        core::SyncObject& syncObject) {
+        core::SyncObject& syncObject,
+        const core::Time& time) {
 
         UpdateFramebuffers();
 
@@ -630,31 +631,48 @@ namespace okami::graphics::diligent {
         const auto& scDesc = mSwapChain->GetDesc();
 
         // Queue up render calls and compute transforms
-        HLSL::SceneGlobals globals;
-        globals.mCamera.mView = DG::float4x4::Identity();
-        globals.mCamera.mViewProj = DG::float4x4::Identity();
-        globals.mCamera.mViewport = DG::float2(scDesc.Width, scDesc.Height);
+        HLSL::SceneGlobals shaderGlobals;
+        shaderGlobals.mCamera.mView = DG::float4x4::Identity();
+        shaderGlobals.mCamera.mViewProj = DG::float4x4::Identity();
+        shaderGlobals.mCamera.mViewport = DG::float2(scDesc.Width, scDesc.Height);
+
+        RenderModuleGlobals rmGlobals;
+        rmGlobals.mProjection = DG::float4x4::Identity();
+        rmGlobals.mView = DG::float4x4::Identity();
+        rmGlobals.mViewportSize = DG::float2(scDesc.Width, scDesc.Height);
+        rmGlobals.mTime = time;
+        rmGlobals.mWorldUp = DG::float3(0.0f, 1.0f, 0.0f);
+
+        rmGlobals.mViewOrigin = DG::float3(0.0f, 0.0f, 0.0f);
+        rmGlobals.mViewDirection = DG::float3(0.0f, 0.0f, 1.0f);
 
         auto cameras = registry.view<core::Camera>();
 
         if (!cameras.empty()) {
             auto cameraEntity = cameras.front();
             auto camera = cameras.get<core::Camera>(cameraEntity);
-            DG::float4x4 projTransform = GetProjection(camera, mSwapChain, 
+            rmGlobals.mProjection = GetProjection(camera, mSwapChain, 
                 mBackend == GraphicsBackend::OPENGL);
             
             auto transform = registry.try_get<core::Transform>(cameraEntity);
-            DG::float4x4 viewTransform = DG::float4x4::Identity();
             if (transform) {
-                viewTransform = ToMatrix(*transform).Inverse();
+                rmGlobals.mView = ToMatrix(*transform).Inverse();
             }
 
-            globals.mCamera.mView = viewTransform;
-            globals.mCamera.mViewProj = viewTransform * projTransform;
+            shaderGlobals.mCamera.mView = rmGlobals.mView;
+            shaderGlobals.mCamera.mViewProj = rmGlobals.mView * rmGlobals.mProjection;
+
+            if (transform) {
+                rmGlobals.mViewOrigin = ToDiligent(
+                    transform->ApplyToPoint(glm::vec3(0.0f, 0.0f, 0.0f)));
+                rmGlobals.mViewDirection = ToDiligent(
+                    transform->ApplyToTangent(glm::vec3(0.0f, 0.0f, 1.0f)));
+            }
+            rmGlobals.mCamera = camera;
         }
 
-        globals.mCamera.mInvView = globals.mCamera.mView.Inverse();
-        globals.mCamera.mInvViewProj = globals.mCamera.mViewProj.Inverse();
+        shaderGlobals.mCamera.mInvView = shaderGlobals.mCamera.mView.Inverse();
+        shaderGlobals.mCamera.mInvViewProj = shaderGlobals.mCamera.mViewProj.Inverse();
 
         auto staticMeshes = registry.view<core::StaticMesh>();
 
@@ -666,7 +684,7 @@ namespace okami::graphics::diligent {
             DG::TEXTURE_VIEW_DEPTH_STENCIL);
 
         // Move globals to GPU
-        mSceneGlobals.Write(immediateContext, globals);
+        mSceneGlobals.Write(immediateContext, shaderGlobals);
 
         // Set render targets
         ITextureView* entityPickView = nullptr;
@@ -773,7 +791,9 @@ namespace okami::graphics::diligent {
 
         // Draw overlays (i.e., ImGui, etc.)
         for (auto overlay : mOverlays) {
-            overlay->QueueCommands(immediateContext, RenderPass::OVERLAY);
+            overlay->QueueCommands(immediateContext, 
+                RenderPass::OVERLAY, 
+                rmGlobals);
         }
 
         // Compute any entity pick requests
@@ -857,9 +877,12 @@ namespace okami::graphics::diligent {
 
         // Schedule the render
         mRenderFinished.add();
-        marl::Task task([this, &frame, renderFinished = mRenderFinished, &syncObject]() {
+        marl::Task task([this, &frame, 
+            renderFinished = mRenderFinished, 
+            &syncObject,
+            time]() {
             defer(renderFinished.done());
-            Render(frame, syncObject);
+            Render(frame, syncObject, time);
         }, marl::Task::Flags::SameThread);
         marl::schedule(std::move(task));
 

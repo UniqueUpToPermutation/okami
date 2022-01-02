@@ -19,8 +19,10 @@ namespace okami::graphics::diligent {
         mSurfaceTransform = swapChain->GetDesc().PreTransform;
     }
 
-    void ImGuiRenderOverlay::QueueCommands(DG::IDeviceContext* context, RenderPass pass) {
-
+    void ImGuiRenderOverlay::QueueCommands(
+        DG::IDeviceContext* context, 
+        RenderPass pass,
+        const RenderModuleGlobals& globals) {
         assert(pass == RenderPass::OVERLAY);
 
         mRenderReady.wait();
@@ -51,10 +53,6 @@ namespace okami::graphics::diligent {
         mOnUpdate.Remove(handle);
     }
 
-    marl::WaitGroup& ImGuiSystem::GetUpdateWaitGroup() {
-        return mUpdateWaitGroup;
-    }
-
     void ImGuiSystem::Startup(marl::WaitGroup& waitGroup) {
         core::InterfaceCollection interfaces;
         mInputSystem->RegisterInterfaces(interfaces);
@@ -65,7 +63,7 @@ namespace okami::graphics::diligent {
             // For high DPI stuff
             float xscale, yscale;
             glfwGetWindowContentScale(glfwInterface->GetWindowGLFW(), &xscale, &yscale);
-            ImGui::GetIO().FontGlobalScale = (xscale + yscale) / 2.0;
+            ImGui::GetIO().FontGlobalScale = glfwInterface->GetContentScale();
 
             // We have a glfw display!
             ImGui_ImplGlfw_InitForOther(glfwInterface->GetWindowGLFW(), false);
@@ -148,11 +146,9 @@ namespace okami::graphics::diligent {
             renderer = mRenderer,
             &update = mOnUpdate,
             &overlay = mOverlay,
-            updateWait = mUpdateWaitGroup,
             inputWait = mWaitForInput]() {
             defer(overlay.mRenderReady.signal());
 
-            updateWait.wait();
             if (inputWait)
                 inputWait();
 
@@ -184,8 +180,17 @@ namespace okami::graphics::diligent {
 
 namespace okami::graphics {
     std::unique_ptr<core::ISystem> CreateImGui(
-        IRenderer* renderer,
+        core::ISystem* renderer,
         core::ISystem* input) {
-        return std::make_unique<diligent::ImGuiSystem>(renderer, input);
+
+        core::InterfaceCollection interfaces(renderer);
+        auto rendererInterface = interfaces.Query<IRenderer>();
+
+        if (!rendererInterface) {
+            throw std::runtime_error("Renderer system does not expose "
+                "IRenderer interface!");
+        }
+
+        return std::make_unique<diligent::ImGuiSystem>(rendererInterface, input);
     }
 }

@@ -22,34 +22,29 @@ struct SpriteAnimData {
     float mOscillatorX;
 };
 
-void SpriteUpdaterFunc(Frame& frame,
+void SpriteUpdater(Frame& frame,
     UpdaterReads<>& reads, 
-    UpdaterWrites<Transform>& writes, 
+    UpdaterWrites<Transform>& writes,
+    UpdaterWaits<>& waits,
     const Time& time) {
 
-    auto lock = writes.Write<Transform>();
+    writes.Write<Transform>([&]() {
+        auto view = frame.Registry().view<Transform, SpriteAnimData>();
 
-    auto view = frame.Registry().view<Transform, SpriteAnimData>();
+        for (auto e : view) {
+            auto& transform = view.get<Transform>(e);
+            auto& anim = view.get<SpriteAnimData>(e);
 
-    for (auto e : view) {
-        auto& transform = view.get<Transform>(e);
-        auto& anim = view.get<SpriteAnimData>(e);
+            anim.mOscillatorX += anim.mOscillatorVelocity * time.mTimeElapsed;
+            
+            auto position = anim.mPositionBase + std::cos(anim.mOscillatorX) * anim.mOscillatorVector;
 
-        anim.mOscillatorX += anim.mOscillatorVelocity * time.mTimeElapsed;
-        
-        auto position = anim.mPositionBase + std::cos(anim.mOscillatorX) * anim.mOscillatorVector;
-
-        transform.mTranslation = glm::vec3(position.x, position.y, 0.0);
-        transform.mRotation = transform.mRotation * glm::angleAxis(
-            (float)(anim.mAngularVelocity * time.mTimeElapsed), glm::vec3(0.0f, 0.0f, 1.0f));
-    }
+            transform.mTranslation = glm::vec3(position.x, position.y, 0.0);
+            transform.mRotation = transform.mRotation * glm::angleAxis(
+                (float)(anim.mAngularVelocity * time.mTimeElapsed), glm::vec3(0.0f, 0.0f, 1.0f));
+        }
+    });
 }
-
-typedef Updater<
-    UpdaterReads<>, 
-    UpdaterWrites<Transform>,
-    &SpriteUpdaterFunc> 
-        SpriteUpdater;
 
 void TestBackend(GraphicsBackend backend) {
     RealtimeGraphicsParams params;
@@ -74,7 +69,7 @@ void TestBackend(GraphicsBackend backend) {
     SystemCollection systems;
     auto display = systems.Add(CreateGLFWDisplay(params));
     auto renderer = systems.Add(CreateRenderer(display, resources));
-    systems.Add<SpriteUpdater>();
+    systems.Add(CreateUpdaterSystem(&SpriteUpdater));
 
     systems.Startup();
     {

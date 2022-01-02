@@ -25,7 +25,6 @@ namespace okami::graphics {
         glm::vec3 mDPos;
         glm::quat mQX;
         glm::quat mQY;
-        glm::quat mBaseQuat;
         
         void PrepareUpdate(const Input& input, 
             const core::Transform& transform,

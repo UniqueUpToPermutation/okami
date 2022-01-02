@@ -49,7 +49,8 @@ namespace okami::graphics::diligent {
 			DG::TEXTURE_FORMAT backbufferColorFormat,
 			DG::TEXTURE_FORMAT backbufferDepthFormat,
 			uint samples,
-			Im3dShaders& shaders);
+			Im3dShaders& shaders,
+			bool bDepthEnable);
 	};
 
 	class Im3dModule {

@@ -97,7 +97,8 @@ namespace okami::graphics::diligent {
 		DG::TEXTURE_FORMAT backbufferColorFormat,
 		DG::TEXTURE_FORMAT backbufferDepthFormat,
 		uint samples,
-		Im3dShaders& shaders) : mShaders(shaders) {
+		Im3dShaders& shaders,
+		bool bDepthEnable) : mShaders(shaders) {
 
 		DG::GraphicsPipelineStateCreateInfo PSOCreateInfo;
 		DG::PipelineStateDesc&              PSODesc          = PSOCreateInfo.PSODesc;
@@ -110,7 +111,7 @@ namespace okami::graphics::diligent {
 		GraphicsPipeline.RTVFormats[0]                = backbufferColorFormat;
 		GraphicsPipeline.PrimitiveTopology            = DG::PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		GraphicsPipeline.RasterizerDesc.CullMode      = DG::CULL_MODE_BACK;
-		GraphicsPipeline.DepthStencilDesc.DepthEnable = true;
+		GraphicsPipeline.DepthStencilDesc.DepthEnable = bDepthEnable;
 		GraphicsPipeline.DSVFormat 					  = backbufferDepthFormat;
 
 		DG::RenderTargetBlendDesc blendState;

@@ -158,7 +158,8 @@ namespace okami::graphics::diligent {
 
         virtual IInputCapture* GetMouseFocus() = 0;
         virtual IInputCapture* GetKeyboardFocus() = 0;
-        
+
+        virtual float GetContentScale() const = 0;
         virtual void WaitForInput() = 0;
     };
 
@@ -183,6 +184,8 @@ namespace okami::graphics::diligent {
         bool bCaptureObjectsDirty = false;
         IInputCapture* mMouseFocus = nullptr;
         IInputCapture* mKeyboardFocus = nullptr;
+
+        float mContentScale = 1.0;
 
         GLFWwindow* mWindow = nullptr;
 		RealtimeGraphicsParams mParams;
@@ -309,6 +312,8 @@ namespace okami::graphics::diligent {
     
         IInputCapture* GetMouseFocus() override;
         IInputCapture* GetKeyboardFocus() override;
+
+        float GetContentScale() const override;
 
         void WaitForInput() override;
     };

@@ -18,8 +18,8 @@ namespace okami::graphics::diligent {
         
         marl::Event mWaitEvent;
 
-        core::WaitHandle mTransformReadHandle;
-        core::WaitHandle mTransformWriteHandle;
+        core::UpdaterReads<core::Transform> mReads;
+        core::UpdaterWrites<core::Transform> mWrites;
 
         FirstPersonController::Input mInput;
 
@@ -182,22 +182,24 @@ namespace okami::graphics::diligent {
     void FirstPersonCameraSystem::RequestSync(core::SyncObject& syncObject) {
         mWaitEvent.clear();
 
-        mTransformReadHandle = syncObject.ReadHandle<core::Transform>();
-        mTransformWriteHandle = syncObject.WriteHandle<core::Transform>();
+        mReads.RequestSync(syncObject);
+        mWrites.RequestSync(syncObject);
     }
     void FirstPersonCameraSystem::Fork(core::Frame& frame,
         core::SyncObject& syncObject,
         const core::Time& time) {
 
         marl::schedule([window = mWindowProvider,
-            &readHandle = mTransformReadHandle, 
-            &writeHandle = mTransformWriteHandle,
+            &reads = mReads,
+            &writes = mWrites,
             &event = mWaitEvent,
             &input = mInput,
             time,
             &mouse = mMouseData,
             &frame]() {
             defer(event.signal());
+            defer(reads.ReleaseHandles());
+            defer(writes.ReleaseHandles());
 
             window->WaitForInput();
 
@@ -210,9 +212,7 @@ namespace okami::graphics::diligent {
                 input.mRotateY = 0.0;
             }
 
-            {
-                core::ReadLock lock(readHandle);
-
+            reads.Read<core::Transform>([&]() {
                 auto view = frame.Registry().view<
                     core::Transform, 
                     FirstPersonController>();
@@ -222,11 +222,9 @@ namespace okami::graphics::diligent {
                     auto& controller = view.get<FirstPersonController>(e);
                     controller.PrepareUpdate(input, transform, time);
                 }
-            }
+            });
 
-            {
-                core::WriteLock lock(writeHandle);
-
+            writes.Write<core::Transform>([&]() {
                 auto view = frame.Registry().view<
                     core::Transform, 
                     FirstPersonController>();
@@ -236,11 +234,11 @@ namespace okami::graphics::diligent {
                     auto& controller = view.get<FirstPersonController>(e);
                     controller.FlushUpdate(transform);
                 }
-            }
+            });
         });
     }
     void FirstPersonCameraSystem::Join(core::Frame& frame) {
-
+        Wait();
     }
     void FirstPersonCameraSystem::Wait() {
         mWaitEvent.wait();
@@ -262,9 +260,14 @@ namespace okami::graphics {
         const core::Transform& transform,
         const core::Time& time) {
         if (!bInitialized) {
-            mBaseQuat = transform.mRotation;
-            mQX = glm::identity<glm::quat>();
-            mQY = glm::identity<glm::quat>();
+            glm::vec3 forward(0.0f, 0.0f, 1.0f);
+            forward = transform.mRotation * forward;
+            auto phi = -std::acos(forward.y) + glm::pi<float>() / 2.0f;
+            auto theta = std::atan2(forward.x, forward.z);
+
+            mQX = glm::angleAxis(theta, glm::vec3(0.0f, 1.0f, 0.0f));
+            mQY = glm::angleAxis(-phi, glm::vec3(1.0f, 0.0f, 0.0f));
+
             bInitialized = true;
         }
         
@@ -309,7 +312,7 @@ namespace okami::graphics {
     void FirstPersonController::FlushUpdate(
         core::Transform& output) {
         output.mTranslation += mDPos;
-        output.mRotation = mQX * mQY * mBaseQuat;
+        output.mRotation = mQX * mQY;
     }
 
     std::unique_ptr<core::ISystem> CreateFPSCameraSystem(core::ISystem* inputSystem) {
