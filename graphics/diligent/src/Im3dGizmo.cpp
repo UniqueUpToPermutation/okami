@@ -44,12 +44,16 @@ namespace okami::graphics::diligent {
 
         IIm3dCallback* mIm3dInterface;
 
+        Im3d::Id mId;
+
         bool bActive = false;
+        bool bResetId = false;
         bool bShouldCaptureMouse = false;
 
         Im3dGizmoSystem(IIm3dCallback* im3d) : 
             mWaitEvent(marl::Event::Mode::Auto),
-            mIm3dInterface(im3d) {
+            mIm3dInterface(im3d),
+            mId(Im3d::MakeId("Gizmo")) {
         }
 
         void ResetGizmo(core::Frame& frame) {
@@ -88,6 +92,11 @@ namespace okami::graphics::diligent {
             mIm3dHandle = mIm3dInterface->AddNoDepth([this]() {
                 defer(mTransformUpdated.signal());
 
+                if (bResetId) {
+                    Im3d::GetContext().resetId();
+                    bResetId = false;
+                }
+
                 auto transformS = glm::mat4(mTransform.mRotation);
                 transformS[3][0] = mTransform.mTranslation[0];
                 transformS[3][1] = mTransform.mTranslation[1];
@@ -100,20 +109,20 @@ namespace okami::graphics::diligent {
                 if (bActive) {
                     switch (mMode) {
                     case GizmoSelectionMode::TRANSLATION:
-                        Im3d::GizmoTranslation("Gizmo", 
+                        Im3d::GizmoTranslation(mId, 
                             &mTransform.mTranslation[0],
                             false);
                         break;
                     case GizmoSelectionMode::ROTATION:
                         Im3d::PushMatrix(ToIm3d(transformR));
-                        Im3d::GizmoRotation("Gizmo",
+                        Im3d::GizmoRotation(mId,
                             &mTransform.mRotation[0][0],
                             false);
                         Im3d::PopMatrix();
                         break;
                     case GizmoSelectionMode::SCALE:
                         Im3d::PushMatrix(ToIm3d(transformS));
-                        Im3d::GizmoScale("Gizmo",
+                        Im3d::GizmoScale(mId,
                             &mTransform.mScale[0]);
                         Im3d::PopMatrix();
                         break;
@@ -213,20 +222,20 @@ namespace okami::graphics::diligent {
 
                 // Replicate changes to gizmo selection locally
                 {
-                    bool bReset = false;
+                    bool bShouldReset = false;
                     for (auto e : mConstructObs) {
                         frame.Registry().emplace<GizmoSelectTagLocal>(e);
-                        bReset = true;
+                        bShouldReset = true;
                     }
 
                     for (auto e : mDestroyObs) {
                         frame.Registry().remove<GizmoSelectTagLocal>(e);
-                        bReset = true;
+                        bShouldReset = true;
                     }
 
                     // If there were changes made to the selection,
                     // reset the Gizmo's position / activation
-                    if (bReset) {
+                    if (bShouldReset) {
                         mConstructObs.clear();
                         mDestroyObs.clear();
                         ResetGizmo(frame);
@@ -255,6 +264,7 @@ namespace okami::graphics::diligent {
         }
 
         void SetMode(GizmoSelectionMode mode) override {
+            bResetId = true;
             mMode = mode;
         }
 
