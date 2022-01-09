@@ -42,7 +42,7 @@ void TestBackend(GraphicsBackend backend) {
     SystemCollection systems;
     auto display = systems.Add(CreateGLFWDisplay(params));
     auto renderer = systems.Add(CreateRenderer(display, resources));
-    renderer->Request<IEntityPick>();
+    renderer->EnableInterface<IEntityPick>();
     
     auto glfwInterface = systems.QueryInterface<IGLFWWindowProvider>();
     auto displayInterface = systems.QueryInterface<IDisplay>();

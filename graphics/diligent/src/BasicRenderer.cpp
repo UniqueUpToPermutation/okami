@@ -347,7 +347,7 @@ namespace okami::graphics::diligent {
         return pipeline;
     }
 
-    void BasicRenderer::Request(const entt::meta_type& interfaceType) {
+    void BasicRenderer::EnableInterface(const entt::meta_type& interfaceType) {
         if (interfaceType == entt::resolve<IEntityPick>()) {
 
             if (mBackend == GraphicsBackend::OPENGL) {
@@ -634,7 +634,10 @@ namespace okami::graphics::diligent {
         HLSL::SceneGlobals shaderGlobals;
         shaderGlobals.mCamera.mView = DG::float4x4::Identity();
         shaderGlobals.mCamera.mViewProj = DG::float4x4::Identity();
+        shaderGlobals.mCamera.mProj = DG::float4x4::Identity();
         shaderGlobals.mCamera.mViewport = DG::float2(scDesc.Width, scDesc.Height);
+        shaderGlobals.mCamera.mNearZ = mBackend == GraphicsBackend::OPENGL ? -1.0 : 0.0;
+        shaderGlobals.mCamera.mFarZ = 1.0;
 
         RenderModuleGlobals rmGlobals;
         rmGlobals.mProjection = DG::float4x4::Identity();
@@ -660,7 +663,10 @@ namespace okami::graphics::diligent {
             }
 
             shaderGlobals.mCamera.mView = rmGlobals.mView;
+            shaderGlobals.mCamera.mProj = rmGlobals.mProjection;
             shaderGlobals.mCamera.mViewProj = rmGlobals.mView * rmGlobals.mProjection;
+            shaderGlobals.mCamera.mNearZ = camera.mNearPlane;
+            shaderGlobals.mCamera.mFarZ = camera.mFarPlane;
 
             if (transform) {
                 rmGlobals.mViewOrigin = ToDiligent(
@@ -668,11 +674,13 @@ namespace okami::graphics::diligent {
                 rmGlobals.mViewDirection = ToDiligent(
                     transform->ApplyToTangent(glm::vec3(0.0f, 0.0f, 1.0f)));
             }
+
             rmGlobals.mCamera = camera;
         }
 
         shaderGlobals.mCamera.mInvView = shaderGlobals.mCamera.mView.Inverse();
         shaderGlobals.mCamera.mInvViewProj = shaderGlobals.mCamera.mViewProj.Inverse();
+        shaderGlobals.mCamera.mInvProj = shaderGlobals.mCamera.mProj.Inverse();
 
         auto staticMeshes = registry.view<core::StaticMesh>();
 

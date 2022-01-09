@@ -75,6 +75,9 @@ namespace okami::graphics {
 		GraphicsBackend mDeviceType = DEFAULT_BACKEND;
 	};
 
+    struct EditorCameraTag {
+    };
+
     std::unique_ptr<core::ISystem> CreateGLFWDisplay(
         const RealtimeGraphicsParams& params = RealtimeGraphicsParams());
     std::unique_ptr<core::ISystem> CreateRenderer(
@@ -88,4 +91,11 @@ namespace okami::graphics {
     std::unique_ptr<core::ISystem> CreateIm3d(
         core::ISystem* renderer,
         core::ISystem* input);
+    std::unique_ptr<core::ISystem> CreateEditorSystem(
+        core::ISystem* entityPick,
+        core::ISystem* input,
+        core::ISystem* imgui,
+        core::ISystem* im3d,
+        core::ISystem* gizmo
+    );
 }

@@ -1,4 +1,4 @@
-#include "BasicTypes.hlsl"
+#include "Common.hlsl"
 
 cbuffer cbuf_SceneGlobals {
     SceneGlobals gGlobals;

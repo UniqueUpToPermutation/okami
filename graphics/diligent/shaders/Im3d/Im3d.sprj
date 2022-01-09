@@ -1,0 +1,222 @@
+<?xml version="1.0"?>
+<project version="2">
+	<pipeline>
+		<pass name="Im3dLines" type="shader" active="true" patchverts="1">
+			<shader type="vs" path="shaders/Im3dVS.hlsl" entry="main" />
+			<shader type="ps" path="shaders/Im3dPS.hlsl" entry="main_lines" />
+			<shader used="true" type="gs" path="shaders/Im3dGS.hlsl" entry="main_lines" />
+			<inputlayout>
+				<item value="BufferFloat4" semantic="ATTRIB0" />
+				<item value="BufferFloat4" semantic="ATTRIB1" />
+			</inputlayout>
+			<rendertexture />
+			<items>
+				<item name="Default" type="renderstate">
+					<cullfront>true</cullfront>
+					<blend>true</blend>
+					<alpha2coverage>false</alpha2coverage>
+					<colorsrcfactor>Source Alpha</colorsrcfactor>
+					<colordstfactor>Inverse Source Alpha</colordstfactor>
+					<colorfunc>Add</colorfunc>
+					<alphasrcfactor>Source Alpha</alphasrcfactor>
+					<alphadstfactor>Inverse Source Alpha</alphadstfactor>
+					<alphafunc>Add</alphafunc>
+					<blendfactor_r>1</blendfactor_r>
+					<blendfactor_g>1</blendfactor_g>
+					<blendfactor_b>1</blendfactor_b>
+					<blendfactor_a>1</blendfactor_a>
+					<depthtest>true</depthtest>
+					<depthclamp>true</depthclamp>
+					<depthmask>true</depthmask>
+					<depthfunc>Less</depthfunc>
+					<depthbias>0</depthbias>
+					<stenciltest>false</stenciltest>
+					<stencilmask>0</stencilmask>
+					<stencilref>255</stencilref>
+					<stencilfrontfunc>Equal</stencilfrontfunc>
+					<stencilbackfunc>Equal</stencilbackfunc>
+					<stencilfrontpass>Keep</stencilfrontpass>
+					<stencilbackpass>Keep</stencilbackpass>
+					<stencilfrontfail>Keep</stencilfrontfail>
+					<stencilbackfail>Keep</stencilbackfail>
+					<depthfrontfail>Keep</depthfrontfail>
+					<depthbackfail>Keep</depthbackfail>
+				</item>
+				<item name="LineBuffer" type="vertexbuffer">
+					<buffer>LineBuffer</buffer>
+					<z>-0.418170929</z>
+					<topology>LineList</topology>
+				</item>
+			</items>
+			<itemvalues />
+			<variables>
+				<variable type="float4x4" name="gGlobals.mCamera.mView" system="View" />
+				<variable type="float4x4" name="gGlobals.mCamera.mViewProj" system="ViewProjection" />
+				<variable type="float4x4" name="gGlobals.mCamera.mProj" system="Projection" />
+				<variable type="float4x4" name="gGlobals.mCamera.mInvView" invert="true" system="View" />
+				<variable type="float4x4" name="gGlobals.mCamera.mInvViewProj" invert="true" system="ViewProjection" />
+				<variable type="float4x4" name="gGlobals.mCamera.mInvProj" invert="true" system="Projection" />
+				<variable type="float2" name="gGlobals.mCamera.mViewport" system="ViewportSize" />
+				<variable type="float" name="gGlobals.mCamera.mNearZ">
+					<row>
+						<value>0.00999999978</value>
+					</row>
+				</variable>
+				<variable type="float" name="gGlobals.mCamera.mFarZ">
+					<row>
+						<value>0</value>
+					</row>
+				</variable>
+			</variables>
+			<macros>
+				<define name="LINES" active="true">1</define>
+				<define name="SHADERED" active="true">1</define>
+			</macros>
+		</pass>
+		<pass name="Im3dPoints" type="shader" active="true" patchverts="1">
+			<shader type="vs" path="shaders/Im3dVS.hlsl" entry="main" />
+			<shader type="ps" path="shaders/Im3dPS.hlsl" entry="main_points" />
+			<shader used="true" type="gs" path="shaders/Im3dGS.hlsl" entry="main_points" />
+			<inputlayout>
+				<item value="BufferFloat4" semantic="ATTRIB0" />
+				<item value="BufferFloat4" semantic="ATTRIB1" />
+			</inputlayout>
+			<rendertexture />
+			<items>
+				<item name="Default2" type="renderstate">
+					<cullfront>true</cullfront>
+					<blend>true</blend>
+					<alpha2coverage>false</alpha2coverage>
+					<colorsrcfactor>Source Alpha</colorsrcfactor>
+					<colordstfactor>Inverse Source Alpha</colordstfactor>
+					<colorfunc>Add</colorfunc>
+					<alphasrcfactor>Source Alpha</alphasrcfactor>
+					<alphadstfactor>Inverse Source Alpha</alphadstfactor>
+					<alphafunc>Add</alphafunc>
+					<blendfactor_r>1</blendfactor_r>
+					<blendfactor_g>1</blendfactor_g>
+					<blendfactor_b>1</blendfactor_b>
+					<blendfactor_a>1</blendfactor_a>
+					<depthtest>true</depthtest>
+					<depthclamp>true</depthclamp>
+					<depthmask>true</depthmask>
+					<depthfunc>Less</depthfunc>
+					<depthbias>0</depthbias>
+					<stenciltest>false</stenciltest>
+					<stencilmask>0</stencilmask>
+					<stencilref>255</stencilref>
+					<stencilfrontfunc>Equal</stencilfrontfunc>
+					<stencilbackfunc>Equal</stencilbackfunc>
+					<stencilfrontpass>Keep</stencilfrontpass>
+					<stencilbackpass>Keep</stencilbackpass>
+					<stencilfrontfail>Keep</stencilfrontfail>
+					<stencilbackfail>Keep</stencilbackfail>
+					<depthfrontfail>Keep</depthfrontfail>
+					<depthbackfail>Keep</depthbackfail>
+				</item>
+				<item name="PointsBuffer" type="vertexbuffer">
+					<buffer>PointsBuffer</buffer>
+					<topology>PointList</topology>
+				</item>
+			</items>
+			<itemvalues />
+			<variables>
+				<variable type="float4x4" name="gGlobals.mCamera.mView" system="View" />
+				<variable type="float4x4" name="gGlobals.mCamera.mViewProj" system="ViewProjection" />
+				<variable type="float4x4" name="gGlobals.mCamera.mProj" system="Projection" />
+				<variable type="float4x4" name="gGlobals.mCamera.mInvView" invert="true" system="View" />
+				<variable type="float4x4" name="gGlobals.mCamera.mInvViewProj" invert="true" system="ViewProjection" />
+				<variable type="float4x4" name="gGlobals.mCamera.mInvProj" invert="true" system="Projection" />
+				<variable type="float2" name="gGlobals.mCamera.mViewport" system="ViewportSize" />
+				<variable type="float" name="gGlobals.mCamera.mNearZ">
+					<row>
+						<value>0</value>
+					</row>
+				</variable>
+				<variable type="float" name="gGlobals.mCamera.mFarZ">
+					<row>
+						<value>0</value>
+					</row>
+				</variable>
+			</variables>
+			<macros>
+				<define name="SHADERED" active="true"></define>
+				<define name="POINTS" active="true"></define>
+			</macros>
+		</pass>
+		<pass name="Im3dTris" type="shader" active="true" patchverts="1">
+			<shader type="vs" path="shaders/Im3dVS.hlsl" entry="main" />
+			<shader type="ps" path="shaders/Im3dPS.hlsl" entry="main_tris" />
+			<inputlayout>
+				<item value="BufferFloat4" semantic="ATTRIB0" />
+				<item value="BufferFloat4" semantic="ATTRIB1" />
+			</inputlayout>
+			<rendertexture />
+			<items>
+				<item name="TrisBuffer" type="vertexbuffer">
+					<buffer>TrisBuffer</buffer>
+					<topology>TriangleList</topology>
+				</item>
+			</items>
+			<itemvalues />
+			<variables>
+				<variable type="float4x4" name="gGlobals.mCamera.mView" system="View" />
+				<variable type="float4x4" name="gGlobals.mCamera.mViewProj" system="ViewProjection" />
+				<variable type="float4x4" name="gGlobals.mCamera.mProj" system="Projection" />
+				<variable type="float4x4" name="gGlobals.mCamera.mInvView" invert="true" system="View" />
+				<variable type="float4x4" name="gGlobals.mCamera.mInvViewProj" invert="true" system="ViewProjection" />
+				<variable type="float4x4" name="gGlobals.mCamera.mInvProj" invert="true" system="Projection" />
+				<variable type="float2" name="gGlobals.mCamera.mViewport" system="ViewportSize" />
+				<variable type="float" name="gGlobals.mCamera.mNearZ">
+					<row>
+						<value>0</value>
+					</row>
+				</variable>
+				<variable type="float" name="gGlobals.mCamera.mFarZ">
+					<row>
+						<value>0</value>
+					</row>
+				</variable>
+			</variables>
+			<macros>
+				<define name="SHADERED" active="true">1</define>
+				<define name="TRIANGLES" active="true">1</define>
+			</macros>
+		</pass>
+	</pipeline>
+	<objects>
+		<object type="buffer" name="LineBuffer" size="512" format="float4;float4" pausedpreview="false" />
+		<object type="buffer" name="PointsBuffer" size="256" format="float4;float4;" pausedpreview="false" />
+		<object type="buffer" name="TrisBuffer" size="96" format="float4;float4;" pausedpreview="false" />
+	</objects>
+	<cameras />
+	<settings>
+		<entry type="property" name="Im3dLines" item="pipe" />
+		<entry type="file" name="Im3dLines" shader="vs" />
+		<entry type="file" name="Im3dLines" shader="ps" />
+		<entry type="file" name="Im3dLines" shader="gs" />
+		<entry type="pinned" name="gGlobals.mCamera.mNearZ" owner="Im3dLines" />
+		<entry type="pinned" name="gGlobals.mCamera.mFarZ" owner="Im3dLines" />
+		<entry type="camera" fp="false">
+			<distance>13</distance>
+			<pitch>38</pitch>
+			<yaw>323</yaw>
+			<roll>360</roll>
+		</entry>
+		<entry type="clearcolor" r="0" g="0" b="0" a="1" />
+		<entry type="usealpha" val="false" />
+		<entry type="watch_expr" expr="tng0" />
+		<entry type="watch_expr" expr="v00" />
+		<entry type="watch_expr" expr="v01" />
+		<entry type="watch_expr" expr="v10" />
+		<entry type="watch_expr" expr="v11" />
+		<entry type="watch_expr" expr="gs0" />
+		<entry type="watch_expr" expr="gs1" />
+		<entry type="vecwatch_expr" expr="p0" color_r="0.882352948" color_g="0.996078432" color_b="0.380392164" />
+		<entry type="vecwatch_expr" expr="d" color_r="0.53725493" color_g="0.41568628" color_b="0.168627456" />
+		<entry type="vecwatch_expr" expr="ps_input" color_r="0.337254912" color_g="0.960784316" color_b="0.607843161" />
+		<entry type="bkpt" file="/home/phil/Projects/okami/graphics/diligent/shaders/Im3d_new/shaders/Im3dPS.hlsl" line="29" use_cond="false" cond="" enabled="true" />
+		<entry type="bkpt" file="/home/phil/Projects/okami/graphics/diligent/shaders/Im3d_new/shaders/Im3dPS.hlsl" line="28" use_cond="false" cond="" enabled="true" />
+	</settings>
+	<plugindata />
+</project>

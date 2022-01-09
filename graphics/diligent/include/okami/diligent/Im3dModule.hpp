@@ -22,7 +22,8 @@ namespace okami::graphics::diligent {
 
 	struct Im3dShaders {
 		DG::RefCntAutoPtr<DG::IShader> mTrianglesVS;
-		DG::RefCntAutoPtr<DG::IShader> mOtherVS;
+		DG::RefCntAutoPtr<DG::IShader> mPointsVS;
+		DG::RefCntAutoPtr<DG::IShader> mLinesVS;
 		DG::RefCntAutoPtr<DG::IShader> mPointsGS;
 		DG::RefCntAutoPtr<DG::IShader> mLinesGS;
 		DG::RefCntAutoPtr<DG::IShader> mTrianglesPS;

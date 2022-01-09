@@ -252,7 +252,7 @@ namespace okami::graphics::diligent {
             mWaitEvent.wait();
         }
 
-        void Request(const entt::meta_type& interfaceType) override {
+        void EnableInterface(const entt::meta_type& interfaceType) override {
         }
 
         bool ShouldCaptureMouse() const override {

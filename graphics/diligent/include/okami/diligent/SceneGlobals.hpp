@@ -6,7 +6,7 @@
 
 namespace HLSL {
     using namespace Diligent;
-    #include <shaders/BasicTypes.hlsl>
+    #include <shaders/Common.hlsl>
 }
 
 namespace okami::graphics::diligent {

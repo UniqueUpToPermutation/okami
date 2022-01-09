@@ -34,6 +34,7 @@ list(APPEND SOURCE
     src/TextureCapture.cpp
     src/FirstPersonCamera.cpp
     src/Im3dGizmo.cpp
+    src/Editor.cpp
     shader_rc.cpp
     ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
     ${IM3D_DIR}/im3d.cpp

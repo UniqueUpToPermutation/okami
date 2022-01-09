@@ -1,4 +1,4 @@
-#include "BasicTypes.hlsl"
+#include "Common.hlsl"
 
 struct PSInput { 
     float4 Pos   : SV_POSITION;

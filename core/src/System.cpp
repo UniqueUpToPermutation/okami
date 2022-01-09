@@ -84,6 +84,6 @@ namespace okami::core {
         }
     }
 
-    void ISystem::Request(const entt::meta_type&) {
+    void ISystem::EnableInterface(const entt::meta_type&) {
     }
 }

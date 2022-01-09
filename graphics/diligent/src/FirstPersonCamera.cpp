@@ -46,7 +46,7 @@ namespace okami::graphics::diligent {
             const core::Time& time) override;
         void Join(core::Frame& frame) override;
         void Wait() override;
-        void Request(const entt::meta_type& interfaceType) override;
+        void EnableInterface(const entt::meta_type& interfaceType) override;
 
         bool ShouldCaptureMouse() const override;
         bool ShouldCaptureKeyboard() const override;
@@ -243,7 +243,7 @@ namespace okami::graphics::diligent {
     void FirstPersonCameraSystem::Wait() {
         mWaitEvent.wait();
     }
-    void FirstPersonCameraSystem::Request(const entt::meta_type& interfaceType) {
+    void FirstPersonCameraSystem::EnableInterface(const entt::meta_type& interfaceType) {
     }
 
     bool FirstPersonCameraSystem::ShouldCaptureMouse() const {

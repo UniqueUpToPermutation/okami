@@ -54,13 +54,22 @@ namespace okami::core {
         // Waits on this system to join
         virtual void Wait() = 0;
 
-        // Request the specified interface type
-        virtual void Request(const entt::meta_type& interfaceType);
+        // EnableInterface the specified interface type
+        virtual void EnableInterface(const entt::meta_type& interfaceType);
 
-        // Request the specified interface type
+        // EnableInterface the specified interface type
         template <typename T>
-        inline void Request() {
-            Request(entt::resolve<T>());
+        inline void EnableInterface() {
+            EnableInterface(entt::resolve<T>());
+        }
+
+        template <typename... Types>
+        std::tuple<Types*...> QueryInterfaces();
+
+        template <typename Type>
+        inline Type* QueryInterface() {
+            auto [ result ] = QueryInterfaces<Type>();
+            return result;
         }
 
         virtual ~ISystem() = default;
@@ -91,6 +100,16 @@ namespace okami::core {
             system->RegisterInterfaces(*this);
         }
     };
+
+    template <typename... Types>
+    std::tuple<Types*...> ISystem::QueryInterfaces() {
+        InterfaceCollection collection;
+        RegisterInterfaces(collection);
+
+        return std::make_tuple<Types*...>(
+            (collection.Query<Types>())...
+        );
+    } 
 
     struct WaitHandle {
         marl::WaitGroup* mPostRead = nullptr;
@@ -277,6 +296,30 @@ namespace okami::core {
     template <typename ... Types>
     class UpdaterReads;
 
+    template <typename... Types>
+    struct MultiRead {
+    };
+
+    template <typename T>
+    struct MultiReadUtil {
+        template <typename... Types>
+        inline static std::array<WaitHandle*, 1> Get(UpdaterReads<Types...>& reads) {
+            return {
+                reads.template ReadHandle<T>()
+            };
+        }
+    };
+
+    template <typename... Types>
+    struct MultiReadUtil<MultiRead<Types...>> {
+        template <typename... ReadTypes>
+        inline static std::array<WaitHandle*, sizeof...(Types)> Get(UpdaterReads<ReadTypes...>& reads) {
+            return {
+                (reads.template ReadHandle<ReadTypes>())...
+            };
+        }
+    };
+
     template <typename Type1, typename ... Types>
     class UpdaterReads<Type1, Types...> {
     private:
@@ -284,6 +327,10 @@ namespace okami::core {
         UpdaterReads<Types...> mRemaining;
     
     public:
+        inline UpdaterReads<Types...>& GetRemaining() {
+            return mRemaining;
+        }
+
         inline void RequestSync(SyncObject& obj) {
             mHandle = obj.ReadHandle<Type1>();
             mRemaining.RequestSync(obj);
@@ -304,9 +351,11 @@ namespace okami::core {
 
         template <typename T, typename LambdaT>
         inline void Read(LambdaT lambda) {
-            auto handle = ReadHandle<T>();
+            auto reads = MultiReadUtil<T>::Get(*this);
             lambda();
-            handle->Release();
+            for (auto r : reads) {
+                r->Release();
+            }
         }
     };
 

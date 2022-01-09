@@ -15,74 +15,92 @@ namespace okami::graphics::diligent {
 		vsTrianglesConfig.mDefines["TRIANGLES"] = "1";
 
 		ShaderParams vsTrianglesParams(
-			"Im3d/Im3d.vsh",
+			"Im3d/shaders/Im3dVS.hlsl",
 			DG::SHADER_TYPE_VERTEX,
 			"Im3d Triangle VS",
-			vsTrianglesConfig);
+			vsTrianglesConfig,
+			"main");
 
-		ShaderPreprocessorConfig vsOtherConfig;
-		vsOtherConfig.mDefines["POINTS"] = "1";
+		ShaderPreprocessorConfig vsPointsConfig;
+		vsPointsConfig.mDefines["POINTS"] = "1";
 
-		ShaderParams vsOtherParams(
-			"Im3d/Im3d.vsh",
+		ShaderParams vsPointsParams(
+			"Im3d/shaders/Im3dVS.hlsl",
 			DG::SHADER_TYPE_VERTEX,
-			"Im3d Other VS",
-			vsOtherConfig);
+			"Im3d Points VS",
+			vsPointsConfig,
+			"main");
+
+		ShaderPreprocessorConfig vsLinesConfig;
+		vsLinesConfig.mDefines["LINES"] = "1";
+
+		ShaderParams vsLinesParams(
+			"Im3d/shaders/Im3dVS.hlsl",
+			DG::SHADER_TYPE_VERTEX,
+			"Im3d Lines VS",
+			vsLinesConfig,
+			"main");
 
 		ShaderPreprocessorConfig gsPtConfig;
 		gsPtConfig.mDefines["POINTS"] = "1";
 
 		ShaderParams gsPointsParams(
-			"Im3d/Im3dPoints.gsh",
+			"Im3d/shaders/Im3dGS.hlsl",
 			DG::SHADER_TYPE_GEOMETRY,
 			"Im3d Point GS",
-			gsPtConfig
+			gsPtConfig,
+			"main_points"
 		);
 
 		ShaderPreprocessorConfig gsLineConfig;
 		gsLineConfig.mDefines["LINES"] = "1";
 
 		ShaderParams gsLinesParams(
-			"Im3d/Im3dLines.gsh",
+			"Im3d/shaders/Im3dGS.hlsl",
 			DG::SHADER_TYPE_GEOMETRY,
 			"Im3d Line GS",
-			gsLineConfig
+			gsLineConfig,
+			"main_lines"
 		);
 
 		ShaderPreprocessorConfig psTriangleConfig;
 		psTriangleConfig.mDefines["TRIANGLES"] = "1";
 
 		ShaderParams psTriangleParams(
-			"Im3d/Im3d.psh",
+			"Im3d/shaders/Im3dPS.hlsl",
 			DG::SHADER_TYPE_PIXEL,
 			"Im3d Triangle PS",
-			psTriangleConfig
+			psTriangleConfig,
+			"main_tris"
 		);
 
 		ShaderPreprocessorConfig psLinesConfig;
 		psLinesConfig.mDefines["LINES"] = "1";
 
 		ShaderParams psLinesParams(
-			"Im3d/Im3d.psh",
+			"Im3d/shaders/Im3dPS.hlsl",
 			DG::SHADER_TYPE_PIXEL,
 			"Im3d Lines PS",
-			psLinesConfig
+			psLinesConfig,
+			"main_lines"
 		);
 
 		ShaderPreprocessorConfig psPointConfig;
 		psPointConfig.mDefines["POINTS"] = "1";
 
 		ShaderParams psPointParams(
-			"Im3d/Im3d.psh",
+			"Im3d/shaders/Im3dPS.hlsl",
 			DG::SHADER_TYPE_PIXEL,
 			"Im3d Point PS",
-			psPointConfig
+			psPointConfig,
+			"main_points"
 		);
         
         bool bPrintLines = false;
 
 		result.mTrianglesVS = CompileEmbeddedShader(device, vsTrianglesParams, system, bPrintLines);
-		result.mOtherVS = CompileEmbeddedShader(device, vsOtherParams, system, bPrintLines);
+		result.mPointsVS = CompileEmbeddedShader(device, vsPointsParams, system, bPrintLines);
+		result.mLinesVS = CompileEmbeddedShader(device, vsLinesParams, system, bPrintLines);
 		result.mPointsGS = CompileEmbeddedShader(device, gsPointsParams, system, bPrintLines);
 		result.mLinesGS = CompileEmbeddedShader(device, gsLinesParams, system, bPrintLines);
 		result.mTrianglesPS = CompileEmbeddedShader(device, psTriangleParams, system, bPrintLines);
@@ -158,11 +176,11 @@ namespace okami::graphics::diligent {
 
 		auto contextData = mPipelineStateTriangles->GetStaticVariableByName(
 			DG::SHADER_TYPE_VERTEX, "cbContextData");
-		if (contextData) contextData->Set(globals.Get());
+		contextData->Set(globals.Get());
 
 		// Line Pipeline
 		GraphicsPipeline.PrimitiveTopology = DG::PRIMITIVE_TOPOLOGY_LINE_LIST;
-		PSOCreateInfo.pVS = shaders.mOtherVS;
+		PSOCreateInfo.pVS = shaders.mLinesVS;
 		PSOCreateInfo.pGS = shaders.mLinesGS;
 		PSOCreateInfo.pPS = shaders.mLinesPS;
 		PSODesc.Name = "Im3d Lines Pipeline";
@@ -173,15 +191,15 @@ namespace okami::graphics::diligent {
 
 		contextData = mPipelineStateLines->GetStaticVariableByName(
 			DG::SHADER_TYPE_VERTEX, "cbContextData");
-		if (contextData) contextData->Set(globals.Get());
+		contextData->Set(globals.Get());
 
 		contextData = mPipelineStateLines->GetStaticVariableByName(
 			DG::SHADER_TYPE_GEOMETRY, "cbContextData");
-		if (contextData) contextData->Set(globals.Get());				
+		contextData->Set(globals.Get());				
 
 		// Point Pipeline
 		GraphicsPipeline.PrimitiveTopology = DG::PRIMITIVE_TOPOLOGY_POINT_LIST;
-		PSOCreateInfo.pVS = shaders.mOtherVS;
+		PSOCreateInfo.pVS = shaders.mPointsVS;
 		PSOCreateInfo.pGS = shaders.mPointsGS;
 		PSOCreateInfo.pPS = shaders.mPointsPS;
 		PSODesc.Name = "Im3d Points Pipeline";
@@ -192,11 +210,11 @@ namespace okami::graphics::diligent {
 
 		contextData = mPipelineStateVertices->GetStaticVariableByName(
 			DG::SHADER_TYPE_VERTEX, "cbContextData");
-		if (contextData) contextData->Set(globals.Get());
+		contextData->Set(globals.Get());
 
 		contextData = mPipelineStateVertices->GetStaticVariableByName(
 			DG::SHADER_TYPE_GEOMETRY, "cbContextData");
-		if (contextData) contextData->Set(globals.Get());
+		contextData->Set(globals.Get());
 
 		mShaders = shaders;
 

@@ -130,7 +130,7 @@ namespace okami::graphics::diligent {
             core::SyncObject& syncObject,
             const core::Time& time);
 
-        void Request(const entt::meta_type&) override;
+        void EnableInterface(const entt::meta_type&) override;
         void Startup(marl::WaitGroup& waitGroup) override;
         void Shutdown() override;
 

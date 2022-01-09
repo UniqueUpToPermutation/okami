@@ -1,5 +1,5 @@
 #include "Types.hlsl"
-#include "../BasicTypes.hlsl"
+#include "../Common.hlsl"
 
 cbuffer cbuf_Globals 
 {
