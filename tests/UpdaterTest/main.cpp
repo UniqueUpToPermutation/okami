@@ -22,20 +22,24 @@ std::atomic<int> gCameraWritesRemaining = 0;
 
 
 void Updater1(Frame& frame, 
-    UpdaterReads<Camera>& reads,
+    UpdaterReads<Transform, Camera>& reads,
     UpdaterWrites<Transform, Camera>& writes,
     UpdaterWaits<Transform, Camera>& waits,
     const Time& time) {
-    reads.Read<Camera>([&]() {
+    reads.Read<Camera>([]() {
         --gCameraReadsRemaining;
     });
 
-    writes.Write<Camera>([&]() { 
+    reads.Read<Transform>([]() {
+        --gTransformReadsRemaining;
+    });
+
+    writes.Write<Camera>([]() { 
         TEST_ASSERT(gCameraReadsRemaining == 0);
         --gCameraWritesRemaining;
     });
 
-    writes.Write<Transform>([&]() {
+    writes.Write<Transform>([]() {
         TEST_ASSERT(gTransformReadsRemaining == 0);
         --gTransformWritesRemaining;
     });
@@ -48,20 +52,21 @@ void Updater1(Frame& frame,
 }
 
 void Updater2(Frame& frame, 
-    UpdaterReads<Transform>& reads,
+    UpdaterReads<Transform, Camera>& reads,
     UpdaterWrites<Transform, Camera>& writes,
     UpdaterWaits<Transform, Camera>& waits,
     const Time& time) {
-    reads.Read<Transform>([&]() {
+    reads.Read<MultiRead<Transform, Camera>>([]() {
         --gTransformReadsRemaining;
+        --gCameraReadsRemaining;
     });
 
-    writes.Write<Transform>([&]() {
+    writes.Write<Transform>([]() {
         TEST_ASSERT(gTransformReadsRemaining == 0);
         --gTransformWritesRemaining;
     });
 
-    writes.Write<Camera>([&]() {
+    writes.Write<Camera>([]() {
         TEST_ASSERT(gCameraReadsRemaining == 0);
         --gCameraWritesRemaining;
     });
@@ -98,9 +103,9 @@ int main() {
         systems.SetFrame(frame);
         systems.LoadResources();
     
-        for (size_t i = 0; i < 2000; ++i) {
-            gTransformReadsRemaining = 1;
-            gCameraReadsRemaining = 1;
+        for (size_t i = 0; i < 100000; ++i) {
+            gTransformReadsRemaining = 2;
+            gCameraReadsRemaining = 2;
             gTransformWritesRemaining = 2;
             gCameraWritesRemaining = 2;
             systems.Fork(Time{0.0, 0.0});

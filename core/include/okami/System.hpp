@@ -115,13 +115,14 @@ namespace okami::core {
         marl::WaitGroup* mPostRead = nullptr;
         marl::WaitGroup* mPostWrite = nullptr;
         marl::mutex* mWriteMutex = nullptr;
-        bool bFinished = true;
+        std::atomic<bool> bFinished = true;
 
         WaitHandle() = default;
 
         inline WaitHandle(marl::WaitGroup& postRead) : 
             mPostRead(&postRead), 
             bFinished(false) {
+            postRead.add();
         }
 
         inline WaitHandle(
@@ -132,13 +133,22 @@ namespace okami::core {
             mPostWrite(&postWrite), 
             mWriteMutex(&writeMutex), 
             bFinished(false) {
+            postWrite.add();
+        }
+
+        WaitHandle& operator=(const WaitHandle&) = delete;
+        WaitHandle& operator=(WaitHandle&& other) {
+            mPostRead = other.mPostRead;
+            mPostWrite = other.mPostWrite;
+            mWriteMutex = other.mWriteMutex;
+            bFinished = other.bFinished.exchange(true);
+            return *this;
         }
 
         WaitHandle(const WaitHandle&) = delete;
-        WaitHandle(WaitHandle&& other) = default;
-
-        WaitHandle& operator=(const WaitHandle&) = delete;
-        WaitHandle& operator=(WaitHandle&& other) = default;
+        WaitHandle(WaitHandle&& other) {
+            *this = std::move(other);
+        }
 
         inline bool IsRead() const {
             return mWriteMutex == nullptr;
@@ -149,14 +159,18 @@ namespace okami::core {
         }
 
         inline void Release() {
-            if (!bFinished) {
+            auto value = bFinished.exchange(true);
+            if (!value) {
                 if (IsRead()) {
                     mPostRead->done();
                 } else {
                     mPostWrite->done();
                 }
-                bFinished = true;
             }
+        }
+
+        ~WaitHandle() {
+            Release();
         }
     };
 
@@ -234,7 +248,6 @@ namespace okami::core {
         template <typename T>
         WaitHandle ReadHandle() {
             auto group = ReadWaitGroup(entt::resolve<T>(), true);
-            group->add();
             return WaitHandle(*group);
         }
 
@@ -243,7 +256,6 @@ namespace okami::core {
             auto readgroup = ReadWaitGroup(entt::resolve<T>(), true);
             auto writegroup = WriteWaitGroup(entt::resolve<T>(), true);
             auto mutex = WriteMutex(entt::resolve<T>(), true);
-            writegroup->add();
             return WaitHandle(*readgroup, *writegroup, *mutex);
         }
     };
@@ -407,9 +419,9 @@ namespace okami::core {
             mObject = &obj;
         }
 
-        template <typename _Type1, typename ... _Types>
+        template <typename _WaitType1, typename ... _WaitTypes>
         inline void Wait() {
-            UpdaterWaitImpl<_Type1, _Types...>::Wait(mObject);
+            UpdaterWaitImpl<_WaitType1, _WaitTypes...>::Wait(mObject);
         }
     };
 
@@ -519,7 +531,6 @@ namespace okami::core {
             SyncObject& syncObject,
             const Time& time) override {
 
-            mFinishedEvent.clear();
             marl::schedule([&frame, 
                 &syncObject, 
                 time, 
