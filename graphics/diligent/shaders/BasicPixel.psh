@@ -7,7 +7,6 @@ struct PSInput {
 
 struct PSOutput { 
     float4 Color : SV_TARGET0;
-    int EntityId : SV_TARGET1;
 };
 
 cbuffer cbuf_InstanceData {
@@ -23,6 +22,4 @@ void main(in PSInput ps_input,
     ps_output.Color = t_Albedo.Sample(
         t_Albedo_sampler, 
         ps_input.UV);
-
-    ps_output.EntityId = gInstanceData.mEntity;
 }

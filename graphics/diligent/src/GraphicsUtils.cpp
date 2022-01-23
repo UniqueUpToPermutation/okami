@@ -1,5 +1,5 @@
 #include <okami/diligent/GraphicsUtils.hpp>
-#include <okami/diligent/Display.hpp>
+#include <okami/diligent/Glfw.hpp>
 
 #include <RenderDevice.h>
 #include <SwapChain.h>
@@ -25,20 +25,59 @@
 using namespace Diligent;
 
 namespace okami::graphics::diligent {
-    void CreateDeviceAndSwapChain(
-        IDisplay* display,
-        INativeWindowProvider* windowProvider,
+
+    void CreateSwapChain(
+        DG::IRenderDevice* device,
+        DG::IDeviceContext* immediateContext,
+        DG::ISwapChain** swapChain,
+        SwapChainDesc scDefaultDesc,
+        IEngineFactory* factory,
+        IWindow* window) {
+
+        NativeWindow nativeWindow = 
+            *reinterpret_cast<const NativeWindow*>(window->GetNativeWindow());
+
+        auto info = device->GetDeviceInfo();
+
+        switch (info.Type) {
+#if D3D11_SUPPORTED
+            case RENDER_DEVICE_TYPE_D3D11:
+            {
+                break;
+            }
+#endif
+
+#if D3D12_SUPPORTED
+            case RENDER_DEVICE_TYPE_D3D12:
+            {
+                break;
+            }
+#endif
+
+#if VULKAN_SUPPORTED
+            case RENDER_DEVICE_TYPE_VULKAN:
+            {
+                auto factoryvk = dynamic_cast<IEngineFactoryVk*>(factory);
+
+                scDefaultDesc.IsPrimary = window->GetDesc().bIsPrimary;
+                factoryvk->CreateSwapChainVk(device, immediateContext, 
+                scDefaultDesc, nativeWindow, swapChain);
+
+                break;
+            }
+#endif
+        }
+    }
+
+    void CreateDevice(
+        GraphicsBackend backend,
         IEngineFactory** factory,
         IRenderDevice** device,
         std::vector<IDeviceContext*>& contexts,
-        ISwapChain** swapChain,
+        SwapChainDesc* scDefaultDesc,
         const get_engine_initialization_attribs& attribsFunc) {
-        SwapChainDesc SCDesc;
-
-        auto backend = display->GetRequestedBackend();
-        auto window = windowProvider->GetWindow();
-
-        RENDER_DEVICE_TYPE deviceType = RENDER_DEVICE_TYPE_UNDEFINED;
+        
+        DG::RENDER_DEVICE_TYPE deviceType = RENDER_DEVICE_TYPE_UNDEFINED;
 
         switch (backend) {
             case GraphicsBackend::D3D11:
@@ -49,9 +88,6 @@ namespace okami::graphics::diligent {
                 break;
             case GraphicsBackend::VULKAN:
                 deviceType = RENDER_DEVICE_TYPE_VULKAN;
-                break;
-            case GraphicsBackend::OPENGL:
-                deviceType = RENDER_DEVICE_TYPE_GL;
                 break;
         }
 
@@ -67,7 +103,7 @@ namespace okami::graphics::diligent {
         // We need at least 3 buffers in Metal to avoid massive
         // performance degradation in full screen mode.
         // https://github.com/KhronosGroup/MoltenVK/issues/808
-        SCDesc.BufferCount = 3;
+        scDefaultDesc->BufferCount = 3;
 #endif
 
         Uint32 NumImmediateContexts = 0;
@@ -119,7 +155,7 @@ namespace okami::graphics::diligent {
                     }
                 }
 
-                m_TheSample->ModifyEngineInitInfo({pFactoryD3D11, m_DeviceType, EngineCI, SCDesc});
+                m_TheSample->ModifyEngineInitInfo({pFactoryD3D11, m_DeviceType, EngineCI, scDesc});
 
                 m_AdapterAttribs = Adapters[EngineCI.AdapterId];
                 if (m_AdapterType != ADAPTER_TYPE_SOFTWARE)
@@ -140,7 +176,7 @@ namespace okami::graphics::diligent {
                 }
 
                 if (pWindow != nullptr)
-                    pFactoryD3D11->CreateSwapChainD3D11(m_pDevice, contexts[0], SCDesc, FullScreenModeDesc{}, *pWindow, swapChain);
+                    pFactoryD3D11->CreateSwapChainD3D11(m_pDevice, contexts[0], scDesc, FullScreenModeDesc{}, *pWindow, swapChain);
             }
             break;
 #endif
@@ -197,7 +233,7 @@ namespace okami::graphics::diligent {
                     }
                 }
 
-                m_TheSample->ModifyEngineInitInfo({pFactoryD3D12, m_DeviceType, EngineCI, SCDesc});
+                m_TheSample->ModifyEngineInitInfo({pFactoryD3D12, m_DeviceType, EngineCI, scDesc});
 
                 m_AdapterAttribs = Adapters[EngineCI.AdapterId];
                 if (m_AdapterType != ADAPTER_TYPE_SOFTWARE)
@@ -218,46 +254,7 @@ namespace okami::graphics::diligent {
                 }
 
                 if (!m_pSwapChain && pWindow != nullptr)
-                    pFactoryD3D12->CreateSwapChainD3D12(m_pDevice, contexts[0], SCDesc, FullScreenModeDesc{}, *pWindow, swapChain);
-            }
-            break;
-#endif
-
-#if GL_SUPPORTED || GLES_SUPPORTED
-            case RENDER_DEVICE_TYPE_GL:
-            case RENDER_DEVICE_TYPE_GLES:
-            {
-#    if EXPLICITLY_LOAD_ENGINE_GL_DLL
-                // Load the dll and import GetEngineFactoryOpenGL() function
-                auto GetEngineFactoryOpenGL = LoadGraphicsEngineOpenGL();
-#    endif
-                auto* pFactoryOpenGL = GetEngineFactoryOpenGL();
-                *factory             = pFactoryOpenGL;
-
-                EngineGLCreateInfo EngineCI;
-                EngineCI.Window = window;
-
-                if (validationLevel >= 0)
-                    EngineCI.SetValidationLevel(static_cast<VALIDATION_LEVEL>(validationLevel));
-
-                attribsFunc(deviceType, EngineCI, SCDesc);
-
-                if (bForceNonSeprblProgs)
-                    EngineCI.Features.SeparablePrograms = DEVICE_FEATURE_STATE_DISABLED;
-                if (EngineCI.NumDeferredContexts != 0)
-                {
-                    LOG_ERROR_MESSAGE("Deferred contexts are not supported in OpenGL mode");
-                    EngineCI.NumDeferredContexts = 0;
-                }
-
-                NumImmediateContexts = 1;
-                contexts.resize(NumImmediateContexts + EngineCI.NumDeferredContexts);
-                pFactoryOpenGL->CreateDeviceAndSwapChainGL(EngineCI, device, contexts.data(), SCDesc, swapChain);
-                if (!*device)
-                {
-                    LOG_ERROR_AND_THROW("Unable to initialize Diligent Engine in OpenGL mode. The API may not be available, "
-                                        "or required features may not be supported by this GPU/driver/OS version.");
-                }
+                    pFactoryD3D12->CreateSwapChainD3D12(m_pDevice, contexts[0], scDesc, FullScreenModeDesc{}, *pWindow, swapChain);
             }
             break;
 #endif
@@ -276,7 +273,7 @@ namespace okami::graphics::diligent {
                 auto* pFactoryVk = GetEngineFactoryVk();
                 *factory = pFactoryVk;
 
-                attribsFunc(deviceType, EngineCI, SCDesc);
+                attribsFunc(deviceType, EngineCI, *scDefaultDesc);
 
                 NumImmediateContexts = std::max(1u, EngineCI.NumImmediateContexts);
                 contexts.resize(NumImmediateContexts + EngineCI.NumDeferredContexts);
@@ -286,8 +283,6 @@ namespace okami::graphics::diligent {
                     LOG_ERROR_AND_THROW("Unable to initialize Diligent Engine in Vulkan mode. The API may not be available, "
                                         "or required features may not be supported by this GPU/driver/OS version.");
                 }
-
-                pFactoryVk->CreateSwapChainVk(*device, contexts[0], SCDesc, window, swapChain);
             }
             break;
 #endif
@@ -303,7 +298,7 @@ namespace okami::graphics::diligent {
                 auto* pFactoryMtl = GetEngineFactoryMtl();
                 m_pEngineFactory  = pFactoryMtl;
 
-                m_TheSample->ModifyEngineInitInfo({pFactoryMtl, m_DeviceType, EngineCI, SCDesc});
+                m_TheSample->ModifyEngineInitInfo({pFactoryMtl, m_DeviceType, EngineCI, scDesc});
 
                 NumImmediateContexts = std::max(1u, EngineCI.NumImmediateContexts);
                 contexts.resize(NumImmediateContexts + EngineCI.NumDeferredContexts);
@@ -315,7 +310,7 @@ namespace okami::graphics::diligent {
                 }
 
                 if (!m_pSwapChain && pWindow != nullptr)
-                    pFactoryMtl->CreateSwapChainMtl(m_pDevice, contexts[0], SCDesc, *pWindow, swapChain);
+                    pFactoryMtl->CreateSwapChainMtl(m_pDevice, contexts[0], scDesc, *pWindow, swapChain);
             }
             break;
 #endif
@@ -405,6 +400,10 @@ namespace okami::graphics::diligent {
     }
 
     DG::TEXTURE_FORMAT ToDiligent(const core::TextureFormat& format) {
+        if (format.mChannels == 0) {
+            return DG::TEX_FORMAT_UNKNOWN;
+        }
+
         switch (format.mValueType) {
         case core::ValueType::FLOAT32:
             switch (format.mChannels) {
@@ -697,16 +696,18 @@ namespace okami::graphics::diligent {
             return core::TextureFormat::RGBA32_UINT();
         case DG::TEX_FORMAT_RGBA32_FLOAT:
             return core::TextureFormat::RGBA32_FLOAT();
+        case DG::TEX_FORMAT_UNKNOWN:
+            return core::TextureFormat::UNKNOWN();
         default:
             throw std::runtime_error("Not supported!");
         }
     }
 
-	DG::float4x4 GetSurfacePretransformMatrix(DG::ISwapChain* swapChain, 
+	DG::float4x4 GetSurfacePretransformMatrix(
+        const DG::SwapChainDesc& scDesc, 
 		const DG::float3& f3CameraViewAxis)
 	{
-		const auto& SCDesc = swapChain->GetDesc();
-		switch (SCDesc.PreTransform)
+		switch (scDesc.PreTransform)
 		{
 			case  DG::SURFACE_TRANSFORM_ROTATE_90:
 				// The image content is rotated 90 degrees clockwise.
@@ -736,20 +737,19 @@ namespace okami::graphics::diligent {
 		}
 	}
 
-	DG::float4x4 GetAdjustedProjectionMatrix(DG::ISwapChain* swapChain, 
+	DG::float4x4 GetAdjustedProjectionMatrix(
+        const DG::SwapChainDesc& scDesc, 
 		bool bIsGL, 
 		float FOV, 
 		float NearPlane, 
 		float FarPlane)
 	{
-		const auto& SCDesc = swapChain->GetDesc();
-
-		float AspectRatio = static_cast<float>(SCDesc.Width) / static_cast<float>(SCDesc.Height);
+		float AspectRatio = static_cast<float>(scDesc.Width) / static_cast<float>(scDesc.Height);
 		float XScale, YScale;
-		if (SCDesc.PreTransform == DG::SURFACE_TRANSFORM_ROTATE_90 ||
-			SCDesc.PreTransform == DG::SURFACE_TRANSFORM_ROTATE_270 ||
-			SCDesc.PreTransform == DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90 ||
-			SCDesc.PreTransform == DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270)
+		if (scDesc.PreTransform == DG::SURFACE_TRANSFORM_ROTATE_90 ||
+			scDesc.PreTransform == DG::SURFACE_TRANSFORM_ROTATE_270 ||
+			scDesc.PreTransform == DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90 ||
+			scDesc.PreTransform == DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270)
 		{
 			// When the screen is rotated, vertical FOV becomes horizontal FOV
 			XScale = 1.f / std::tan(FOV / 2.f);
@@ -798,19 +798,19 @@ namespace okami::graphics::diligent {
 
     DG::float4x4 GetProjection(
         const core::Camera& camera,
-        DG::ISwapChain* swapChain, 
+        const DG::SwapChainDesc& scDesc,
         bool bIsGL) {
         if (camera.mType == core::Camera::Type::PERSPECTIVE) {
 			// Get pretransform matrix that rotates the scene according the surface orientation
-			auto srfPreTransform = GetSurfacePretransformMatrix(swapChain, DG::float3{0, 0, 1});
+			auto srfPreTransform = GetSurfacePretransformMatrix(scDesc, DG::float3{0, 0, 1});
 
 			// Get projection matrix adjusted to the current screen orientation
-			auto proj = GetAdjustedProjectionMatrix(swapChain, bIsGL, 
+			auto proj = GetAdjustedProjectionMatrix(scDesc, bIsGL, 
                 camera.mFieldOfView, camera.mNearPlane, camera.mFarPlane);
 			return srfPreTransform * proj;
 		} else if (camera.mType == core::Camera::Type::ORTHOGRAPHIC) {
 			// Get pretransform matrix that rotates the scene according the surface orientation
-			auto srfPreTransform = GetSurfacePretransformMatrix(swapChain, DG::float3{0, 0, 1});
+			auto srfPreTransform = GetSurfacePretransformMatrix(scDesc, DG::float3{0, 0, 1});
 
 			// Get projection matrix adjusted to the current screen orientation
 			auto proj = GetAdjustedOrthoMatrix(bIsGL, ToDiligent(camera.mOrthoSize), 
@@ -819,6 +819,32 @@ namespace okami::graphics::diligent {
 		} else {
 			throw std::runtime_error("Invalid Camera Type!");
 		}
+    }
+
+    DG::SURFACE_TRANSFORM ToDiligent(
+        SurfaceTransform transform) {
+        switch (transform) {
+            case SurfaceTransform::OPTIMAL:
+                return DG::SURFACE_TRANSFORM_OPTIMAL;
+            case SurfaceTransform::IDENTITY:
+                return DG::SURFACE_TRANSFORM_IDENTITY;
+            case SurfaceTransform::ROTATE_90:
+                return DG::SURFACE_TRANSFORM_ROTATE_90;
+            case SurfaceTransform::ROTATE_180:
+                return DG::SURFACE_TRANSFORM_ROTATE_180;
+            case SurfaceTransform::ROTATE_270:
+                return DG::SURFACE_TRANSFORM_ROTATE_270;
+            case SurfaceTransform::HORIZONTAL_MIRROR:
+                return DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR;
+            case SurfaceTransform::HORIZONTAL_MIRROR_ROTATE_90:
+                return DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90;
+            case SurfaceTransform::HORIZONTAL_MIRROR_ROTATE_180:
+                return DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180;
+            case SurfaceTransform::HORIZONTAL_MIRROR_ROTATE_270:
+                return DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270;
+            default:
+                throw std::runtime_error("Unknown SurfaceTransform!");
+        }
     }
 
     uint GetTypeSize(DG::VALUE_TYPE type) {

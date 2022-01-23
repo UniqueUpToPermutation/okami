@@ -10,17 +10,20 @@ using namespace okami::graphics;
 int main() {
     Meta::Register();
 
+    ResourceInterface resources;
+
     marl::Scheduler scheduler(marl::Scheduler::Config::allCores());
     scheduler.bind();
     defer(scheduler.unbind());
 
     SystemCollection systems;
-    systems.Add(CreateGLFWDisplay());
+    systems.Add(CreateGLFWDisplay(&resources));
+
+    auto display = systems.QueryInterface<IDisplay>();
+    auto window = display->CreateWindow();
 
     systems.Startup();
     {
-        auto window = systems.QueryInterface<IDisplay>();
-
         Frame frame;
         systems.SetFrame(frame);
         systems.LoadResources();

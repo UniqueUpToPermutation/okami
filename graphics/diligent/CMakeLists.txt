@@ -20,7 +20,6 @@ add_custom_command(
 	DEPENDS ${shader_SRC})
 
 list(APPEND SOURCE
-    src/Display.cpp
     src/BasicRenderer.cpp
     src/GraphicsUtils.cpp
     src/ShaderPreprocessor.cpp
@@ -35,6 +34,8 @@ list(APPEND SOURCE
     src/FirstPersonCamera.cpp
     src/Im3dGizmo.cpp
     src/Editor.cpp
+    src/Glfw.cpp
+    src/RenderModule.cpp
     shader_rc.cpp
     ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
     ${IM3D_DIR}/im3d.cpp
@@ -45,7 +46,6 @@ if(PLATFORM_MACOS)
 endif()
 
 list(APPEND INCLUDE
-    include/okami/diligent/Display.hpp
     include/okami/diligent/BasicRenderer.hpp
     include/okami/diligent/GraphicsUtils.hpp
     include/okami/diligent/ShaderPreprocessor.hpp
@@ -60,6 +60,7 @@ list(APPEND INCLUDE
     include/okami/diligent/TextureCapture.hpp
     include/okami/diligent/FirstPersonCamera.hpp
     include/okami/diligent/Im3dGizmo.hpp
+    include/okami/diligent/Glfw.hpp
 )
 
 add_library(okami-graphics-diligent STATIC ${SOURCE} ${INCLUDE})

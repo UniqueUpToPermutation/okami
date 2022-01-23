@@ -2,26 +2,43 @@
 
 #include <okami/Graphics.hpp>
 #include <okami/Camera.hpp>
+#include <okami/Geometry.hpp>
+#include <okami/Embed.hpp>
 
 #include <DeviceContext.h>
 #include <RenderDevice.h>
 #include <SwapChain.h>
 #include <BasicMath.hpp>
+#include <RefCntAutoPtr.hpp>
 
 namespace DG = Diligent;
 
 namespace okami::graphics::diligent {
-    
-    enum class RenderPass {
-        UNKNOWN,
-        DEPTH,
-        COLOR,
-        COLOR_FINAL,
-        OVERLAY
+
+    struct GeometryImpl {
+        std::vector<DG::RefCntAutoPtr<DG::IBuffer>>
+            mVertexBuffers;
+        DG::RefCntAutoPtr<DG::IBuffer>
+            mIndexBuffer;
     };
 
+    struct TextureImpl {
+        DG::RefCntAutoPtr<DG::ITexture>
+            mTexture;
+    };
+
+    inline TextureImpl* GetTextureImpl(core::Texture* texture) {
+        return reinterpret_cast<TextureImpl*>(texture->GetBackend());
+    }
+
+    inline GeometryImpl* GetGeometryImpl(core::Geometry* geo) {
+        return reinterpret_cast<GeometryImpl*>(geo->GetBackend());
+    }
+
     struct RenderModuleParams {
-        bool bRenderEntityIds = false;
+        std::vector<RenderPass> mRequestedRenderPasses;
+        core::IVirtualFileSystem* mFileSystem = nullptr;
+        DG::RefCntAutoPtr<DG::ITexture> mDefaultTexture;
     };
 
     struct RenderModuleGlobals {
@@ -34,18 +51,35 @@ namespace okami::graphics::diligent {
         core::Camera mCamera;
         core::Time mTime;
     };
-    
+
     class IRenderModule : public IGraphicsObject {
     public:
         virtual void Startup(
-            core::ISystem* renderer, 
-            DG::IRenderDevice* device, 
-            DG::ISwapChain* swapChain,
+            core::ISystem* renderer,
+            DG::IRenderDevice* device,
             const RenderModuleParams& params) = 0;
+        virtual void Update(
+            bool bAllowBlock = false) = 0;
         virtual void QueueCommands(
-            DG::IDeviceContext* context, 
-            RenderPass pass,
+            DG::IDeviceContext* context,
+            const core::Frame& frame,
+            const RenderView& view,
+            const RenderPass& pass,
             const RenderModuleGlobals& globals) = 0;
+        virtual void WaitUntilReady(core::SyncObject& obj) = 0;
         virtual void Shutdown() = 0;
+        virtual void RegisterVertexFormats(core::VertexLayoutRegistry& registry) = 0;
+        virtual void RegisterResourceInterfaces(core::ResourceInterface& resourceInterface) = 0;
+
+        void* GetBackend() override;
+    };
+
+    class IOverlayModule : 
+        public IRenderModule, 
+        public IRenderCanvasAttachment {
+    public:
+        void* GetUserData() override final;
+        void RegisterVertexFormats(core::VertexLayoutRegistry& registry) override final;
+        void RegisterResourceInterfaces(core::ResourceInterface& resourceInterface) override final;
     };
 }

@@ -42,7 +42,7 @@ void TestBackend(GraphicsBackend backend) {
 
     systems.Add(CreateIm3d(renderer));
 
-    auto im3dInterface = systems.QueryInterface<IIm3dCallback>();
+    auto im3dInterface = systems.QueryInterface<IIm3dSystem>();
     im3dInterface->Add([]() {
         Im3d::BeginTriangles();
         Im3d::Vertex(-0.75f, -0.75f, 0.0f, Im3d::Color_Blue);

@@ -17,6 +17,7 @@ list(APPEND SOURCE
     src/Texture.cpp
     src/Material.cpp
     src/Clock.cpp
+    src/Graphics.cpp
 
     ../ext/lodepng/lodepng.cpp
 )
@@ -44,6 +45,7 @@ list(APPEND INCLUDE
     include/okami/PlatformDefs.hpp
     include/okami/BoundingBox.hpp
     include/okami/Observer.hpp
+    include/okami/Graphics.hpp
 )
 
 add_library(okami-core STATIC ${SOURCE} ${INCLUDE})

@@ -36,6 +36,7 @@ namespace okami::core {
         bool bNormalized;
         bool bLinear;
 
+        static TextureFormat UNKNOWN();
         static TextureFormat RGBA32_FLOAT();
         static TextureFormat RGBA32_UINT();
         static TextureFormat RGBA32_SINT();

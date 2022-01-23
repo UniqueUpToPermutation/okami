@@ -83,7 +83,4 @@ namespace okami::core {
             system->SetFrame(frame);
         }
     }
-
-    void ISystem::EnableInterface(const entt::meta_type&) {
-    }
 }

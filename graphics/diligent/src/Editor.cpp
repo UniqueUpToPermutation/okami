@@ -1,7 +1,7 @@
 #include <okami/diligent/Im3dGizmo.hpp>
 #include <okami/diligent/ImGuiSystem.hpp>
 #include <okami/diligent/Im3dSystem.hpp>
-#include <okami/diligent/Display.hpp>
+#include <okami/Input.hpp>
 #include <okami/diligent/Im3dGizmo.hpp>
 
 using namespace okami::core;
@@ -12,10 +12,9 @@ namespace okami::graphics::diligent {
     class EditorSystem : 
         public ISystem {
     public:
-        IGLFWWindowProvider* mGlfw;
+        IWindow* mWindow;
         IImGuiCallback* mImgui;
-        IIm3dCallback* mIm3d;
-        IEntityPick* mEntityPick;
+        IIm3dSystem* mIm3d;
         IGizmo* mGizmo;
         
         delegate_handle_t mImguiDelegate;
@@ -31,13 +30,11 @@ namespace okami::graphics::diligent {
         int mGridSize = 20;
 
         inline EditorSystem(
-            IEntityPick* entityPick,
-            IGLFWWindowProvider* glfw,
+            IWindow* window,
             IImGuiCallback* imgui,
-            IIm3dCallback* im3d,
+            IIm3dSystem* im3d,
             IGizmo* gizmo) :
-            mEntityPick(entityPick),
-            mGlfw(glfw),
+            mWindow(window),
             mImgui(imgui),
             mIm3d(im3d),
             mGizmo(gizmo) {
@@ -95,10 +92,12 @@ namespace okami::graphics::diligent {
         }
 
         void Startup(marl::WaitGroup& waitGroup) override {
-            mImguiDelegate = mImgui->Add([this]() {
+            mImguiDelegate = mImgui->Add(mWindow, 
+                [this]() {
                 RenderImGui();
             });
-            mIm3dDelegate = mIm3d->Add([this]() {
+            mIm3dDelegate = mIm3d->Add(mWindow,
+                [this]() {
                 mOnReadFinished.wait();
                 RenderIm3d();
             });
@@ -157,39 +156,29 @@ namespace okami::graphics::diligent {
 
         void Wait() override {
         }
-
-        void EnableInterface(const entt::meta_type& interfaceType) override {
-        }
     };
     
 }
 
 namespace okami::graphics {
     std::unique_ptr<ISystem> CreateEditorSystem(
-        ISystem* entityPick,
-        ISystem* input,
+        IWindow* mainWindow,
         ISystem* imgui,
         ISystem* im3d,
         ISystem* gizmo
     ) {
-        IEntityPick* _entityPick = entityPick->QueryInterface<IEntityPick>();
-        IGLFWWindowProvider* _input = input->QueryInterface<IGLFWWindowProvider>();
         IImGuiCallback* _imgui = imgui->QueryInterface<IImGuiCallback>();
-        IIm3dCallback* _im3d = im3d->QueryInterface<IIm3dCallback>();
+        IIm3dSystem* _im3d = im3d->QueryInterface<IIm3dSystem>();
         IGizmo* _gizmo = gizmo->QueryInterface<IGizmo>();
 
-        if (!_entityPick) 
-            throw std::runtime_error("entityPick does not implement IEntityPick!");
-        if (!_input)
-            throw std::runtime_error("input does not implement IGLFWWindowProvider!");
         if (!_imgui)
             throw std::runtime_error("imgui does not implement IImGuiCallback!");
         if (!_im3d)
-            throw std::runtime_error("im3d does not implement IIm3dCallback!");
+            throw std::runtime_error("im3d does not implement IIm3dSystem!");
         if (!_gizmo)
             throw std::runtime_error("gizmo does not implement IGizmo!");
 
         return std::make_unique<EditorSystem>(
-            _entityPick, _input, _imgui, _im3d, _gizmo);
+            mainWindow, _imgui, _im3d, _gizmo);
     }
 }

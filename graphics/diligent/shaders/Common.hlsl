@@ -1,6 +1,7 @@
 #ifndef BASIC_TYPES_HLSL_
 #define BASIC_TYPES_HLSL_
 
+// Input structures shared with C++ code
 struct CameraAttribs {
     float4x4 mView;
     float4x4 mViewProj;
@@ -25,7 +26,75 @@ struct StaticInstanceData {
     int mPadding2;
 };
 
+// Shader only stuff
 #if !defined(__cplusplus)
+#if !defined(COLOR_ATTRIBUTE)
+#define COLOR_ATTRIBUTE_NONE
+#define COLOR_ATTRIBUTE_ENABLED false
+#else
+#define COLOR_ATTRIBUTE_ENABLED true
+#endif
+
+#if !defined(DEPTH_ATTRIBUTE)
+#define DEPTH_ATTRIBUTE_NONE
+#define DEPTH_ATTRIBUTE_ENABLED false
+#else
+#define DEPTH_ATTRIBUTE_ENABLED true
+#endif
+
+#if !defined(ALBEDO_ATTRIBUTE)
+#define ALBEDO_ATTRIBUTE_NONE
+#define ALBEDO_ATTRIBUTE_ENABLED false
+#else
+#define ALBEDO_ATTRIBUTE_ENABLED true
+#endif
+
+#if !defined(UV_ATTRIBUTE)
+#define UV_ATTRIBUTE_NONE
+#define UV_ATTRIBUTE_ENABLED false
+#else
+#define UV_ATTRIBUTE_ENABLED true
+#endif
+
+#if !defined(NORMAL_ATTRIBUTE)
+#define NORMAL_ATTRIBUTE_NONE
+#define NORMAL_ATTRIBUTE_ENABLED false
+#else
+#define NORMAL_ATTRIBUTE_ENABLED true
+#endif
+
+#if !defined(ROUGHNESS_ATTRIBUTE)
+#define ROUGHNESS_ATTRIBUTE_NONE
+#define ROUGHNESS_ATTRIBUTE_ENABLED false
+#else
+#define ROUGHNESS_ATTRIBUTE_ENABLED true
+#endif
+
+#if !defined(METALLIC_ATTRIBUTE)
+#define METALLIC_ATTRIBUTE_NONE
+#define METALLIC_ATTRIBUTE_ENABLED false
+#else
+#define METALLIC_ATTRIBUTE_ENABLED true
+#endif
+
+#if !defined(ENTITY_ID_ATTRIBUTE)
+#define ENTITY_ID_ATTRIBUTE_NONE
+#define ENTITY_ID_ATTRIBUTE_ENABLED false
+#else
+#define ENTITY_ID_ATTRIBUTE_ENABLED true
+#endif
+
+struct PixelData {
+    float4 mColor       : COLOR_ATTRIBUTE;
+    float mDepth        : DEPTH_ATTRIBUTE;
+    float3 mAlbedo      : ALBEDO_ATTRIBUTE;
+    float2 mUV          : UV_ATTRIBUTE;
+    float3 mNormal      : NORMAL_ATTRIBUTE;
+    float3 mRoughness   : ROUGHNESS_ATTRIBUTE;
+    float3 mMetallic    : METALLIC_ATTRIBUTE;
+    int mEntity         : ENTITY_ID_ATTRIBUTE;
+};
+
 #if defined(SHADERED)
 float4 apply(float4x4 mat, float4 vec) {
     return mul(vec, mat);

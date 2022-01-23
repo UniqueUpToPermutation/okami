@@ -1,108 +1,366 @@
 #include <okami/diligent/ImGuiSystem.hpp>
-#include <okami/diligent/Display.hpp>
+#include <okami/diligent/GraphicsUtils.hpp>
 
 #include <ImGuiImplDiligent.hpp>
+#include <ImGuiDiligentRenderer.hpp>
 #include <backends/imgui_impl_glfw.h>
+
+using namespace okami::core;
 
 namespace okami::graphics::diligent {
 
+    static const char* ImGui_ImplOkami_GetClipboardText(void* user_data) {
+        return reinterpret_cast<ImGuiRenderOverlay::ImGuiImpl*>
+            (user_data)->mWindow->GetClipboardText();
+    }
+
+    static void ImGui_ImplOkami_SetClipboardText(void* user_data, const char* text) {
+        reinterpret_cast<ImGuiRenderOverlay::ImGuiImpl*>
+            (user_data)->mWindow->SetClipboardText(text);
+    }
+
+    void ImGuiRenderOverlay::ImGuiImpl::MouseButtonCallback(
+        core::MouseButton button, 
+        core::KeyAction action,
+        core::KeyModifiers mods) {
+
+        if (action == core::KeyAction::PRESS && 
+                (int)button >= 0 && 
+                (int)button < mMouseJustPressed.size()) {
+            mMouseJustPressed[(int)button] = true;
+        }
+    }
+
+    void ImGuiRenderOverlay::ImGuiImpl::ScrollCallback(
+        double xoffset, 
+        double yoffset) {
+        mIO.MouseWheelH += (float)xoffset;
+        mIO.MouseWheel += (float)yoffset;
+    }
+
+    void ImGuiRenderOverlay::ImGuiImpl::KeyCallback(
+        core::Key key,
+        int scancode,
+        core::KeyAction action,
+        core::KeyModifiers mods) {
+
+        ImGuiIO& io = mIO;
+        if (action == core::KeyAction::PRESS)
+            io.KeysDown[(int)key] = true;
+        if (action == core::KeyAction::RELEASE)
+            io.KeysDown[(int)key] = false;
+
+        // Modifiers are not reliable across systems
+        io.KeyCtrl = io.KeysDown[(int)core::Key::LEFT_CONTROL] 
+            || io.KeysDown[(int)core::Key::RIGHT_CONTROL];
+        io.KeyShift = io.KeysDown[(int)core::Key::LEFT_SHIFT] 
+            || io.KeysDown[(int)core::Key::RIGHT_SHIFT];
+        io.KeyAlt = io.KeysDown[(int)core::Key::LEFT_ALT] 
+            || io.KeysDown[(int)core::Key::RIGHT_ALT];
+#ifdef _WIN32
+        io.KeySuper = false;
+#else
+        io.KeySuper = io.KeysDown[(int)core::Key::LEFT_SUPER] 
+            || io.KeysDown[(int)core::Key::RIGHT_SUPER];
+#endif
+    }
+
+    void ImGuiRenderOverlay::ImGuiImpl::CharCallback(unsigned int c) {
+        ImGuiIO& io = mIO;
+        io.AddInputCharacter(c);
+    }
+
+    void ImGuiRenderOverlay::ImGuiImpl::NewFrame(const core::Time& time) {
+        ImGuiIO& io = mIO;
+        IM_ASSERT(io.Fonts->IsBuilt() && "Font atlas not built! It is generally built by the renderer backend. Missing call to renderer _NewFrame() function? e.g. ImGui_ImplOpenGL3_NewFrame().");
+
+        // Setup display size (every frame to accommodate for window resizing)
+        int w, h;
+        int display_w, display_h;
+
+        auto win_size = mWindow->GetWindowSize();
+        auto frame_size = mWindow->GetFramebufferSize();
+
+        io.DisplaySize = ImVec2((float)win_size.x, (float)win_size.y);
+        if (w > 0 && h > 0)
+            io.DisplayFramebufferScale = ImVec2(
+                (float)frame_size.x / win_size.x, 
+                (float)frame_size.y / win_size.y);
+
+        // Setup time step
+        double current_time = glfwGetTime();
+        io.DeltaTime = time.mTimeElapsed;
+        mTime = time.mTotalTime;
+
+        UpdateMousePosAndButtons();
+        UpdateMouseCursor();
+
+        // Update game controllers (if enabled and available)
+        UpdateGamepads();
+    }
+
+    ImGuiRenderOverlay::ImGuiImpl::ImGuiImpl(
+        IWindow* window) : 
+        mWindow(window) {
+        
+        ImGuiIO& io = mIO;
+
+        io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;         // We can honor GetMouseCursor() values (optional)
+        io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;          // We can honor io.WantSetMousePos requests (optional, rarely used)
+        io.BackendPlatformName = "imgui_impl_okami";
+
+        // Keyboard mapping. ImGui will use those indices to peek into the io.KeysDown[] array.
+        io.KeyMap[ImGuiKey_Tab] = (int)core::Key::TAB;
+        io.KeyMap[ImGuiKey_LeftArrow] = (int)core::Key::LEFT;
+        io.KeyMap[ImGuiKey_RightArrow] = (int)core::Key::RIGHT;
+        io.KeyMap[ImGuiKey_UpArrow] = (int)core::Key::UP;
+        io.KeyMap[ImGuiKey_DownArrow] = (int)core::Key::DOWN;
+        io.KeyMap[ImGuiKey_PageUp] = (int)core::Key::PAGE_UP;
+        io.KeyMap[ImGuiKey_PageDown] = (int)core::Key::PAGE_DOWN;
+        io.KeyMap[ImGuiKey_Home] = (int)core::Key::HOME;
+        io.KeyMap[ImGuiKey_End] = (int)core::Key::END;
+        io.KeyMap[ImGuiKey_Insert] = (int)core::Key::INSERT;
+        io.KeyMap[ImGuiKey_Delete] = (int)core::Key::DELETE;
+        io.KeyMap[ImGuiKey_Backspace] = (int)core::Key::BACKSPACE;
+        io.KeyMap[ImGuiKey_Space] = (int)core::Key::SPACE;
+        io.KeyMap[ImGuiKey_Enter] = (int)core::Key::ENTER;
+        io.KeyMap[ImGuiKey_Escape] = (int)core::Key::ESCAPE;
+        io.KeyMap[ImGuiKey_KeyPadEnter] = (int)core::Key::NUMPAD_ENTER;
+        io.KeyMap[ImGuiKey_A] = (int)core::Key::A;
+        io.KeyMap[ImGuiKey_C] = (int)core::Key::C;
+        io.KeyMap[ImGuiKey_V] = (int)core::Key::V;
+        io.KeyMap[ImGuiKey_X] = (int)core::Key::X;
+        io.KeyMap[ImGuiKey_Y] = (int)core::Key::Y;
+        io.KeyMap[ImGuiKey_Z] = (int)core::Key::Z;
+
+        io.SetClipboardTextFn = ImGui_ImplOkami_SetClipboardText;
+        io.GetClipboardTextFn = ImGui_ImplOkami_GetClipboardText;
+        io.ClipboardUserData = this;
+        io.ImeWindowHandle = mWindow->GetWin32Window();
+        io.FontGlobalScale = mWindow->GetContentScale();
+
+        mContext = ImGui::CreateContext();
+
+        mMouseButtonCallbackHandle = mWindow->AddMouseButtonCallback(
+            [this](IInputProvider* input, 
+                core::MouseButton button, 
+                core::KeyAction action,
+                core::KeyModifiers mods) {
+            
+            MouseButtonCallback(button, action, mods);
+            return ImGui::GetIO().WantCaptureMouse;
+        }, CallbackPriority::GUI, this);
+
+        mMouseButtonScrollHandle = mWindow->AddScrollCallback(
+            [this](IInputProvider* input,
+                double xoffset, 
+                double yoffset) {
+            
+            ScrollCallback(xoffset, yoffset);
+            return ImGui::GetIO().WantCaptureMouse;
+        }, CallbackPriority::GUI, this);
+
+        mKeyHandle = mWindow->AddKeyCallback(
+            [this](IInputProvider* input,
+                core::Key key,
+                int scancode,
+                core::KeyAction action,
+                core::KeyModifiers mods) {
+
+            KeyCallback(key, scancode, action, mods);
+            return ImGui::GetIO().WantCaptureKeyboard;
+        }, CallbackPriority::GUI, this);
+
+        mCharHandle = mWindow->AddCharCallback(
+            [this](IInputProvider* input,
+                unsigned int codepoint) {
+
+            CharCallback(codepoint);
+            return ImGui::GetIO().WantCaptureKeyboard;
+        }, CallbackPriority::GUI, this);
+    }
+
+    ImGuiRenderOverlay::ImGuiImpl::~ImGuiImpl() {
+        mWindow->RemoveMouseButtonCallback(mMouseButtonCallbackHandle);
+        mWindow->RemoveScrollCallback(mMouseButtonScrollHandle);
+        mWindow->RemoveKeyCallback(mKeyHandle);
+        mWindow->RemoveCharCallback(mCharHandle);
+
+        ImGui::DestroyContext(mContext);
+    }
+
     void ImGuiRenderOverlay::Startup(
         core::ISystem* renderer,
-        DG::IRenderDevice* device, 
-        DG::ISwapChain* swapChain,
+        DG::IRenderDevice* device,
         const RenderModuleParams& params) {
-        auto rtv = swapChain->GetCurrentBackBufferRTV();
-        auto dsv = swapChain->GetDepthBufferDSV();
 
-        mImGuiImpl = std::make_unique<DG::ImGuiImplDiligent>(device, 
-            rtv->GetDesc().Format, dsv->GetDesc().Format);
-        mSurfaceTransform = swapChain->GetDesc().PreTransform;
+        auto rendererInterface = renderer->QueryInterface<IRenderer>();
+
+        if (rendererInterface == nullptr) {
+            throw std::runtime_error("Renderer does not implement IRenderer!");
+        }        
+
+        auto rtFormat = ToDiligent(
+            rendererInterface->GetFormat(RenderAttribute::COLOR));
+        auto dsvFormat = ToDiligent(
+            rendererInterface->GetDepthFormat(RenderPass::Final()));
+
+        mRenderer = std::make_unique<DG::ImGuiDiligentRenderer>(
+            device, 
+            rtFormat, 
+            dsvFormat,
+            DefaultInitialVBSize,
+            DefaultInitialIBSize);
+
+        mRenderer->CreateDeviceObjects();
+        mRenderer->CreateFontsTexture();
     }
 
     void ImGuiRenderOverlay::QueueCommands(
         DG::IDeviceContext* context, 
-        RenderPass pass,
+        const core::Frame& frame,
+        const RenderView& view,
+        const RenderPass& pass,
         const RenderModuleGlobals& globals) {
-        assert(pass == RenderPass::OVERLAY);
+        assert(pass.IsFinal());
 
         mRenderReady.wait();
-        mImGuiImpl->Render(context);
-        mRenderFinished.signal();
+
+        for (auto& [key, impl] : mImGuiImpls) {
+            auto canvas = impl->mWindow->GetCanvas();
+
+            ImGui::SetCurrentContext(impl->mContext);
+
+            auto size = canvas->GetSize();
+            mRenderer->NewFrame(
+                size.mWidth, 
+                size.mHeight, 
+                ToDiligent(size.mTransform));
+            mRenderer->RenderDrawData(context, ImGui::GetDrawData());
+            mRenderer->EndFrame();
+        }
     }
     
     void ImGuiRenderOverlay::Shutdown() {
-        mImGuiImpl.reset();
+        mRenderer.reset();
     }
 
-    ImGuiSystem::ImGuiSystem(IRenderer* renderer, core::ISystem* input) :
-        mRenderer(renderer), 
-        mInputSystem(input) {
+    void ImGuiRenderOverlay::UpdateCanvas(ImGuiImpl* impl, const Time& time) {
+        impl->mWindow->WaitForInput();
 
-        mRenderer->AddOverlay(&mOverlay);
+        ImGui::SetCurrentContext(impl->mContext);
+        ImGui::GetIO() = impl->mIO;
+
+        impl->NewFrame(time);
+
+        ImGui::NewFrame();
+        mOnGenerateRenderLists.InvokeOnly(impl->mWindow);
+        ImGui::EndFrame();
+    }
+
+    void ImGuiRenderOverlay::UpdateAllCanvases(const Time& time) {
+        for (auto& [key, impl] : mImGuiImpls) {
+            UpdateCanvas(impl.get(), time);
+        }
+    }
+
+    void ImGuiRenderOverlay::AddWindow(
+        IWindow* window) {
+
+        if (mImGuiImpls.find(window) != mImGuiImpls.end()) {
+            throw std::runtime_error("Overlay has already been attached to canvas!");
+        }
+        
+        auto impl = std::make_unique<ImGuiImpl>(window);
+        mImGuiImpls.emplace(window, std::move(impl));
+    }
+
+    void ImGuiRenderOverlay::RemoveWindow(
+        IWindow* window) {
+
+        mImGuiImpls.erase(window);
+        mOnGenerateRenderLists.RemoveAll(window);
+    }
+
+    core::delegate_handle_t ImGuiRenderOverlay::AddCallback(
+        IWindow* window, 
+        immedate_callback_t callback) {
+        
+#ifndef NDEBUG
+        auto it = mImGuiImpls.find(window);
+
+        if (it == mImGuiImpls.end()) {
+            throw std::runtime_error("The ImGuiSystem must first " 
+                "be attached to the designated render canvas!");
+        }
+#endif
+
+        return mOnGenerateRenderLists.Add(window, std::move(callback));
+    }
+
+    void ImGuiRenderOverlay::RemoveCallback(
+        core::delegate_handle_t handle) {
+        mOnGenerateRenderLists.Remove(handle);
+    }
+
+    ImGuiSystem::ImGuiSystem(
+        IDisplay* display,
+        IRenderer* renderer) :
+        mDisplay(display),
+        mRenderer(renderer) {
+    }
+
+    ImGuiSystem::ImGuiSystem(
+        IDisplay* display,
+        IRenderer* renderer, 
+        IWindow* window) : 
+        ImGuiSystem(display, renderer) {
+        mOverlay.AddWindow(window);
     }
 
     ImGuiSystem::~ImGuiSystem() {
         mRenderer->RemoveOverlay(&mOverlay);
     }
 
-    core::delegate_handle_t ImGuiSystem::Add(immedate_callback_t callback) {
-        return mOnUpdate.Add(std::move(callback));
+    core::delegate_handle_t ImGuiSystem::Add(
+        IWindow* window, 
+        immedate_callback_t callback) {
+        return mOverlay.AddCallback(window, std::move(callback));
     }
 
-    void ImGuiSystem::Remove(core::delegate_handle_t handle) {
-        mOnUpdate.Remove(handle);
+    void ImGuiSystem::AddOverlayTo(IWindow* window) {
+        mOverlay.AddWindow(window);
+        window->GetCanvas()->AddOverlay(&mOverlay);
+    }
+
+    void ImGuiSystem::Remove(
+        core::delegate_handle_t handle) {
+        mOverlay.RemoveCallback(handle);
     }
 
     void ImGuiSystem::Startup(marl::WaitGroup& waitGroup) {
-        core::InterfaceCollection interfaces;
-        mInputSystem->RegisterInterfaces(interfaces);
-
-        auto glfwInterface = interfaces.Query<IGLFWWindowProvider>();
-
-        if (glfwInterface) {
-            // For high DPI stuff
-            float xscale, yscale;
-            glfwGetWindowContentScale(glfwInterface->GetWindowGLFW(), &xscale, &yscale);
-            ImGui::GetIO().FontGlobalScale = glfwInterface->GetContentScale();
-
-            // We have a glfw display!
-            ImGui_ImplGlfw_InitForOther(glfwInterface->GetWindowGLFW(), false);
-
-            mMouseButtonCallbackHandle = glfwInterface->AddMouseButtonCallback(
-                [](GLFWwindow* window, int button, int action, int mods) {
-                
-                ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
-                return ImGui::GetIO().WantCaptureMouse;
-            }, CallbackPriority::GUI, this);
-
-            mMouseButtonScrollHandle = glfwInterface->AddScrollCallback(
-                [](GLFWwindow* window, double xoffset, double yoffset) {
-                
-                ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
-                return ImGui::GetIO().WantCaptureMouse;
-            }, CallbackPriority::GUI, this);
-
-            mKeyHandle = glfwInterface->AddKeyCallback(
-                [](GLFWwindow* window, int key, int scancode, int action, int mods) {
-
-                ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
-                return ImGui::GetIO().WantCaptureKeyboard;
-            }, CallbackPriority::GUI, this);
-
-            mCharHandle = glfwInterface->AddCharCallback(
-                [](GLFWwindow* window, unsigned int codepoint) {
-
-                ImGui_ImplGlfw_CharCallback(window, codepoint);
-                return ImGui::GetIO().WantCaptureKeyboard;
-            }, CallbackPriority::GUI, this);
-
-            mWaitForInput = [glfwInterface]() {
-                glfwInterface->WaitForInput();
-            };
-
-        } else {
-            throw std::runtime_error("Input system does not implement any supported interfaces!");
-        }
+        // Create mouse cursors
+        // (By design, on X11 cursors are user configurable and some cursors may be missing. When a cursor doesn't exist,
+        // GLFW will emit an error which will often be printed by the app, so we temporarily disable error reporting.
+        // Missing cursors will return NULL and our _UpdateMouseCursor() function will use the Arrow cursor instead.)
+        mMouseCursors[ImGuiMouseCursor_Arrow] = 
+            mDisplay->CreateStandardCursor(StandardCursor::ARROW);
+        mMouseCursors[ImGuiMouseCursor_TextInput] = 
+            mDisplay->CreateStandardCursor(StandardCursor::IBEAM);
+        mMouseCursors[ImGuiMouseCursor_ResizeNS] = 
+            mDisplay->CreateStandardCursor(StandardCursor::VRESIZE);
+        mMouseCursors[ImGuiMouseCursor_ResizeEW] = 
+            mDisplay->CreateStandardCursor(StandardCursor::HRESIZE);
+        mMouseCursors[ImGuiMouseCursor_Hand] =
+            mDisplay->CreateStandardCursor(StandardCursor::HAND);
+        mMouseCursors[ImGuiMouseCursor_ResizeAll] =
+            mDisplay->CreateStandardCursor(StandardCursor::RESIZE_ALL);
+        mMouseCursors[ImGuiMouseCursor_ResizeNESW] =
+            mDisplay->CreateStandardCursor(StandardCursor::RESIZE_NESW);
+        mMouseCursors[ImGuiMouseCursor_ResizeNWSE] = 
+            mDisplay->CreateStandardCursor(StandardCursor::RESIZE_NWSE);
+        mMouseCursors[ImGuiMouseCursor_NotAllowed] = 
+            mDisplay->CreateStandardCursor(StandardCursor::NOT_ALLOWED);
     }
 
     void ImGuiSystem::RegisterInterfaces(core::InterfaceCollection& interfaces) {
@@ -110,87 +368,59 @@ namespace okami::graphics::diligent {
     }
 
     void ImGuiSystem::Shutdown() {
-        core::InterfaceCollection interfaces;
-        mInputSystem->RegisterInterfaces(interfaces);
-
-        auto glfwInterface = interfaces.Query<IGLFWWindowProvider>();
-
-        if (glfwInterface) {
-            glfwInterface->RemoveMouseButtonCallback(mMouseButtonCallbackHandle);
-            glfwInterface->RemoveScrollCallback(mMouseButtonScrollHandle);
-            glfwInterface->RemoveKeyCallback(mKeyHandle);
-            glfwInterface->RemoveCharCallback(mCharHandle);
-
-            // We have a glfw display!
-            ImGui_ImplGlfw_Shutdown();
-
-        } else {
-            throw std::runtime_error("Input system does not implement any supported interfaces!");
+        for (auto& cursor : mMouseCursors) {
+            mDisplay->DestroyCursor(cursor);
+            cursor = nullptr;
         }
-
-        mWaitForInput = nullptr;
     }
 
     void ImGuiSystem::LoadResources(marl::WaitGroup& waitGroup) {
     }
+
     void ImGuiSystem::SetFrame(core::Frame& frame) {
     }
+
     void ImGuiSystem::RequestSync(core::SyncObject& syncObject) {
+        mOverlay.mRenderReady.clear();
     }
+
     void ImGuiSystem::Fork(core::Frame& frame, 
         core::SyncObject& syncObject,
         const core::Time& time) {
 
-        mOverlay.mRenderReady.clear();
         marl::schedule([
-            renderer = mRenderer,
-            &update = mOnUpdate,
-            &overlay = mOverlay,
-            inputWait = mWaitForInput]() {
+            time,
+            &overlay = mOverlay]() {
             defer(overlay.mRenderReady.signal());
 
-            if (inputWait)
-                inputWait();
-
-            auto size = renderer->GetRenderArea();
-
-            ImGui::GetIO().DisplaySize = ImVec2(size.x, size.y);
-            ImGui_ImplGlfw_NewFrame();
-            overlay.mImGuiImpl->NewFrame(size.x, size.y, overlay.mSurfaceTransform);
-            update();
-            overlay.mImGuiImpl->EndFrame();
+            overlay.UpdateAllCanvases(time);
         });
     }
 
     void ImGuiSystem::Wait() {
-        mOverlay.mRenderFinished.wait();
+        mOverlay.mRenderReady.wait();
     }
 
     void ImGuiSystem::Join(core::Frame& frame) {
         Wait();
     }
-
-    bool ImGuiSystem::ShouldCaptureMouse() const {
-        return ImGui::GetIO().WantCaptureMouse;
-    }  
-    bool ImGuiSystem::ShouldCaptureKeyboard() const {
-        return ImGui::GetIO().WantCaptureKeyboard;
-    }
 }
 
 namespace okami::graphics {
     std::unique_ptr<core::ISystem> CreateImGui(
-        core::ISystem* renderer,
-        core::ISystem* input) {
+        IDisplay* display,
+        IRenderer* renderer, 
+        IWindow* window) {
 
-        core::InterfaceCollection interfaces(renderer);
-        auto rendererInterface = interfaces.Query<IRenderer>();
+        return std::make_unique<diligent::ImGuiSystem>(
+            display, renderer, window);
+    }
 
-        if (!rendererInterface) {
-            throw std::runtime_error("Renderer system does not expose "
-                "IRenderer interface!");
-        }
+    std::unique_ptr<core::ISystem> CreateImGui(
+        IDisplay* display,
+        IRenderer* renderer) {
 
-        return std::make_unique<diligent::ImGuiSystem>(rendererInterface, input);
+        return std::make_unique<diligent::ImGuiSystem>(
+            display, renderer);
     }
 }

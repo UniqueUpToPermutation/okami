@@ -7,7 +7,7 @@
 
 #include <okami/PlatformDefs.hpp>
 
-namespace okami::core {
+namespace okami {
     typedef int64_t ref_count_t;
 	typedef int64_t resource_id_t;
 
@@ -41,7 +41,9 @@ namespace okami::core {
 			mBackend = value;
 		}
 
-        inline Resource() = default;
+        inline Resource() : 
+			mOnLoad(marl::Event::Mode::Manual) {
+		}
 		inline Resource(const Resource& other) : 
 			Resource() {
 			assert(other.mBackend == nullptr);

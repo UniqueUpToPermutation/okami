@@ -27,8 +27,72 @@ namespace okami::core {
         }
 
         inline void operator()(_ArgTypes... __args) {
-            for (auto &[key, value] : mMap) {
+            for (auto& [key, value] : mMap) {
                 value(__args...);
+            }
+        }
+    };
+
+    template<typename UserData, typename... _ArgTypes>
+    class UserDataEvent {
+    private:
+        struct Entry {
+            delegate_handle_t mHandle;
+            std::function<void(_ArgTypes...)> mFunc;
+            UserData mData;
+        };
+
+        std::unordered_multimap<UserData, Entry> mEntries;
+        std::unordered_map<delegate_handle_t,
+            typename std::unordered_multimap<UserData, Entry>::iterator> 
+                mHandleToIt;
+
+        delegate_handle_t mCurrentHandle = 0;
+
+    public:
+        inline delegate_handle_t Add(UserData data, std::function<void(_ArgTypes...)> function) {
+            mCurrentHandle++;
+
+            Entry e;
+            e.mHandle = mCurrentHandle;
+            e.mFunc = std::move(function);
+            e.mData = data;
+
+            auto it = mEntries.emplace(data, std::move(e));
+            mHandleToIt.emplace(e.mHandle, it);
+            return mCurrentHandle;
+        }
+
+        inline void Remove(delegate_handle_t handle) {
+            auto it = mHandleToIt.find(handle);
+
+            if (it != mHandleToIt.end()) {
+                mEntries.erase(it->second);
+                mHandleToIt.erase(it);
+            }
+        }
+
+        inline void RemoveAll(UserData data) {
+            auto range = mEntries.equal_range(data);
+
+            for (auto it = range.first; it != range.second; ++it) {
+                mHandleToIt.erase(it->second.mHandle);
+                mEntries.erase(it);
+            }
+        }
+
+        inline void operator()(_ArgTypes... __args) {
+            for (auto& [data, e] : mEntries) {
+                e.mFunc(__args...);
+            }
+        }
+
+        inline void InvokeOnly(UserData data, _ArgTypes... __args) {
+            auto range = mEntries.equal_range(data);
+
+            for (auto it = range.first; it != range.second; ++it) {
+                auto& e = it->second;
+                e.mFunc(std::forward<_ArgTypes>(__args)...);
             }
         }
     };

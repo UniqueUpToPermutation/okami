@@ -14,7 +14,8 @@
 namespace okami::core {
 
     template <typename T>
-    struct LoadParams;
+    struct LoadParams {
+    };
 
     class IResourceManagerAbstract {
     public:

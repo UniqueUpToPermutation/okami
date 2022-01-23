@@ -11,6 +11,10 @@ namespace okami::graphics::diligent {
 
 	std::string ShaderPreprocessorConfig::Stringify(const ShaderPreprocessorConfig* overrides) const {
 		std::stringstream ss;
+
+		for (auto& it : mHeaderItems) {
+			ss << it << std::endl << std::endl;
+		}
 	
 		for (auto& it : mDefines) {
 			ss << "#define " << it.first << " " << it.second << std::endl;
@@ -21,6 +25,8 @@ namespace okami::graphics::diligent {
 				ss << "#define " << it.first << " " << it.second << std::endl;
 			}
 		}
+
+		ss << std::endl << std::endl;
 		return ss.str();
 	}
 

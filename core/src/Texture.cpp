@@ -11,6 +11,12 @@ using namespace entt;
 
 namespace okami::core {
 
+	TextureFormat TextureFormat::UNKNOWN() {
+		return TextureFormat{
+			0, ValueType::UNDEFINED, false, false
+		};
+	}
+
 	TextureFormat TextureFormat::RGBA32_FLOAT() {
 		return TextureFormat{
 			4, ValueType::FLOAT32, false, true

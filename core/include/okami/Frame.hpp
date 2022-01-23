@@ -176,6 +176,9 @@ namespace okami::core {
 		inline entt::registry& Registry() {
 			return mRegistry;
 		}
+		inline const entt::registry& Registry() const {
+			return mRegistry;
+		}
 		inline entt::entity GetRoot() const {
 			return mRoot;
 		}

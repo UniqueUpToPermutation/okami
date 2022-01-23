@@ -5,9 +5,13 @@
 #include <okami/Material.hpp>
 
 namespace okami::core {
+
+    class StaticMeshMaterial : public BaseMaterial {
+    };
+
     struct StaticMesh {
         Handle<Geometry> mGeometry;
-        Handle<BaseMaterial> mMaterial;
+        Handle<StaticMeshMaterial> mMaterial;
     };
 
     struct Sprite {

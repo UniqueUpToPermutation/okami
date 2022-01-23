@@ -3,9 +3,10 @@
 #include <okami/System.hpp>
 #include <okami/Graphics.hpp>
 #include <okami/Event.hpp>
-#include <okami/diligent/Display.hpp>
+#include <okami/Input.hpp>
 #include <okami/diligent/RenderModule.hpp>
 #include <okami/diligent/Im3dModule.hpp>
+#include <okami/diligent/Im3dGizmo.hpp>
 
 #include <RefCntAutoPtr.hpp>
 #include <im3d.h>
@@ -32,72 +33,115 @@ namespace okami::graphics::diligent {
     }
 
     class Im3dRenderOverlay final :
-        public IRenderModule {
+        public IOverlayModule {
     public:
         DG::SURFACE_TRANSFORM mSurfaceTransform;
-        bool bDraw = false;
-        
+
+        struct CanvasImpl : public core::IInputCapture {
+            RenderCanvas* mCanvas = nullptr;
+            core::IInputProvider* mInput = nullptr;
+
+            Im3d::Context mContext;
+            Im3d::Context mContextNoDepth;
+
+            core::delegate_handle_t mKeyHandler = 0;
+            core::delegate_handle_t mMousePosHandler = 0;
+            core::delegate_handle_t mMouseButtonHandler = 0;
+
+            Im3d::AppData mAppData;
+            RenderModuleGlobals mLastFrameGlobals;
+
+            double mScale = 0.0;
+
+            struct InputCache {
+                double mMousePosX;
+                double mMousePosY;
+            } mInputCache;
+
+            bool ShouldCaptureMouse() const override;
+            bool ShouldCaptureKeyboard() const override;
+
+            ~CanvasImpl();
+        };
+
+        core::UserDataEvent<RenderCanvas*> mOnUpdate;
+        core::UserDataEvent<RenderCanvas*> mOnUpdateNoDepth;
+
+        std::unordered_map<RenderCanvas*,
+            std::unique_ptr<CanvasImpl>> mCanvasInfos;
+
         Im3dShaders mShaders;
         Im3dPipeline mPipeline;
         Im3dPipeline mPipelineNoDepth;
         Im3dModule mModule;
+
         marl::Event mRenderReady;
-        marl::Event mRenderFinished;
 
-        Im3d::Context* mContext;
-        Im3d::Context* mContextNoDepth;
-
-        RenderModuleGlobals mLastFrameGlobals;
-
-        Im3dRenderOverlay(Im3d::Context* context,
-            Im3d::Context* contextNoDepth);
+        void UpdateCanvas(CanvasImpl& canvas);
+        void UpdateAllCanvases();
 
         void Startup(
             core::ISystem* renderer,
-            DG::IRenderDevice* device, 
-            DG::ISwapChain* swapChain,
+            DG::IRenderDevice* device,
             const RenderModuleParams& params) override;
         void QueueCommands(
-            DG::IDeviceContext* context, 
-            RenderPass pass,
+            DG::IDeviceContext* context,
+            const core::Frame& frame,
+            const RenderView& view,
+            const RenderPass& pass,
             const RenderModuleGlobals& globals) override;
         void Shutdown() override;
+        void AddCanvas(
+            RenderCanvas* canvas, 
+            core::IInputProvider* input,
+            double scale);
+        void RemoveCanvas(RenderCanvas* canvas);
+
+        core::delegate_handle_t AddCallback(
+            RenderCanvas* canvas,
+            core::IInputProvider* input,
+            immedate_callback_t callback);
+        core::delegate_handle_t AddNoDepthCallback(
+            RenderCanvas* canvas,
+            core::IInputProvider* input, 
+            immedate_callback_t callback);
+
+        void OnAttach(RenderCanvas* canvas) override;
+        void OnDettach(RenderCanvas* canvas) override;
+
+        void Update(bool bAllowBlock = false) override;
+        void WaitUntilReady(core::SyncObject& obj) override;
+
+        Im3dRenderOverlay();
     };
 
     class Im3dSystem final :
         public core::ISystem,
-        public IIm3dCallback,
-        public IInputCapture {
+        public IIm3dSystem {
     private:
         Im3dRenderOverlay mOverlay;
+        Im3dGizmo mGizmo;
         IRenderer* mRenderer = nullptr;
-        IGLFWWindowProvider* mInput = nullptr;
-        core::Event<> mOnUpdate;
-        core::Event<> mOnUpdateNoDepth;
-
-        core::delegate_handle_t mKeyHandler;
-        core::delegate_handle_t mMousePosHandler;
-        core::delegate_handle_t mMouseButtonHandler;
-
-        Im3d::Context mContext;
-        Im3d::Context mContextNoDepth;
-        Im3d::AppData mAppData;
-
-        double mScale = 0.0;
-
-        struct InputCache {
-            double mMousePosX;
-            double mMousePosY;
-        } mInputCache;
+        double mScale = 1.0;
 
     public:
         Im3dSystem(IRenderer* renderer);
-        Im3dSystem(IRenderer* renderer, IGLFWWindowProvider* input);
+        Im3dSystem(IRenderer* renderer, 
+            IWindow* window);
+        Im3dSystem(IRenderer* renderer,
+            core::IInputProvider* input,
+            RenderCanvas* canvas);
         ~Im3dSystem();
 
-        core::delegate_handle_t Add(immedate_callback_t callback) override;
-        core::delegate_handle_t 
-            AddNoDepth(immedate_callback_t callback) override;
+        core::delegate_handle_t Add(
+            RenderCanvas* canvas, 
+            core::IInputProvider* input,
+            immedate_callback_t callback) override;
+        core::delegate_handle_t AddNoDepth(
+            RenderCanvas* canvas,
+            core::IInputProvider* input,
+            immedate_callback_t callback) override;
+
         void Remove(core::delegate_handle_t handle) override;
 
         void Startup(marl::WaitGroup& waitGroup) override;
@@ -112,8 +156,7 @@ namespace okami::graphics::diligent {
         void Join(core::Frame& frame) override;
         void Wait() override;
 
-        bool SupportsInput() const override;
-        bool ShouldCaptureMouse() const override;
-        bool ShouldCaptureKeyboard() const override;
+        void AttachTo(RenderCanvas* canvas, core::IInputProvider* provider);
+        void DettachFrom(RenderCanvas* canvas);
     };
 }

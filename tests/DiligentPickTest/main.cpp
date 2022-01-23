@@ -99,7 +99,7 @@ void TestBackend(GraphicsBackend backend) {
         systems.SetFrame(frame);
         systems.LoadResources();
 
-        auto im3dInterface = systems.QueryInterface<IIm3dCallback>();
+        auto im3dInterface = systems.QueryInterface<IIm3dSystem>();
         im3dInterface->Add([&selectedEntity, &frame, &geo]() {
             if (selectedEntity != entt::null &&
                 selectedEntity != entt::entity(0)) {
