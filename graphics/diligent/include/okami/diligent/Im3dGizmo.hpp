@@ -38,12 +38,7 @@ namespace okami::graphics::diligent {
         core::UpdaterWaits<core::Transform,
             GizmoSelectTag> mWaits;
 
-        core::delegate_handle_t mIm3dHandle;
-        core::delegate_handle_t mMousePosHandle;
-
         GizmoSelectionMode mMode = GizmoSelectionMode::TRANSLATION;
-
-        IIm3dSystem* mIm3dInterface;
 
         Im3d::Id mId;
 

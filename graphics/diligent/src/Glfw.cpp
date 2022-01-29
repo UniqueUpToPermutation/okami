@@ -505,9 +505,9 @@ namespace okami::graphics::diligent {
 
     DisplayGLFW::DisplayGLFW(
         core::ResourceInterface* resources,
-        const RealtimeGraphicsParams& params) : 
-        mResources(resources), 
-        mParams(params) {
+        const RealtimeGraphicsParams& params) :  
+        mParams(params),
+        mResources(resources) {
     }
 
     ICursor* DisplayGLFW::CreateStandardCursor(StandardCursor cursor) {
@@ -652,9 +652,11 @@ namespace okami::graphics::diligent {
         core::SyncObject& syncObject,
         const core::Time& time) {
 
-        for (auto& window : mWindows) {
-            if (window.second->IsClosed()) {
-                mWindows.erase(window.first);
+        for (auto it = mWindows.begin(); it != mWindows.end();) {
+            auto current = it++;
+
+            if (current->second->IsClosed()) {
+                mWindows.erase(current);
             }
         }
         

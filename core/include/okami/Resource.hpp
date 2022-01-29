@@ -11,6 +11,10 @@ namespace okami {
     typedef int64_t ref_count_t;
 	typedef int64_t resource_id_t;
 
+	namespace core {
+		class ResourceInterface;
+	}
+
     class Resource {
     private:
 		resource_id_t mId = -1;
@@ -44,6 +48,7 @@ namespace okami {
         inline Resource() : 
 			mOnLoad(marl::Event::Mode::Manual) {
 		}
+
 		inline Resource(const Resource& other) : 
 			Resource() {
 			assert(other.mBackend == nullptr);
@@ -65,9 +70,14 @@ namespace okami {
 		}
 
 		virtual entt::meta_type GetType() const = 0;
+
+		friend class core::ResourceInterface;
     };
 
-	typedef void(*resource_destructor_t)(void* owner, Resource* object);
+	template <typename T, bool isWeak=false>
+	class Handle;
+
+	typedef void(*resource_destructor_t)(void* owner, Handle<Resource, true> object);
 
 	struct RefCountWrapper {
 		std::atomic<ref_count_t> mRefCount = 1;
@@ -78,35 +88,28 @@ namespace okami {
 			++mRefCount;
 		}
 
-		void Release(Resource* object) {
-			auto value = mRefCount.fetch_sub(1);
-
-			if (value == 1) {
-				if (mOwner) {
-					mDestructor(mOwner, object);
-				} else {
-					delete object;
-				}
-
-				delete this;
-			}
-		}
+		void Release(Handle<Resource, true> object);
 
 		RefCountWrapper(void* owner, resource_destructor_t destructor) :
 			mOwner(owner), mDestructor(std::move(destructor)) {
 		}
 	};
 
-    template <typename T>
+    template <typename T, bool isWeak>
 	class Handle {
 	private:
 		T* mResource;
 		RefCountWrapper* mRefCounter;
 		
 	public:
-		inline Handle(T&& resource) : 
-			mResource(new T(std::move(resource))),
-			mRefCounter(new RefCountWrapper(nullptr, nullptr)) {
+		inline Handle(T* resource, RefCountWrapper* refCounter) :
+			mResource(resource),
+			mRefCounter(refCounter) {
+			if constexpr (!isWeak) {
+				if (mResource) {
+					mRefCounter->AddRef();
+				}
+			}
 		}
 
 		inline Handle(T&& resource, void* owner, resource_destructor_t destructor) : 
@@ -119,23 +122,31 @@ namespace okami {
 			mRefCounter(nullptr) {
 		}
 
-		inline Handle(T* resource) : 
-			mResource(resource),
-			mRefCounter(nullptr) {
-			if (resource) {
-				mRefCounter = new RefCountWrapper(nullptr, nullptr);
-			}
+		inline Handle(std::nullptr_t) :
+			Handle() {
 		}
 
-		inline Handle(const Handle<T>& h) : 
+		inline Handle(const Handle<T, isWeak>& h) : 
 			mResource(h.mResource),
 			mRefCounter(h.mRefCounter) {
-			if (mResource) {
-				mRefCounter->AddRef();
+			if constexpr (!isWeak) {
+				if (mResource) {
+					mRefCounter->AddRef();
+				}
 			}
 		}
 
-		inline Handle(Handle<T>&& h) : 
+		inline Handle(const Handle<T, !isWeak>& h) : 
+			mResource(h.mResource),
+			mRefCounter(h.mRefCounter) {
+			if constexpr (!isWeak) {
+				if (mResource) {
+					mRefCounter->AddRef();
+				}
+			}
+		}
+
+		inline Handle(Handle<T, isWeak>&& h) : 
 			mResource(h.mResource), 
 			mRefCounter(h.mRefCounter) {
 			h.mResource = nullptr;
@@ -143,17 +154,25 @@ namespace okami {
 		}
 
 		inline void Release() {
-			if (mResource) {
-				mRefCounter->Release(mResource);
+			if constexpr (!isWeak) {
+				if (mResource) {
+					mRefCounter->Release(DownCast<Resource, true>());
+				}
 			}
+
+			mResource = nullptr;
+			mRefCounter = nullptr;
 		}
 
 		inline void Adopt(T* resource, void* owner, resource_destructor_t destructor) {
 			Release();
 
 			mResource = resource;
-			if (resource) {
-				mRefCounter = new RefCountWrapper(owner, std::move(destructor));
+
+			if constexpr (!isWeak) {
+				if (resource) {
+					mRefCounter = new RefCountWrapper(owner, std::move(destructor));
+				}
 			}
 		}
 
@@ -161,11 +180,19 @@ namespace okami {
 			Adopt(resource, nullptr, nullptr);
 		}
 
-		inline Handle<T>& operator=(const Handle<T>& h) {
+		inline Handle<T, isWeak>& operator=(std::nullptr_t) {
 			Release();
 
-			if (h.mRefCounter) {
-				h.mRefCounter->AddRef();
+			return *this;
+		}
+
+		inline Handle<T, isWeak>& operator=(const Handle<T, isWeak>& h) {
+			Release();
+
+			if constexpr (!isWeak) {
+				if (h.mRefCounter) {
+					h.mRefCounter->AddRef();
+				}
 			}
 
 			mResource = h.mResource;
@@ -174,13 +201,27 @@ namespace okami {
 			return *this;
 		}
 
-		inline Handle<T>& operator=(Handle<T>&& h) {
+		inline Handle<T, isWeak>& operator=(const Handle<T, !isWeak>& h) {
 			Release();
+
+			if constexpr (!isWeak) {
+				if (h.mRefCounter) {
+					h.mRefCounter->AddRef();
+				}
+			}
 
 			mResource = h.mResource;
 			mRefCounter = h.mRefCounter;
-			h.mResource = nullptr;
-			h.mRefCounter = nullptr;
+
+			return *this;
+		}
+
+		inline Handle<T, isWeak>& operator=(Handle<T, isWeak>&& h) {
+			Release();
+
+			std::swap(mResource, h.mResource);
+			std::swap(mRefCounter, h.mRefCounter);
+
 			return *this;
 		}
 
@@ -208,26 +249,46 @@ namespace okami {
 			return mResource;
 		}
 
-		inline bool operator==(const Handle<T>& other) const {
+		inline bool operator==(const Handle<T, isWeak>& other) const {
 			return other.mResource == mResource;
 		}
 
-		template <typename T2>
-		inline Handle<T2> TryCast() {
-			return Handle<T2>(dynamic_cast<T2*>(mResource));
+		template <typename T2, bool resultIsWeak=false>
+		inline Handle<T2, resultIsWeak> TryCast() {
+			return Handle<T2, resultIsWeak>(dynamic_cast<T2*>(mResource), mRefCounter);
 		}
 
-		template <typename T2>
-		inline Handle<T2> DownCast() {
-			return Handle<T2>(static_cast<T2*>(mResource));
+		template <typename T2, bool resultIsWeak=false>
+		inline Handle<T2, resultIsWeak> DownCast() {
+			return Handle<T2, resultIsWeak>(static_cast<T2*>(mResource), mRefCounter);
 		}
 
 		struct Hasher {
-			inline std::size_t operator()(const Handle<T>& h) const
+			inline std::size_t operator()(const Handle<T, isWeak>& h) const
 			{
 				using std::hash;
 				return hash<T*>()(h.mResource);
 			}
 		};
+
+		friend class Handle<T, !isWeak>;
 	};
+
+	// A non-owning handle that does not count towards active references
+	template <typename T>
+	using WeakHandle = Handle<T, true>;
+
+	inline void RefCountWrapper::Release(WeakHandle<Resource> object) {
+		auto value = mRefCount.fetch_sub(1);
+
+		if (value == 1) {
+			if (mOwner) {
+				mDestructor(mOwner, object);
+			} else {
+				delete object.Ptr();
+			}
+
+			delete this;
+		}
+	}
 }

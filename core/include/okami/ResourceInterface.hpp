@@ -41,11 +41,43 @@ namespace okami::core {
         }
     };
 
+    void ResourceInterfaceDestructor(void* owner, WeakHandle<Resource> object);
+
     class ResourceInterface {
     private:
         std::unordered_map<entt::meta_type, 
             IResourceManagerAbstract*, TypeHash> mLoaderInterfaces;
         std::atomic<resource_id_t> mCurrentId = 0;
+
+        marl::mutex mResourcesMut;
+
+        typedef std::unordered_set<WeakHandle<Resource>,
+            typename WeakHandle<Resource>::Hasher> set_t; 
+            
+        set_t mOrphanedResources;
+
+        // All resources registered with a path
+        std::unordered_map<std::filesystem::path,
+            typename set_t::iterator, PathHash> mPathToResource;
+        std::unordered_map<WeakHandle<Resource>,
+            typename std::unordered_map<std::filesystem::path,
+                typename set_t::iterator, PathHash>::iterator,
+            typename WeakHandle<Resource>::Hasher> mResourceToPath;
+
+        void Destroy(WeakHandle<Resource> object) {
+            marl::lock lock(mResourcesMut);
+
+            auto it = mResourceToPath.find(object);
+
+            if (it != mResourceToPath.end()) {
+                mPathToResource.erase(it->second);
+                mResourceToPath.erase(it);
+            }
+
+            mOrphanedResources.erase(object);
+
+            delete object.Ptr();
+        }
        
     public:
         template <typename T>
@@ -60,7 +92,17 @@ namespace okami::core {
             auto it = mLoaderInterfaces.find(type);
 
             if (it == mLoaderInterfaces.end()) {
-                throw std::runtime_error("No registered interface for this type!");
+                marl::lock lock(mResourcesMut);
+
+                auto it = mPathToResource.find(path);
+
+                if (it == mPathToResource.end()) {
+                    throw std::runtime_error("Type does not have a "
+                        "ResourceManager! And an instance of this object "
+                        "has not been created!");
+                }
+
+                return it->second;
             }
 
             auto lookup = dynamic_cast<IResourceManager<T>*>(it->second);
@@ -74,13 +116,20 @@ namespace okami::core {
             auto type = entt::resolve<T>();
             auto it = mLoaderInterfaces.find(type);
 
+            auto newId = mCurrentId.fetch_add(1);
+
             if (it == mLoaderInterfaces.end()) {
-                throw std::runtime_error("No registered interface for this type!");
+                marl::lock lock(mResourcesMut);
+                
+                Handle<T> h(std::move(obj), this, &ResourceInterfaceDestructor);
+                h->SetId(newId);
+                mOrphanedResources.emplace(h.template DownCast<Resource, true>());
+
+                return h;
             }
 
             auto lookup = dynamic_cast<IResourceManager<T>*>(it->second);
 
-            auto newId = mCurrentId.fetch_add(1);
             return lookup->Add(std::move(obj), newId);
         }
 
@@ -89,14 +138,31 @@ namespace okami::core {
             auto type = entt::resolve<T>();
             auto it = mLoaderInterfaces.find(type);
 
+            auto newId = mCurrentId.fetch_add(1);
+
             if (it == mLoaderInterfaces.end()) {
-                throw std::runtime_error("No registered interface for this type!");
+                marl::lock lock(mResourcesMut);
+
+                Handle<T> h(std::move(obj), this, &ResourceInterfaceDestructor);
+                h->SetId(newId);
+
+                auto it = mOrphanedResources.emplace(h.template DownCast<Resource, true>());
+                
+                auto it2 = mPathToResource.emplace(path, it);
+                mResourceToPath.emplace(h.Ptr(), it2);
+
+                return h;
             }
 
             auto lookup = dynamic_cast<IResourceManager<T>*>(it->second);
 
-            auto newId = mCurrentId.fetch_add(1);
             return lookup->Add(std::move(obj), path, newId);
         }
+
+        friend void ResourceInterfaceDestructor(void* owner, WeakHandle<Resource> object);
     };
+
+    inline void ResourceInterfaceDestructor(void* owner, WeakHandle<Resource> object) {
+        reinterpret_cast<ResourceInterface*>(owner)->Destroy(object);
+    }
 }

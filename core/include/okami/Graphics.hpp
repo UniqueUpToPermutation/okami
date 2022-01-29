@@ -112,7 +112,7 @@ namespace okami::graphics {
         bool bHasResized;
     };
 
-    class RenderCanvas : public Resource {
+    class RenderCanvas final : public Resource {
     private:
         std::atomic<uint> mWidth;
         std::atomic<uint> mHeight;

@@ -66,6 +66,11 @@ namespace okami::graphics::diligent {
                 break;
             }
 #endif
+
+            default:
+            {
+                throw std::runtime_error("Device type not supported!");
+            }
         }
     }
 
@@ -96,8 +101,6 @@ namespace okami::graphics::diligent {
 #else 
         int validationLevel = 0;
 #endif
-
-        bool bForceNonSeprblProgs = false;
 
 #if PLATFORM_MACOS
         // We need at least 3 buffers in Metal to avoid massive

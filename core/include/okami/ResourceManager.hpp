@@ -61,7 +61,7 @@ namespace okami::core {
     };
 
     template <typename T>
-    void ResourceDestructorWrapper(void* destroyer, Resource* obj);
+    void ResourceDestructorWrapper(void* destroyer, WeakHandle<Resource> obj);
 
     /*
         The ResourceManager is a thread-safe way of managing the lifetime and usage
@@ -88,7 +88,7 @@ namespace okami::core {
         marl::mutex mBackendMutex;
 
         // Used to queue up resources for deletion (called by Release())
-        MessagePipe<T*> mDeleteQueueBackend;
+        MessagePipe<WeakHandle<T>> mDeleteQueueBackend;
         MessagePipe<resource_id_t> mDeleteQueueFrontend;
 
         // Used to queue up resources for loading
@@ -101,12 +101,14 @@ namespace okami::core {
         resource_destroy_delegate_t<T> mDestroyer;
 
         // Resources that have already loaded. (Backend)
-        typedef std::unordered_set<T*> set_t; 
+        typedef std::unordered_set<WeakHandle<T>,
+            typename WeakHandle<T>::Hasher> set_t; 
         set_t mOwnedResources;
 
         // Various lookups so we don't load resources twice. (Frontend)
         marl::mutex mFrontendMutex;
-        typedef std::unordered_map<std::filesystem::path, T*, PathHash> path_to_resource_t;
+        typedef std::unordered_map<std::filesystem::path, 
+            WeakHandle<T>, PathHash> path_to_resource_t;
 
         path_to_resource_t mPathToResource;
         std::unordered_map<resource_id_t,
@@ -220,7 +222,7 @@ namespace okami::core {
                 if (request.mFinalizer)
                     request.mFinalizer(request.mHandle.Ptr());
 
-                mOwnedResources.emplace(request.mHandle.Ptr());
+                mOwnedResources.emplace(request.mHandle);
 
                 // Let everyone know this resource is ready to be used.
                 request.mHandle->OnLoadEvent().signal();
@@ -232,7 +234,7 @@ namespace okami::core {
             CollectGarbage(bBlock);
         }
 
-        void OnDestroyed(T* t) {
+        void OnDestroyed(WeakHandle<T> t) {
             // Make sure both the front-end and backend are informed of the deletion!
             mDeleteQueueFrontend.ProducerEnqueue(t->Id());
             mDeleteQueueBackend.ProducerEnqueue(t);
@@ -285,7 +287,7 @@ namespace okami::core {
                     // Queue a new load if item is niether loaded or loading
                     bQueueLoad = true;
                     resource = Handle<T>(mConstructor(), this, &ResourceDestructorWrapper<T>);
-                    auto emplace_it = mPathToResource.emplace_hint(it, path, resource.Ptr());
+                    auto emplace_it = mPathToResource.emplace_hint(it, path, resource);
                     mIdToResource.emplace(newId, emplace_it);
                 }
             }
@@ -347,7 +349,7 @@ namespace okami::core {
 
             {
                 marl::lock lock(mFrontendMutex);
-                auto it = mPathToResource.emplace(path, handle.Ptr());
+                auto it = mPathToResource.emplace(path, handle);
                 mIdToResource.emplace(newId, it.first);
             }
 
@@ -359,9 +361,9 @@ namespace okami::core {
     };
 
     template <typename T>
-    void ResourceDestructorWrapper(void* destroyer, Resource* obj) {
-        T* obj_ = dynamic_cast<T*>(obj);
+    void ResourceDestructorWrapper(void* destroyer, WeakHandle<Resource> obj) {
+        WeakHandle<T> objCast = obj.TryCast<T>();
         ResourceManager<T>* destroyer_ = reinterpret_cast<ResourceManager<T>*>(destroyer);
-        destroyer_->OnDestroyed(obj_);
+        destroyer_->OnDestroyed(objCast);
     }
 }

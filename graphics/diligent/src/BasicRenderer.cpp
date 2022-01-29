@@ -28,6 +28,7 @@ namespace okami::graphics::diligent {
     BasicRenderer::BasicRenderer(
         IDisplay* display,
         core::ResourceInterface& resources) : 
+        mDisplay(display),
         mGeometryManager(
             []() { return core::Geometry(); },
             [this](core::Geometry* geo) { OnDestroy(geo); }),
@@ -36,8 +37,7 @@ namespace okami::graphics::diligent {
             [this](core::Texture* tex) { OnDestroy(tex); }),
         mRenderCanvasManager(
             []() -> RenderCanvas { throw std::runtime_error("Error!"); },
-            [this](RenderCanvas* canvas) { OnDestroy(canvas); }),
-        mDisplay(display) {
+            [this](RenderCanvas* canvas) { OnDestroy(canvas); }) {
 
         // Associate the renderer with the geometry 
         resources.Register<core::Geometry>(this);
@@ -119,8 +119,22 @@ namespace okami::graphics::diligent {
         delete tex;
     }
 
+    void BasicRenderer::OnFinalize(RenderCanvas* canvas) {
+        UpdateFramebuffer(canvas);
+    }
+
+    inline BasicRenderer::RenderCanvasImpl* GetRenderCanvasImpl(RenderCanvas* canvas) {
+        return reinterpret_cast<BasicRenderer::RenderCanvasImpl*>(canvas->GetBackend());
+    }
+
+    void BasicRenderer::OnDestroy(RenderCanvas* canvas) {
+        auto impl = GetRenderCanvasImpl(canvas);
+        delete impl;
+        delete canvas;
+    }
+
     void BasicRenderer::UpdateFramebuffer(RenderCanvas* canvas) {
-        auto impl = reinterpret_cast<RenderCanvasImpl*>(canvas->GetBackend());
+        auto impl = GetRenderCanvasImpl(canvas);
 
         const auto& pass = canvas->GetPassInfo();
         bool bWindowBackend = false;
@@ -167,7 +181,7 @@ namespace okami::graphics::diligent {
 
                 impl->mDepthTarget->Release();
 
-                for (int i = 0; i < pass.mAttributeCount; ++i) {
+                for (uint i = 0; i < pass.mAttributeCount; ++i) {
                     TextureDesc dg_desc;
                     dg_desc.BindFlags = BIND_RENDER_TARGET;
                     dg_desc.CPUAccessFlags = CPU_ACCESS_NONE;
@@ -263,7 +277,6 @@ namespace okami::graphics::diligent {
         DG::IEngineFactory* factory = nullptr;
         DG::IRenderDevice* device  = nullptr;
         std::vector<DG::IDeviceContext*> contexts;
-        DG::ISwapChain* swapChain = nullptr;
 
         CreateDevice(mDisplay->GetRequestedBackend(), 
             &factory, &device, contexts, &mDefaultSCDesc, 
@@ -503,7 +516,7 @@ namespace okami::graphics::diligent {
                 ITextureView* dsv = nullptr;
 
                 if (!canvasImpl->mSwapChain) {
-                    for (int i = 0; i < pass.mAttributeCount; ++i) {
+                    for (uint i = 0; i < pass.mAttributeCount; ++i) {
                         rtvs[i] = canvasImpl->mRenderTargets[i]
                             ->GetDefaultView(DG::TEXTURE_VIEW_RENDER_TARGET);
                     }
@@ -524,7 +537,7 @@ namespace okami::graphics::diligent {
                 // Clear screen
                 if (rv.bClear) {
                     float color[] = { 0.3f, 0.3f, 0.3f, 1.0f };
-                    for (int i = 0; i < pass.mAttributeCount; ++i) {
+                    for (uint i = 0; i < pass.mAttributeCount; ++i) {
                         immediateContext->ClearRenderTarget(rtvs[i], 
                             color, 
                             RESOURCE_STATE_TRANSITION_MODE_TRANSITION);

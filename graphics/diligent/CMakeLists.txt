@@ -97,11 +97,10 @@ PRIVATE
 PUBLIC
     Diligent-Common
     Diligent-GraphicsTools
-    Diligent-TextureLoader
     Diligent-TargetPlatform
     Diligent-Imgui
+    ${OKAMI_CORE_LIB_DEPENDENCES}
     ${ENGINE_LIBRARIES}
-	Diligent-NativeAppBase
     glfw
 )
 
@@ -111,8 +110,10 @@ elseif(PLATFORM_ANDROID)
     target_link_libraries(okami-graphics-diligent PRIVATE GLESv3 PUBLIC native_app_glue)
 elseif(PLATFORM_LINUX)
     target_link_libraries(okami-graphics-diligent PRIVATE XCBKeySyms GL X11)
-elseif(PLATFORM_MACOS OR PLATFORM_IOS)
-    set_source_files_properties(${IM3D_DIR}/im3d.cpp PROPERTIES COMPILE_FLAGS -Wno-error)
+endif()
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set_source_files_properties(${IM3D_DIR}/im3d.cpp PROPERTIES COMPILE_FLAGS -Wno-everything)
 endif()
 
 list(APPEND LIB_DEPENDENCIES_LIST

@@ -37,7 +37,7 @@ namespace okami::graphics::diligent {
     public:
         DG::SURFACE_TRANSFORM mSurfaceTransform;
 
-        struct CanvasImpl : public core::IInputCapture {
+        struct CanvasImpl final : public core::IInputCapture {
             RenderCanvas* mCanvas = nullptr;
             core::IInputProvider* mInput = nullptr;
 

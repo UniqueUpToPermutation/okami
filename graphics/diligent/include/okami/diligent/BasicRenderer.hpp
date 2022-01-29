@@ -85,7 +85,6 @@ namespace okami::graphics::diligent {
 
         std::unique_ptr<GeometryImpl>       MoveToGPU(const core::Geometry& geometry);
         std::unique_ptr<TextureImpl>        MoveToGPU(const core::Texture& texture);
-        std::unique_ptr<RenderCanvasImpl>   MoveToGPU(const RenderCanvas& canvas);
 
         void UpdateFramebuffer(RenderCanvas* canvas);
 

@@ -53,8 +53,8 @@ namespace okami::graphics::diligent {
 
     FirstPersonCameraSystem::FirstPersonCameraSystem(
         IInputProvider* inputProvider) :
-        mWaitEvent(marl::Event::Mode::Manual),
-        mInputProvider(inputProvider) {
+        mInputProvider(inputProvider),
+        mWaitEvent(marl::Event::Mode::Manual) {
     }
 
     void FirstPersonCameraSystem::Startup(marl::WaitGroup& waitGroup) {

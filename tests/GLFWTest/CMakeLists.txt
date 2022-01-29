@@ -16,5 +16,7 @@ target_link_libraries(okami-glfw-test
     ${OKAMI_CORE_LIB_DEPENDENCES}
     okami-graphics-diligent)
 
+message("LINKING: ${OKAMI_CORE_LIB_DEPENDENCES}")
+
 add_test(NAME okami-glfw-test COMMAND okami-glfw-test)
 add_dependencies(okami-tests okami-glfw-test)

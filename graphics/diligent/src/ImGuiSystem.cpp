@@ -25,8 +25,8 @@ namespace okami::graphics::diligent {
         core::KeyModifiers mods) {
 
         if (action == core::KeyAction::PRESS && 
-                (int)button >= 0 && 
-                (int)button < mMouseJustPressed.size()) {
+                (uint)button >= 0 && 
+                (uint)button < mMouseJustPressed.size()) {
             mMouseJustPressed[(int)button] = true;
         }
     }
@@ -75,20 +75,16 @@ namespace okami::graphics::diligent {
         IM_ASSERT(io.Fonts->IsBuilt() && "Font atlas not built! It is generally built by the renderer backend. Missing call to renderer _NewFrame() function? e.g. ImGui_ImplOpenGL3_NewFrame().");
 
         // Setup display size (every frame to accommodate for window resizing)
-        int w, h;
-        int display_w, display_h;
-
         auto win_size = mWindow->GetWindowSize();
         auto frame_size = mWindow->GetFramebufferSize();
 
         io.DisplaySize = ImVec2((float)win_size.x, (float)win_size.y);
-        if (w > 0 && h > 0)
+        if (win_size.x > 0 && win_size.y > 0)
             io.DisplayFramebufferScale = ImVec2(
                 (float)frame_size.x / win_size.x, 
                 (float)frame_size.y / win_size.y);
 
         // Setup time step
-        double current_time = glfwGetTime();
         io.DeltaTime = time.mTimeElapsed;
         mTime = time.mTotalTime;
 
@@ -306,8 +302,8 @@ namespace okami::graphics::diligent {
     ImGuiSystem::ImGuiSystem(
         IDisplay* display,
         IRenderer* renderer) :
-        mDisplay(display),
-        mRenderer(renderer) {
+        mRenderer(renderer),
+        mDisplay(display) {
     }
 
     ImGuiSystem::ImGuiSystem(

@@ -22,7 +22,7 @@ namespace okami::graphics::diligent {
         static constexpr DG::Uint32 DefaultInitialVBSize = 1024;
         static constexpr DG::Uint32 DefaultInitialIBSize = 2048;
 
-        struct ImGuiImpl : public core::IInputCapture {
+        struct ImGuiImpl final : public core::IInputCapture {
             IWindow* mWindow = nullptr;
 
             core::delegate_handle_t mMouseButtonCallbackHandle = 0;

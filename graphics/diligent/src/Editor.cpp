@@ -129,8 +129,6 @@ namespace okami::graphics::diligent {
                 defer(mOnReadFinished.signal());
                 defer(mReads.ReleaseHandles());
 
-                entt::entity mCamera = entt::null;
-
                 mReads.Read<MultiRead<EditorCameraTag, Transform>>([&]() {
                     auto cameras = frame.Registry().view<EditorCameraTag>();
 

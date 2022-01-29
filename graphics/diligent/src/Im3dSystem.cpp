@@ -401,7 +401,6 @@ namespace okami::graphics::diligent {
         core::SyncObject& syncObject,
         const core::Time& time) {
         marl::schedule([
-            renderer = mRenderer,
             &overlay = mOverlay]() {
             overlay.UpdateAllCanvases();
         });
