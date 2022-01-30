@@ -472,6 +472,8 @@ namespace okami::graphics::diligent {
         glfwGetWindowContentScale(mWindow, &scaleX, &scaleY);
 
         mContentScale = (scaleX + scaleY) / 2.0;
+
+        mNativeWindowStruct = MakeNativeWindowStruct();
     }
 
     WindowGLFW::~WindowGLFW() {
@@ -593,10 +595,11 @@ namespace okami::graphics::diligent {
         RenderCanvasDesc desc;
         desc.mWidth = size.x;
         desc.mHeight = size.y;
-        desc.mNativeWindowInterface = ptr.get();
+        desc.mWindow = ptr.get();
         desc.mPassInfo = pass;
 
         RenderCanvas canvas(desc);
+
         ptr->mRenderCanvas = mResources->Add<RenderCanvas>(
             std::move(canvas));
         ptr->mId = ++mCurrentWindowId;

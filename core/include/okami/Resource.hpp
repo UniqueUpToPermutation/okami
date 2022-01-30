@@ -81,6 +81,8 @@ namespace okami {
 
 	struct RefCountWrapper {
 		std::atomic<ref_count_t> mRefCount = 1;
+		std::atomic<bool> bDestroyed = false;
+		std::atomic<bool> bFreed = false;
         void* const mOwner;
         resource_destructor_t const mDestructor;
 
@@ -88,7 +90,13 @@ namespace okami {
 			++mRefCount;
 		}
 
+		// Decrements reference counter by 1 and calls the destructor if necessary.
 		void Release(Handle<Resource, true> object);
+		// Forces the reference counter to 0 and calls the destructor.
+		void Destroy(Handle<Resource, true> object);
+		// Forces the reference counter to 0 and frees the object manually by calling delete
+		// and ignoring the custom destructor.
+		void Free(Resource* object);
 
 		RefCountWrapper(void* owner, resource_destructor_t destructor) :
 			mOwner(owner), mDestructor(std::move(destructor)) {
@@ -99,22 +107,29 @@ namespace okami {
 	class Handle {
 	private:
 		T* mResource;
-		RefCountWrapper* mRefCounter;
+		std::shared_ptr<RefCountWrapper> mRefCounter;
 		
 	public:
-		inline Handle(T* resource, RefCountWrapper* refCounter) :
+		inline void Free() {
+			mRefCounter->Free(mResource);
+		}
+
+		inline void Destroy() {
+			mRefCounter->Destroy(*this);
+		}
+
+		inline Handle(T* resource, const std::shared_ptr<RefCountWrapper>& refCounter) :
 			mResource(resource),
 			mRefCounter(refCounter) {
 			if constexpr (!isWeak) {
-				if (mResource) {
-					mRefCounter->AddRef();
-				}
+				mRefCounter->AddRef();
 			}
 		}
 
 		inline Handle(T&& resource, void* owner, resource_destructor_t destructor) : 
 			mResource(new T(std::move(resource))),
-			mRefCounter(new RefCountWrapper(owner, std::move(destructor))) {
+			mRefCounter(std::make_shared<RefCountWrapper>(
+				owner, std::move(destructor))) {
 		}
 
 		inline Handle() : 
@@ -130,9 +145,7 @@ namespace okami {
 			mResource(h.mResource),
 			mRefCounter(h.mRefCounter) {
 			if constexpr (!isWeak) {
-				if (mResource) {
-					mRefCounter->AddRef();
-				}
+				mRefCounter->AddRef();
 			}
 		}
 
@@ -140,9 +153,7 @@ namespace okami {
 			mResource(h.mResource),
 			mRefCounter(h.mRefCounter) {
 			if constexpr (!isWeak) {
-				if (mResource) {
-					mRefCounter->AddRef();
-				}
+				mRefCounter->AddRef();
 			}
 		}
 
@@ -155,29 +166,13 @@ namespace okami {
 
 		inline void Release() {
 			if constexpr (!isWeak) {
-				if (mResource) {
+				if (mRefCounter) {
 					mRefCounter->Release(DownCast<Resource, true>());
 				}
 			}
 
 			mResource = nullptr;
 			mRefCounter = nullptr;
-		}
-
-		inline void Adopt(T* resource, void* owner, resource_destructor_t destructor) {
-			Release();
-
-			mResource = resource;
-
-			if constexpr (!isWeak) {
-				if (resource) {
-					mRefCounter = new RefCountWrapper(owner, std::move(destructor));
-				}
-			}
-		}
-
-		inline void Adopt(T* resource) {
-			Adopt(resource, nullptr, nullptr);
 		}
 
 		inline Handle<T, isWeak>& operator=(std::nullptr_t) {
@@ -189,14 +184,14 @@ namespace okami {
 		inline Handle<T, isWeak>& operator=(const Handle<T, isWeak>& h) {
 			Release();
 
-			if constexpr (!isWeak) {
-				if (h.mRefCounter) {
-					h.mRefCounter->AddRef();
-				}
-			}
-
 			mResource = h.mResource;
 			mRefCounter = h.mRefCounter;
+
+			if constexpr (!isWeak) {
+				if (mRefCounter) {
+					mRefCounter->AddRef();
+				}
+			}
 
 			return *this;
 		}
@@ -204,14 +199,14 @@ namespace okami {
 		inline Handle<T, isWeak>& operator=(const Handle<T, !isWeak>& h) {
 			Release();
 
-			if constexpr (!isWeak) {
-				if (h.mRefCounter) {
-					h.mRefCounter->AddRef();
-				}
-			}
-
 			mResource = h.mResource;
 			mRefCounter = h.mRefCounter;
+
+			if constexpr (!isWeak) {
+				if (mRefCounter) {
+					mRefCounter->AddRef();
+				}
+			}
 
 			return *this;
 		}
@@ -282,13 +277,28 @@ namespace okami {
 		auto value = mRefCount.fetch_sub(1);
 
 		if (value == 1) {
+			Destroy(object);
+		}
+	}
+
+	inline void RefCountWrapper::Destroy(Handle<Resource, true> object) {
+		auto bShouldDestroy = !bDestroyed.exchange(true);
+
+		if (bShouldDestroy) {
 			if (mOwner) {
 				mDestructor(mOwner, object);
 			} else {
-				delete object.Ptr();
+				Free(object.Ptr());
 			}
+		}
+	}
 
-			delete this;
+	inline void RefCountWrapper::Free(Resource* object) {
+		bDestroyed = true;
+		auto bShouldFree = !bFreed.exchange(true);
+
+		if (bShouldFree) {
+			delete object;
 		}
 	}
 }

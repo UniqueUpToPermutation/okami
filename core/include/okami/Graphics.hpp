@@ -93,7 +93,7 @@ namespace okami::graphics {
         uint mWidth;
         uint mHeight;
         RenderPass mPassInfo;
-        IWindow* mNativeWindowInterface = nullptr;
+        IWindow* mWindow = nullptr;
     };
 
     class RenderCanvas;
@@ -118,7 +118,7 @@ namespace okami::graphics {
         std::atomic<uint> mHeight;
         std::atomic<bool> bHasResized;
         RenderPass mPassInfo;
-        SurfaceTransform mSurfaceTransform;
+        SurfaceTransform mSurfaceTransform = SurfaceTransform::OPTIMAL;
         IWindow* mWindow = nullptr;
         std::set<IRenderCanvasAttachment*> mOverlays;
 
@@ -207,7 +207,8 @@ namespace okami::graphics {
         inline RenderCanvas(const RenderCanvasDesc& desc) :
             mWidth(desc.mWidth),
             mHeight(desc.mHeight),
-            mPassInfo(desc.mPassInfo) {
+            mPassInfo(desc.mPassInfo),
+            mWindow(desc.mWindow) {
         }
 
         ~RenderCanvas();

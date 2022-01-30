@@ -18,6 +18,7 @@ list(APPEND SOURCE
     src/Material.cpp
     src/Clock.cpp
     src/Graphics.cpp
+    src/ResourceInterface.cpp
 
     ../ext/lodepng/lodepng.cpp
 )

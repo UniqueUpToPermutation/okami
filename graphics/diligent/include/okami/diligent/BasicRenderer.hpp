@@ -116,8 +116,8 @@ namespace okami::graphics::diligent {
             const entt::meta_type& type) const override;
 
         // Geometry resource handlers
-        void OnFinalize(core::Geometry* geometry);
-        void OnDestroy(core::Geometry* geometry);
+        void OnFinalize(WeakHandle<core::Geometry> geometry);
+        void OnDestroy(WeakHandle<core::Geometry> geometry);
         Handle<core::Geometry> Load(
             const std::filesystem::path& path, 
             const core::LoadParams<core::Geometry>& params, 
@@ -129,8 +129,8 @@ namespace okami::graphics::diligent {
             resource_id_t newResId) override;
 
         // Texture resource handlers
-        void OnFinalize(core::Texture* texture);
-        void OnDestroy(core::Texture* texture);
+        void OnFinalize(WeakHandle<core::Texture> texture);
+        void OnDestroy(WeakHandle<core::Texture> texture);
         Handle<core::Texture> Load(
             const std::filesystem::path& path, 
             const core::LoadParams<core::Texture>& params, 
@@ -142,8 +142,8 @@ namespace okami::graphics::diligent {
             resource_id_t newResId) override;
 
         // Texture resource handlers
-        void OnFinalize(RenderCanvas* canvas);
-        void OnDestroy(RenderCanvas* canvas);
+        void OnFinalize(WeakHandle<RenderCanvas> canvas);
+        void OnDestroy(WeakHandle<RenderCanvas> canvas);
         Handle<RenderCanvas> Load(
             const std::filesystem::path& path, 
             const core::LoadParams<RenderCanvas>& params, 

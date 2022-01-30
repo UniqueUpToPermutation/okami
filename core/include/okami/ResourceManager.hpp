@@ -33,10 +33,10 @@ namespace okami::core {
         const LoadParams<T>& params)>;
 
     template <typename T>
-    using resource_finalize_delegate_t = std::function<void(T* resource)>;
+    using resource_finalize_delegate_t = std::function<void(WeakHandle<T> resource)>;
 
     template <typename T>
-    using resource_destroy_delegate_t = std::function<void(T* resource)>;
+    using resource_destroy_delegate_t = std::function<void(WeakHandle<T> resource)>;
 
     template <typename T>
     using resource_construct_delegate_t = std::function<T()>;
@@ -157,8 +157,6 @@ namespace okami::core {
 
                 // Collect all garbage
                 if (bUncollectedResources) {
-                    PrintWarning("ResourceManager::Shutdown(): Uncollected resources are still alive!"
-                        " This may cause a memory leak or corruption!");
                     CollectGarbage(true);
                 }
             }
@@ -220,7 +218,7 @@ namespace okami::core {
 
                 // Run finalizer on main thread!
                 if (request.mFinalizer)
-                    request.mFinalizer(request.mHandle.Ptr());
+                    request.mFinalizer(request.mHandle);
 
                 mOwnedResources.emplace(request.mHandle);
 

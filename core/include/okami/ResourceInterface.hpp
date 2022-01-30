@@ -64,22 +64,15 @@ namespace okami::core {
                 typename set_t::iterator, PathHash>::iterator,
             typename WeakHandle<Resource>::Hasher> mResourceToPath;
 
-        void Destroy(WeakHandle<Resource> object) {
-            marl::lock lock(mResourcesMut);
-
-            auto it = mResourceToPath.find(object);
-
-            if (it != mResourceToPath.end()) {
-                mPathToResource.erase(it->second);
-                mResourceToPath.erase(it);
-            }
-
-            mOrphanedResources.erase(object);
-
-            delete object.Ptr();
-        }
+        void Destroy(WeakHandle<Resource> object);
        
     public:
+        void DestroyAllOrphaned();
+
+        inline ~ResourceInterface() {
+            DestroyAllOrphaned();
+        }
+
         template <typename T>
         inline void Register(IResourceManager<T>* loader) {
             mLoaderInterfaces.emplace(entt::resolve<T>(), loader);
@@ -161,8 +154,4 @@ namespace okami::core {
 
         friend void ResourceInterfaceDestructor(void* owner, WeakHandle<Resource> object);
     };
-
-    inline void ResourceInterfaceDestructor(void* owner, WeakHandle<Resource> object) {
-        reinterpret_cast<ResourceInterface*>(owner)->Destroy(object);
-    }
 }

@@ -31,13 +31,13 @@ namespace okami::graphics::diligent {
         mDisplay(display),
         mGeometryManager(
             []() { return core::Geometry(); },
-            [this](core::Geometry* geo) { OnDestroy(geo); }),
+            [this](WeakHandle<core::Geometry> geo) { OnDestroy(geo); }),
         mTextureManager(
             []() { return core::Texture(); },
-            [this](core::Texture* tex) { OnDestroy(tex); }),
+            [this](WeakHandle<core::Texture> tex) { OnDestroy(tex); }),
         mRenderCanvasManager(
             []() -> RenderCanvas { throw std::runtime_error("Error!"); },
-            [this](RenderCanvas* canvas) { OnDestroy(canvas); }) {
+            [this](WeakHandle<RenderCanvas> canvas) { OnDestroy(canvas); }) {
 
         // Associate the renderer with the geometry 
         resources.Register<core::Geometry>(this);
@@ -45,10 +45,10 @@ namespace okami::graphics::diligent {
         resources.Register<RenderCanvas>(this);
     }
 
-    void BasicRenderer::OnDestroy(core::Geometry* geometry) {
+    void BasicRenderer::OnDestroy(WeakHandle<core::Geometry> geometry) {
         auto impl = reinterpret_cast<GeometryImpl*>(geometry->GetBackend());
         delete impl;
-        delete geometry;
+        geometry.Free();
     }
 
     std::unique_ptr<GeometryImpl>
@@ -107,19 +107,19 @@ namespace okami::graphics::diligent {
         return impl;
     }
 
-    void BasicRenderer::OnFinalize(core::Geometry* geometry) {
+    void BasicRenderer::OnFinalize(WeakHandle<core::Geometry> geometry) {
         auto impl = MoveToGPU(*geometry);
         geometry->DeallocCPU();
         geometry->SetBackend(impl.release());
     }
 
-    void BasicRenderer::OnDestroy(core::Texture* tex) {
+    void BasicRenderer::OnDestroy(WeakHandle<core::Texture> tex) {
         auto impl = GetTextureImpl(tex);
         delete impl;
-        delete tex;
+        tex.Free();
     }
 
-    void BasicRenderer::OnFinalize(RenderCanvas* canvas) {
+    void BasicRenderer::OnFinalize(WeakHandle<RenderCanvas> canvas) {
         UpdateFramebuffer(canvas);
     }
 
@@ -127,10 +127,10 @@ namespace okami::graphics::diligent {
         return reinterpret_cast<BasicRenderer::RenderCanvasImpl*>(canvas->GetBackend());
     }
 
-    void BasicRenderer::OnDestroy(RenderCanvas* canvas) {
+    void BasicRenderer::OnDestroy(WeakHandle<RenderCanvas> canvas) {
         auto impl = GetRenderCanvasImpl(canvas);
         delete impl;
-        delete canvas;
+        canvas.Free();
     }
 
     void BasicRenderer::UpdateFramebuffer(RenderCanvas* canvas) {
@@ -176,10 +176,12 @@ namespace okami::graphics::diligent {
 
             if (size.bHasResized || bForceResize) {
                 for (auto& rt : impl->mRenderTargets) {
-                    rt->Release();
+                    if (rt)
+                        rt->Release();
                 }
 
-                impl->mDepthTarget->Release();
+                if (impl->mDepthTarget)
+                    impl->mDepthTarget->Release();
 
                 for (uint i = 0; i < pass.mAttributeCount; ++i) {
                     TextureDesc dg_desc;
@@ -263,7 +265,7 @@ namespace okami::graphics::diligent {
         return impl;
     }
 
-    void BasicRenderer::OnFinalize(core::Texture* texture) {
+    void BasicRenderer::OnFinalize(WeakHandle<core::Texture> texture) {
         auto impl = MoveToGPU(*texture);
         texture->DeallocCPU();
         texture->SetBackend(impl.release());
@@ -342,7 +344,7 @@ namespace okami::graphics::diligent {
             return core::Geometry::Load(path, layout);
         };
 
-        auto finalizer = [this](core::Geometry* geo) {
+        auto finalizer = [this](WeakHandle<core::Geometry> geo) {
             OnFinalize(geo);
         };
 
@@ -351,7 +353,7 @@ namespace okami::graphics::diligent {
 
     Handle<core::Geometry> BasicRenderer::Add(core::Geometry&& obj, 
         resource_id_t newResId) {
-        auto finalizer = [this](core::Geometry* geo) {
+        auto finalizer = [this](WeakHandle<core::Geometry> geo) {
             OnFinalize(geo);
         };
         return mGeometryManager.Add(std::move(obj), newResId, finalizer);
@@ -360,7 +362,7 @@ namespace okami::graphics::diligent {
     Handle<core::Geometry> BasicRenderer::Add(core::Geometry&& obj, 
         const std::filesystem::path& path, 
         resource_id_t newResId) {
-        auto finalizer = [this](core::Geometry* geo) {
+        auto finalizer = [this](WeakHandle<core::Geometry> geo) {
             OnFinalize(geo);
         };
         return mGeometryManager.Add(std::move(obj), path, newResId, finalizer);
@@ -375,7 +377,7 @@ namespace okami::graphics::diligent {
             return core::Texture::Load(path, params);
         };
 
-        auto finalizer = [this](core::Texture* tex) {
+        auto finalizer = [this](WeakHandle<core::Texture> tex) {
             OnFinalize(tex);
         };
 
@@ -384,7 +386,7 @@ namespace okami::graphics::diligent {
 
     Handle<core::Texture> BasicRenderer::Add(core::Texture&& obj, 
         resource_id_t newResId) {
-        auto finalizer = [this](core::Texture* tex) {
+        auto finalizer = [this](WeakHandle<core::Texture> tex) {
             OnFinalize(tex);
         };
         return mTextureManager.Add(std::move(obj), newResId, finalizer);
@@ -393,7 +395,7 @@ namespace okami::graphics::diligent {
     Handle<core::Texture> BasicRenderer::Add(core::Texture&& obj, 
         const std::filesystem::path& path, 
         resource_id_t newResId) {
-        auto finalizer = [this](core::Texture* tex) {
+        auto finalizer = [this](WeakHandle<core::Texture> tex) {
             OnFinalize(tex);
         };
         return mTextureManager.Add(std::move(obj), path, newResId, finalizer);
@@ -408,7 +410,7 @@ namespace okami::graphics::diligent {
 
     Handle<RenderCanvas> BasicRenderer::Add(RenderCanvas&& obj, 
         resource_id_t newResId) {
-        auto finalizer = [this](RenderCanvas* canvas) {
+        auto finalizer = [this](WeakHandle<RenderCanvas> canvas) {
             OnFinalize(canvas);
         };
         return mRenderCanvasManager.Add(std::move(obj), newResId, finalizer);
@@ -478,9 +480,16 @@ namespace okami::graphics::diligent {
             auto cameraEntity = rv.mCamera;
             auto camera = registry.get<core::Camera>(cameraEntity);
 
+            auto renderCanvas = GetRenderCanvasImpl(rv.mTarget);
             DG::SwapChainDesc scDesc;
-            scDesc.Width = width;
-            scDesc.Height = height;
+            if (renderCanvas->mSwapChain) {
+                scDesc = renderCanvas->mSwapChain->GetDesc();
+            } else {
+                scDesc.Width = width;
+                scDesc.Height = height;
+                scDesc.PreTransform = ToDiligent(rv.mTarget->GetSurfaceTransform());
+            }
+
             rmGlobals.mProjection = GetProjection(camera, scDesc, false);
             
             auto transform = registry.try_get<core::Transform>(cameraEntity);
