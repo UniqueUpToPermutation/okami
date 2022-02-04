@@ -58,8 +58,8 @@ namespace okami::graphics::diligent {
     public:
         StaticMeshModule();
 
-        void OnDestroy(core::StaticMeshMaterial* material);
-        void OnFinalize(core::StaticMeshMaterial* material);
+        void OnDestroy(WeakHandle<core::StaticMeshMaterial> material);
+        void OnFinalize(WeakHandle<core::StaticMeshMaterial> material);
 
         void Startup(
             core::ISystem* renderer,

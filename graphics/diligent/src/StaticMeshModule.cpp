@@ -118,7 +118,7 @@ namespace okami::graphics::diligent {
     StaticMeshModule::StaticMeshModule() :
         mMaterialManager(
             []() { return StaticMeshMaterial(); },
-            [this](StaticMeshMaterial* mat) { OnDestroy(mat); }),
+            [this](WeakHandle<StaticMeshMaterial> mat) { OnDestroy(mat); }),
         mFormat(core::VertexFormat::PositionUVNormal()) {
     }
     
@@ -295,7 +295,7 @@ namespace okami::graphics::diligent {
         core::StaticMeshMaterial&& obj, 
         resource_id_t newResId) {
 
-        auto finalizer = [this](StaticMeshMaterial* mat) {
+        auto finalizer = [this](WeakHandle<StaticMeshMaterial> mat) {
             OnFinalize(mat);
         };
 
@@ -311,18 +311,19 @@ namespace okami::graphics::diligent {
         throw std::runtime_error("Not supported for StaticMeshMaterial!");
     }
 
-    void StaticMeshModule::OnDestroy(StaticMeshMaterial* material) {
+    void StaticMeshModule::OnDestroy(WeakHandle<StaticMeshMaterial> material) {
         auto impl = reinterpret_cast<StaticMeshMaterialImpl*>(material->GetBackend());
         delete impl;
-        delete material;
+
+        material.Free();
     }
 
-    void StaticMeshModule::OnFinalize(core::StaticMeshMaterial* material) {
+    void StaticMeshModule::OnFinalize(WeakHandle<StaticMeshMaterial> material) {
         auto& data = material->GetData();
 
         auto impl = std::make_unique<StaticMeshMaterialImpl>();
-
         InitializeMaterial(data, *impl);
+        material->SetBackend(impl.release());
     }
 
     void StaticMeshModule::InitializeMaterial(

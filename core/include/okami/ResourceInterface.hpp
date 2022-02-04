@@ -95,7 +95,8 @@ namespace okami::core {
                         "has not been created!");
                 }
 
-                return it->second;
+                Handle<Resource> handle = *it->second;
+                return handle.TryCast<T>();
             }
 
             auto lookup = dynamic_cast<IResourceManager<T>*>(it->second);

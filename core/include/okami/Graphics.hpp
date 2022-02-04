@@ -219,7 +219,7 @@ namespace okami::graphics {
 
     struct RenderView {
         Handle<RenderCanvas> mTarget;
-        entt::entity mCamera;
+        entt::entity mCamera = entt::null;
         bool bClear = true;
     };
 
