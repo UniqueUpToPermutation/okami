@@ -33,32 +33,32 @@ namespace okami::graphics::diligent {
         renderer->RegisterInterfaces(interfaces);
 
         auto globalsBuffer = interfaces.Query<IGlobalsBufferProvider>();
-        auto rendererInterface = interfaces.Query<IRenderer>();
+        auto renderPassFormatProvider = interfaces.Query<IRenderPassFormatProvider>();
 
         if (!globalsBuffer) {
             throw std::runtime_error(
                 "Renderer does not implement IGlobalsBufferProvider!");
         }
 
-        if (!rendererInterface) {
+        if (!renderPassFormatProvider) {
             throw std::runtime_error(
-                "Renderer does not implement IRenderer!");
+                "Renderer does not implement IRenderPassFormatProvider!");
         }
 
         mShaders = Im3dShaders::LoadDefault(device, params.mFileSystem);
         
         mPipeline = Im3dPipeline(device, 
             *globalsBuffer->GetGlobalsBuffer(),
-            ToDiligent(rendererInterface->GetFormat(RenderAttribute::COLOR)),
-            ToDiligent(rendererInterface->GetDepthFormat(RenderPass::Final())),
+            renderPassFormatProvider->GetFormat(RenderAttribute::COLOR),
+            renderPassFormatProvider->GetDepthFormat(RenderPass::Final()),
             1,
             mShaders,
             true);
 
         mPipelineNoDepth = Im3dPipeline(device,
             *globalsBuffer->GetGlobalsBuffer(),
-            ToDiligent(rendererInterface->GetFormat(RenderAttribute::COLOR)),
-            ToDiligent(rendererInterface->GetDepthFormat(RenderPass::Final())),
+            renderPassFormatProvider->GetFormat(RenderAttribute::COLOR),
+            renderPassFormatProvider->GetDepthFormat(RenderPass::Final()),
             1,
             mShaders,
             false);

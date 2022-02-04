@@ -190,16 +190,16 @@ namespace okami::graphics::diligent {
         DG::IRenderDevice* device,
         const RenderModuleParams& params) {
 
-        auto rendererInterface = renderer->QueryInterface<IRenderer>();
+        auto renderPassFormatProvider = renderer->QueryInterface<IRenderPassFormatProvider>();
 
-        if (rendererInterface == nullptr) {
-            throw std::runtime_error("Renderer does not implement IRenderer!");
+        if (renderPassFormatProvider == nullptr) {
+            throw std::runtime_error("Renderer does not implement IRenderPassFormatProvider!");
         }        
 
-        auto rtFormat = ToDiligent(
-            rendererInterface->GetFormat(RenderAttribute::COLOR));
-        auto dsvFormat = ToDiligent(
-            rendererInterface->GetDepthFormat(RenderPass::Final()));
+        auto rtFormat = 
+            renderPassFormatProvider->GetFormat(RenderAttribute::COLOR);
+        auto dsvFormat = 
+            renderPassFormatProvider->GetDepthFormat(RenderPass::Final());
 
         mRenderer = std::make_unique<DG::ImGuiDiligentRenderer>(
             device, 

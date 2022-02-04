@@ -24,7 +24,6 @@ namespace okami::graphics::diligent {
             DG::RefCntAutoPtr<DG::IShader>          mPS;
             
             DG::RefCntAutoPtr<DG::IPipelineState>   mState;
-            DG::Uint32                              mAlbedoIdx;
 
             DG::RefCntAutoPtr<DG::IShaderResourceBinding>
                 mDefaultBinding;
@@ -51,6 +50,10 @@ namespace okami::graphics::diligent {
         };
 
         StaticMeshMaterialImpl                      mDefaultMaterial;
+
+        void InitializeMaterial(
+            const core::StaticMeshMaterial::Data& materialData,
+            StaticMeshMaterialImpl& impl);
 
     public:
         StaticMeshModule();

@@ -1,6 +1,7 @@
 #include <okami/Okami.hpp>
 #include <okami/Graphics.hpp>
 #include <okami/Geometry.hpp>
+#include <okami/Camera.hpp>
 #include <okami/Transform.hpp>
 #include <okami/GraphicsComponents.hpp>
 
@@ -13,33 +14,37 @@ using namespace okami::graphics;
 void TestBackend(GraphicsBackend backend) {
 
     RealtimeGraphicsParams params;
-    params.mDeviceType = backend;
+    params.mBackend = backend;
+
+    WindowParams windowParams;
 
     switch (backend) {
         case GraphicsBackend::VULKAN:
-            params.mWindowTitle = "okami Diligent-Engine Geometry Test (Vulkan)";
-            break;
-        case GraphicsBackend::OPENGL:
-            params.mWindowTitle = "okami Diligent-Engine Geometry Test (OpenGL)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Geometry Test (Vulkan)";
             break;
         case GraphicsBackend::D3D11:
-            params.mWindowTitle = "okami Diligent-Engine Geometry Test (D3D11)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Geometry Test (D3D11)";
             break;
         case GraphicsBackend::D3D12:
-            params.mWindowTitle = "okami Diligent-Engine Geometry Test (D3D12)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Geometry Test (D3D12)";
             break;
     }
 
     ResourceInterface resources;
     SystemCollection systems;
-    auto display = systems.Add(CreateGLFWDisplay(params));
-    auto renderer = systems.Add(CreateRenderer(display, resources));
+    systems.Add(CreateGLFWDisplay(&resources, params));
+    auto display = systems.QueryInterface<IDisplay>();
+
+    systems.Add(CreateRenderer(display, resources));
+    auto renderer = systems.QueryInterface<IRenderer>();
 
     systems.Startup();
     {
-        auto displayInterface = systems.QueryInterface<IDisplay>();
         auto vertexLayouts = systems.QueryInterface<IVertexLayoutProvider>();
         auto staticMeshLayout = vertexLayouts->GetVertexLayout<StaticMesh>();
+
+        // Create window
+        auto window = display->CreateWindow(windowParams);
 
         // Create a geometry object from user-specified data
         Geometry::Data<> data;
@@ -53,16 +58,22 @@ void TestBackend(GraphicsBackend backend) {
 
         // Create a static mesh using the specified geometry
         Frame frame;
-        auto entity = frame.CreateEntity();
-        frame.Emplace<Transform>(entity);
-        frame.Emplace<StaticMesh>(entity, StaticMesh{geo});
+        auto geoEntity = frame.CreateEntity();
+        frame.Emplace<Transform>(geoEntity);
+        frame.Emplace<StaticMesh>(geoEntity, StaticMesh{geo, nullptr});
 
         // Geometry is a available to use after this is called
         systems.SetFrame(frame);
         systems.LoadResources();
+
+        RenderView rv;
+        rv.bClear = true;
+        rv.mCamera = entt::null;
+        rv.mTarget = window->GetCanvas();
         
         Clock clock;
-        while (!displayInterface->ShouldClose()) {
+        while (!window->ShouldClose()) {
+            renderer->SetRenderView(rv);
             systems.Fork(clock.GetTime());
             systems.Join();
         }
@@ -76,10 +87,6 @@ int main() {
     marl::Scheduler scheduler(marl::Scheduler::Config::allCores());
     scheduler.bind();
     defer(scheduler.unbind());
-
-#if GL_SUPPORTED
-    TestBackend(GraphicsBackend::OPENGL);
-#endif
 
 #if VULKAN_SUPPORTED && !PLATFORM_MACOS
     TestBackend(GraphicsBackend::VULKAN);

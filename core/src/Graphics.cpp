@@ -19,7 +19,7 @@ namespace okami::graphics {
         }
     }
 
-    bool RenderPass::operator==(const RenderPass& pass) {
+    bool RenderPass::operator==(const RenderPass& pass) const {
         bool bResult = pass.mAttributeCount == mAttributeCount;
 
         for (int i = 0; i < MaxAttributes; ++i) {

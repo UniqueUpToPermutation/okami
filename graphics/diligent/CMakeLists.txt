@@ -36,6 +36,7 @@ list(APPEND SOURCE
     src/Editor.cpp
     src/Glfw.cpp
     src/RenderModule.cpp
+    src/StaticMeshModule.cpp
     shader_rc.cpp
     ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
     ${IM3D_DIR}/im3d.cpp

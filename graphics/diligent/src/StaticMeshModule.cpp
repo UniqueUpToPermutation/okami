@@ -11,7 +11,7 @@ namespace okami::graphics::diligent {
 
     StaticMeshModule::Pipeline CreateStaticMeshPipeline(
         DG::IRenderDevice* device,
-        IRenderer* renderer,
+        IRenderPassFormatProvider* formatProvider,
         IGlobalsBufferProvider* globalsBufferProvider,
         DG::IShader* vertexShader,
         DynamicUniformBuffer<HLSL::StaticInstanceData>* instanceBuffer,
@@ -21,31 +21,44 @@ namespace okami::graphics::diligent {
         
         auto fileLoader = params.mFileSystem;
 
-        ShaderParams paramsStaticMeshPSColor(
-            "BasicPixel.psh", DG::SHADER_TYPE_PIXEL, "Static Mesh PS");
-
         StaticMeshModule::Pipeline pipeline;
-        pipeline.mPS.Attach(CompileEmbeddedShader(
-            device, paramsStaticMeshPSColor, fileLoader, true));
+
+        if (pass.mAttributeCount > 0) {
+            ShaderPreprocessorConfig preprocessorConfig;
+            WritePassShaderMacros(pass, preprocessorConfig);
+
+            ShaderParams paramsStaticMeshPSColor(
+                "BasicPixel.psh", DG::SHADER_TYPE_PIXEL, 
+                "Static Mesh PS", preprocessorConfig);
+
+            pipeline.mPS.Attach(CompileEmbeddedShader(
+                device, paramsStaticMeshPSColor, fileLoader, true));
+        }
 
         // Create pipeline
         GraphicsPipelineStateCreateInfo PSOCreateInfo;
         PSOCreateInfo.PSODesc.Name = "Static Mesh";
         PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
         PSOCreateInfo.GraphicsPipeline.NumRenderTargets             = pass.mAttributeCount;
+        PSOCreateInfo.GraphicsPipeline.RTVFormats[0]                = DG::TEX_FORMAT_UNKNOWN;
         for (int i = 0; i < pass.mAttributeCount; ++i) {
-            PSOCreateInfo.GraphicsPipeline.RTVFormats[0]            = ToDiligent(renderer->GetFormat(pass.mAttributes[i]));
+            PSOCreateInfo.GraphicsPipeline.RTVFormats[0]            = formatProvider->GetFormat(pass.mAttributes[i]);
         }
-        PSOCreateInfo.GraphicsPipeline.DSVFormat                    = ToDiligent(renderer->GetDepthFormat(pass));
+        PSOCreateInfo.GraphicsPipeline.DSVFormat                    = formatProvider->GetDepthFormat(pass);
         PSOCreateInfo.GraphicsPipeline.PrimitiveTopology            = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode      = CULL_MODE_BACK;
         PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = true;
+        PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.StencilEnable = false;
 
         InputLayoutDiligent inputLayout = ToDiligent(vertexFormat);
         PSOCreateInfo.GraphicsPipeline.InputLayout.LayoutElements = inputLayout.mElements.data();
         PSOCreateInfo.GraphicsPipeline.InputLayout.NumElements = inputLayout.mElements.size();
 
         PSOCreateInfo.pVS = vertexShader;
+
+        if (pass.mAttributeCount > 0) {
+            PSOCreateInfo.pPS = pipeline.mPS;
+        }
 
         std::vector<ShaderResourceVariableDesc> shaderVars;
         std::vector<ImmutableSamplerDesc> samplerDescs;
@@ -66,6 +79,7 @@ namespace okami::graphics::diligent {
             shaderVars.emplace_back(ShaderResourceVariableDesc{
                 SHADER_TYPE_PIXEL, "t_Albedo", 
                 SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE});
+
             shaderVars.emplace_back(ShaderResourceVariableDesc{
                 SHADER_TYPE_PIXEL, "cbuf_InstanceData", 
                 SHADER_RESOURCE_VARIABLE_TYPE_STATIC});
@@ -89,12 +103,13 @@ namespace okami::graphics::diligent {
         pipeline.mState->GetStaticVariableByName(
             DG::SHADER_TYPE_VERTEX, "cbuf_SceneGlobals")->Set(
                 globalsBufferProvider->GetGlobalsBuffer()->Get());
-        
+    
+        pipeline.mState->GetStaticVariableByName(
+            DG::SHADER_TYPE_VERTEX, "cbuf_InstanceData")->Set(instanceBuffer->Get());
+
         if (pass.mAttributeCount > 0) {
             pipeline.mState->GetStaticVariableByName(
-                DG::SHADER_TYPE_VERTEX, "cbuf_InstanceData")->Set(instanceBuffer->Get());
-            pipeline.mState->GetStaticVariableByName(
-                DG::SHADER_TYPE_VERTEX, "cbuf_InstanceData")->Set(instanceBuffer->Get());
+                DG::SHADER_TYPE_PIXEL, "cbuf_InstanceData")->Set(instanceBuffer->Get());
         }
 
         return pipeline;
@@ -121,25 +136,25 @@ namespace okami::graphics::diligent {
         mDefaultTexture = params.mDefaultTexture;
 
         core::InterfaceCollection interfaces(renderer);
-        auto rendererInterface = interfaces.Query<IRenderer>();
-        auto globalBuffersPovider = interfaces.Query<IGlobalsBufferProvider>();
+        auto globalBuffersProvider = interfaces.Query<IGlobalsBufferProvider>();
+        auto renderPassFormatProvider = interfaces.Query<IRenderPassFormatProvider>();
 
-        if (!rendererInterface) {
-            throw std::runtime_error("Renderer does not implement"
-                " IRenderer!");
-        }
-
-        if (!globalBuffersPovider) {
+        if (!globalBuffersProvider) {
             throw std::runtime_error("Renderer does not implement"
                 " IGlobalsBufferProvider!");
+        }
+
+        if (!renderPassFormatProvider) {
+            throw std::runtime_error("Renderer does not implement"
+                " IRenderPassFormatProvider!");
         }
 
         int pipelineId = 0;
         for (auto pass : params.mRequestedRenderPasses) {
             auto pipeline = CreateStaticMeshPipeline(
                 device,
-                rendererInterface,
-                globalBuffersPovider,
+                renderPassFormatProvider,
+                globalBuffersProvider,
                 mVS,
                 &mInstanceData,
                 mFormat,
@@ -149,6 +164,13 @@ namespace okami::graphics::diligent {
             mPipelineLookup.emplace(pass, pipelineId++);
             mPipelines.emplace_back(std::move(pipeline));
         }
+
+        InitializeMaterial(StaticMeshMaterial::Data(), mDefaultMaterial);
+    }
+
+    void StaticMeshModule::Update(
+        bool bAllowBlock) {
+        mMaterialManager.RunBackend(bAllowBlock);    
     }
 
     void StaticMeshModule::QueueCommands(
@@ -178,7 +200,7 @@ namespace okami::graphics::diligent {
         };
 
         for (auto entity : staticMeshes) {
-            auto& staticMesh = staticMeshes.get<core::StaticMesh>(entity);
+            const auto& staticMesh = staticMeshes.get<const core::StaticMesh>(entity);
             auto transform = registry.try_get<core::Transform>(entity);
 
             RenderCall call;
@@ -238,10 +260,10 @@ namespace okami::graphics::diligent {
 
             DG::ITexture* texture;
         }
-        
     }
 
     void StaticMeshModule::Shutdown() {
+        mDefaultMaterial = StaticMeshMaterialImpl();
         mVS.Release();
         mInstanceData = DynamicUniformBuffer<HLSL::StaticInstanceData>();
         mPipelines.clear();
@@ -277,7 +299,7 @@ namespace okami::graphics::diligent {
             OnFinalize(mat);
         };
 
-        mMaterialManager.Add(std::move(obj),
+        return mMaterialManager.Add(std::move(obj),
             newResId,
             finalizer);
     }
@@ -299,7 +321,13 @@ namespace okami::graphics::diligent {
         auto& data = material->GetData();
 
         auto impl = std::make_unique<StaticMeshMaterialImpl>();
-        auto data = material->GetData();
+
+        InitializeMaterial(data, *impl);
+    }
+
+    void StaticMeshModule::InitializeMaterial(
+        const core::StaticMeshMaterial::Data& data,
+        StaticMeshMaterialImpl& impl) {
 
         DG::ITexture* albedo;
         if (data.mAlbedo) {
@@ -313,12 +341,13 @@ namespace okami::graphics::diligent {
             pipeline.mState->CreateShaderResourceBinding(
                 &binding, true);
 
-            binding->GetVariableByIndex(DG::SHADER_TYPE_PIXEL, 
-                pipeline.mAlbedoIdx)->Set(
-                    albedo->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-        
+            if (pipeline.mPS) {
+                binding->GetVariableByName(DG::SHADER_TYPE_PIXEL, 
+                    "t_Albedo")->Set(albedo->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
+            }
+
             DG::RefCntAutoPtr<DG::IShaderResourceBinding> autoPtr(binding);
-            impl->mBindings.emplace_back(std::move(autoPtr));
+            impl.mBindings.emplace_back(std::move(autoPtr));
         }
     }
 }

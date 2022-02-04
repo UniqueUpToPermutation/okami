@@ -7,6 +7,11 @@
 namespace okami::core {
 
     class StaticMeshMaterial : public BaseMaterial {
+    public:
+        inline StaticMeshMaterial(const Data& data) : BaseMaterial(data) {
+        }
+
+        inline StaticMeshMaterial() = default;
     };
 
     struct StaticMesh {

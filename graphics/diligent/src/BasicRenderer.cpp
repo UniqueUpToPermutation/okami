@@ -15,16 +15,6 @@ void MakeShaderMap(okami::core::file_map_t* map);
 
 namespace okami::graphics::diligent {
 
-    void GetEngineInitializationAttribs(
-        DG::RENDER_DEVICE_TYPE DeviceType, 
-        DG::EngineCreateInfo& EngineCI, 
-        DG::SwapChainDesc& SCDesc) {
-        
-		SCDesc.ColorBufferFormat            = TEX_FORMAT_RGBA8_UNORM_SRGB;
-        EngineCI.Features.GeometryShaders   = DEVICE_FEATURE_STATE_ENABLED;
-        EngineCI.Features.Tessellation 		= DEVICE_FEATURE_STATE_ENABLED;
-    }
-
     BasicRenderer::BasicRenderer(
         IDisplay* display,
         core::ResourceInterface& resources) : 
@@ -37,7 +27,8 @@ namespace okami::graphics::diligent {
             [this](WeakHandle<core::Texture> tex) { OnDestroy(tex); }),
         mRenderCanvasManager(
             []() -> RenderCanvas { throw std::runtime_error("Error!"); },
-            [this](WeakHandle<RenderCanvas> canvas) { OnDestroy(canvas); }) {
+            [this](WeakHandle<RenderCanvas> canvas) { OnDestroy(canvas); }),
+        mResourceInterface(resources) {
 
         // Associate the renderer with the geometry 
         resources.Register<core::Geometry>(this);
@@ -157,8 +148,8 @@ namespace okami::graphics::diligent {
                     mDefaultSCDesc, mEngineFactory, window);
 
                 const auto& scDesc = swapChain->GetDesc();
-                if (mColorFormat == DG::TEX_FORMAT_UNKNOWN) {
-                    mColorFormat = scDesc.ColorBufferFormat;
+                if (mColorFormat != scDesc.ColorBufferFormat) {
+                    throw std::runtime_error("Swap chain has improper color format!");
                 }
 
                 impl->mSwapChain = swapChain;
@@ -194,7 +185,7 @@ namespace okami::graphics::diligent {
                     dg_desc.MipLevels = 1;
                     dg_desc.Name = "Render Canvas RT Backend";
                     dg_desc.Format = 
-                        ToDiligent(GetFormat(pass.mAttributes[i]));
+                        GetFormat(pass.mAttributes[i]);
 
                     DG::ITexture* tex = nullptr;
                     mDevice->CreateTexture(dg_desc, nullptr, &tex);
@@ -211,7 +202,7 @@ namespace okami::graphics::diligent {
                 dg_desc.MipLevels = 1;
                 dg_desc.Name = "Render Canvas DS Backend";
                 dg_desc.Format = 
-                    ToDiligent(GetDepthFormat(pass));
+                    GetDepthFormat(pass);
 
                 DG::ITexture* tex = nullptr;
                 mDevice->CreateTexture(dg_desc, nullptr, &tex);
@@ -280,9 +271,29 @@ namespace okami::graphics::diligent {
         DG::IRenderDevice* device  = nullptr;
         std::vector<DG::IDeviceContext*> contexts;
 
+        if (mDisplay->GetRequestedBackend() == GraphicsBackend::VULKAN) {
+            mColorFormat = DG::TEX_FORMAT_BGRA8_UNORM_SRGB;
+        } else {
+            mColorFormat = DG::TEX_FORMAT_RGBA8_UNORM_SRGB;
+        }
+        mDepthFormat = DG::TEX_FORMAT_D32_FLOAT;
+
+        auto getInitializationAttribs = [this, 
+            colorFormat = mColorFormat,
+            depthFormat = mDepthFormat](
+            DG::RENDER_DEVICE_TYPE DeviceType, 
+            DG::EngineCreateInfo& EngineCI, 
+            DG::SwapChainDesc& scDesc) {
+
+            scDesc.ColorBufferFormat            = colorFormat;
+            scDesc.DepthBufferFormat            = depthFormat;
+            EngineCI.Features.GeometryShaders   = DEVICE_FEATURE_STATE_ENABLED;
+            EngineCI.Features.Tessellation 		= DEVICE_FEATURE_STATE_ENABLED;
+        };
+
         CreateDevice(mDisplay->GetRequestedBackend(), 
             &factory, &device, contexts, &mDefaultSCDesc, 
-            &GetEngineInitializationAttribs);
+            getInitializationAttribs);
 
         mEngineFactory.Attach(factory);
         mDevice.Attach(device);
@@ -292,29 +303,62 @@ namespace okami::graphics::diligent {
                 DG::RefCntAutoPtr<DG::IDeviceContext>(context));
         }
 
-        mVertexLayouts.Register<core::StaticMesh>(core::VertexFormat::PositionUV());
+        // Create the default texture
+        const uint defaultTexWidth = 16;
+        const uint defaultTexHeight = 16;
+
+        DG::TextureDesc defaultTexDesc;
+        defaultTexDesc.BindFlags = DG::BIND_SHADER_RESOURCE;
+        defaultTexDesc.Format = DG::TEX_FORMAT_RGBA8_UNORM_SRGB;
+        defaultTexDesc.Width = defaultTexWidth;
+        defaultTexDesc.Height = defaultTexHeight;
+        defaultTexDesc.MipLevels = 1;
+        defaultTexDesc.Type = DG::RESOURCE_DIM_TEX_2D;
+        
+        std::vector<uint8_t> defaultTexDataRaw(4 * defaultTexWidth * defaultTexHeight);
+        std::fill(defaultTexDataRaw.begin(), defaultTexDataRaw.end(), 255u);
+
+        std::vector<DG::TextureSubResData> subData(1);
+        subData[0].Stride = 4 * defaultTexWidth;
+        subData[0].pData = defaultTexDataRaw.data();
+
+        DG::TextureData defaultTexData;
+        defaultTexData.NumSubresources = 1;
+        defaultTexData.pContext = mContexts[0];
+        defaultTexData.pSubResources = subData.data();
+
+        DG::ITexture* defaultTexture = nullptr;
+        mDevice->CreateTexture(defaultTexDesc, &defaultTexData, &defaultTexture);
+        mDefaultTexture.Attach(defaultTexture);
 
         // Create globals buffer
         mSceneGlobals = DynamicUniformBuffer<HLSL::SceneGlobals>(mDevice);
 
-        // This should spawn requested backends.
+        AddModule(std::make_unique<StaticMeshModule>());
+
+        // This should spawn requested render canvas backends.
         mRenderCanvasManager.RunBackend(true);
+
+        mColorPass = RenderPass::Final();
 
         RenderModuleParams params;
         params.mFileSystem = &fileLoader;
         params.mDefaultTexture = mDefaultTexture;
         params.mRequestedRenderPasses = {
             mColorPass,
-            mDepthPass,
-            mEntityIdPass
         };
 
-        for (auto& modules : mRenderModules) {
-            modules->Startup(this, mDevice, params);
+        for (auto& module : mRenderModules) {
+            module->Startup(this, mDevice, params);
         }
 
         for (auto overlay : mOverlays) {
             overlay->Startup(this, mDevice, params);
+        }
+
+        for (auto& module : mRenderModules) {
+            module->RegisterResourceInterfaces(mResourceInterface);
+            module->RegisterVertexFormats(mVertexLayouts);
         }
     }
 
@@ -322,12 +366,17 @@ namespace okami::graphics::diligent {
         interfaces.Add<core::IVertexLayoutProvider>(this);
         interfaces.Add<IRenderer>(this);
         interfaces.Add<IGlobalsBufferProvider>(this);
+        interfaces.Add<IRenderPassFormatProvider>(this);
     }
 
     void BasicRenderer::LoadResources(marl::WaitGroup& waitGroup) {
         mGeometryManager.ScheduleBackend(waitGroup, true);
         mTextureManager.ScheduleBackend(waitGroup, true);
         mRenderCanvasManager.ScheduleBackend(waitGroup, true);
+
+        for (auto& module : mRenderModules) { 
+            module->Update(true);
+        }
     }
 
     void BasicRenderer::SetFrame(core::Frame& frame) {
@@ -442,6 +491,10 @@ namespace okami::graphics::diligent {
         mGeometryManager.ScheduleBackend(resourceWait);
         mTextureManager.ScheduleBackend(resourceWait);
 
+        for (auto& module : mRenderModules) { 
+            module->Update(false);
+        }
+
         syncObject.WaitUntilFinished<core::Camera>();
 
         auto& registry = frame.Registry();
@@ -478,8 +531,14 @@ namespace okami::graphics::diligent {
             rmGlobals.mViewDirection = DG::float3(0.0f, 0.0f, 1.0f);
 
             auto cameraEntity = rv.mCamera;
-            auto camera = registry.get<core::Camera>(cameraEntity);
+            core::Camera camera;
+            core::Camera* cameraPtr = nullptr;
 
+            if (cameraEntity != entt::null) {
+                camera = registry.get<core::Camera>(cameraEntity);
+                cameraPtr = &camera;
+            }
+            
             auto renderCanvas = GetRenderCanvasImpl(rv.mTarget);
             DG::SwapChainDesc scDesc;
             if (renderCanvas->mSwapChain) {
@@ -490,11 +549,14 @@ namespace okami::graphics::diligent {
                 scDesc.PreTransform = ToDiligent(rv.mTarget->GetSurfaceTransform());
             }
 
-            rmGlobals.mProjection = GetProjection(camera, scDesc, false);
+            rmGlobals.mProjection = GetProjection(cameraPtr, scDesc, false);
             
-            auto transform = registry.try_get<core::Transform>(cameraEntity);
-            if (transform) {
-                rmGlobals.mView = ToMatrix(*transform).Inverse();
+            core::Transform* transform = nullptr;
+            if (cameraEntity != entt::null) {
+                transform = registry.try_get<core::Transform>(cameraEntity);
+                if (transform) {
+                    rmGlobals.mView = ToMatrix(*transform).Inverse();
+                }
             }
 
             shaderGlobals.mCamera.mView = rmGlobals.mView;
@@ -643,8 +705,17 @@ namespace okami::graphics::diligent {
         mEngineFactory.Release();
     }
 
-    void BasicRenderer::AddModule(std::unique_ptr<IGraphicsObject>&&) {
-        throw std::runtime_error("Not implemented!");
+    void BasicRenderer::AddModule(std::unique_ptr<IGraphicsObject>&& object) {
+        auto cast = dynamic_cast<IRenderModule*>(object.get());
+
+        if (cast) {
+            std::unique_ptr<IRenderModule> modul(cast);
+            object.release();
+
+            mRenderModules.emplace(std::move(modul));
+        } else {
+            throw std::runtime_error("Module is not IRenderModule!");
+        }
     }
 
     void BasicRenderer::AddOverlay(IGraphicsObject* object) {
@@ -667,21 +738,21 @@ namespace okami::graphics::diligent {
         }
     }
 
-    core::TextureFormat BasicRenderer::GetFormat(
+    DG::TEXTURE_FORMAT BasicRenderer::GetFormat(
         RenderAttribute attrib) {
         switch (attrib) {
             case RenderAttribute::COLOR:
-                return ToOkami(mColorFormat);
+                return mColorFormat;
             case RenderAttribute::ENTITY_ID:
-                return core::TextureFormat::R32_UINT();
+                return DG::TEX_FORMAT_R32_UINT;
             default:
-                return core::TextureFormat::UNKNOWN();
+                return DG::TEX_FORMAT_UNKNOWN;
         }
     }
 
-    core::TextureFormat BasicRenderer::GetDepthFormat(
+    DG::TEXTURE_FORMAT BasicRenderer::GetDepthFormat(
         const RenderPass& pass) {
-        return core::TextureFormat::R32_FLOAT();
+        return DG::TEX_FORMAT_D32_FLOAT;
     }
 
     DynamicUniformBuffer<HLSL::SceneGlobals>*

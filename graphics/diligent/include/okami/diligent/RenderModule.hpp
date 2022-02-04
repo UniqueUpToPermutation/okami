@@ -52,6 +52,12 @@ namespace okami::graphics::diligent {
         core::Time mTime;
     };
 
+    class IRenderPassFormatProvider {
+    public:
+        virtual DG::TEXTURE_FORMAT GetFormat(RenderAttribute attrib) = 0;
+        virtual DG::TEXTURE_FORMAT GetDepthFormat(const RenderPass& pass) = 0;
+    };
+
     class IRenderModule : public IGraphicsObject {
     public:
         virtual void Startup(

@@ -37,7 +37,8 @@ namespace okami::graphics::diligent {
         public core::IResourceManager<RenderCanvas>,
         public core::IVertexLayoutProvider,
         public IRenderer,
-        public IGlobalsBufferProvider {
+        public IGlobalsBufferProvider,
+        public IRenderPassFormatProvider {
     public:
         struct RenderCanvasImpl {
             DG::RefCntAutoPtr<DG::ISwapChain>
@@ -54,12 +55,14 @@ namespace okami::graphics::diligent {
         DG::RefCntAutoPtr<DG::IEngineFactory>       mEngineFactory;
         std::vector<DG::RefCntAutoPtr<DG::IDeviceContext>>   
             mContexts;
+        core::ResourceInterface&                    mResourceInterface;
 
         RenderPass                                  mColorPass;
         RenderPass                                  mDepthPass;
         RenderPass                                  mEntityIdPass;
 
         DG::TEXTURE_FORMAT                          mColorFormat = DG::TEX_FORMAT_UNKNOWN;
+        DG::TEXTURE_FORMAT                          mDepthFormat = DG::TEX_FORMAT_UNKNOWN;
 
         std::vector<RenderView>                     mRenderViews;
         
@@ -158,8 +161,8 @@ namespace okami::graphics::diligent {
         void AddOverlay(IGraphicsObject* object) override;
         void RemoveOverlay(IGraphicsObject* object) override;
 
-        core::TextureFormat GetFormat(RenderAttribute attrib) override;
-        core::TextureFormat GetDepthFormat(const RenderPass& pass) override;
+        DG::TEXTURE_FORMAT GetFormat(RenderAttribute attrib) override;
+        DG::TEXTURE_FORMAT GetDepthFormat(const RenderPass& pass) override;
 
         DynamicUniformBuffer<HLSL::SceneGlobals>*
             GetGlobalsBuffer() override;

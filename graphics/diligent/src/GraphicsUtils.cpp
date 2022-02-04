@@ -61,7 +61,7 @@ namespace okami::graphics::diligent {
 
                 scDefaultDesc.IsPrimary = window->GetDesc().bIsPrimary;
                 factoryvk->CreateSwapChainVk(device, immediateContext, 
-                scDefaultDesc, nativeWindow, swapChain);
+                    scDefaultDesc, nativeWindow, swapChain);
 
                 break;
             }
@@ -800,28 +800,32 @@ namespace okami::graphics::diligent {
 	}
 
     DG::float4x4 GetProjection(
-        const core::Camera& camera,
+        const core::Camera* camera,
         const DG::SwapChainDesc& scDesc,
         bool bIsGL) {
-        if (camera.mType == core::Camera::Type::PERSPECTIVE) {
-			// Get pretransform matrix that rotates the scene according the surface orientation
-			auto srfPreTransform = GetSurfacePretransformMatrix(scDesc, DG::float3{0, 0, 1});
+        if (camera) {
+            if (camera->mType == core::Camera::Type::PERSPECTIVE) {
+                // Get pretransform matrix that rotates the scene according the surface orientation
+                auto srfPreTransform = GetSurfacePretransformMatrix(scDesc, DG::float3{0, 0, 1});
 
-			// Get projection matrix adjusted to the current screen orientation
-			auto proj = GetAdjustedProjectionMatrix(scDesc, bIsGL, 
-                camera.mFieldOfView, camera.mNearPlane, camera.mFarPlane);
-			return srfPreTransform * proj;
-		} else if (camera.mType == core::Camera::Type::ORTHOGRAPHIC) {
-			// Get pretransform matrix that rotates the scene according the surface orientation
-			auto srfPreTransform = GetSurfacePretransformMatrix(scDesc, DG::float3{0, 0, 1});
+                // Get projection matrix adjusted to the current screen orientation
+                auto proj = GetAdjustedProjectionMatrix(scDesc, bIsGL, 
+                    camera->mFieldOfView, camera->mNearPlane, camera->mFarPlane);
+                return srfPreTransform * proj;
+            } else if (camera->mType == core::Camera::Type::ORTHOGRAPHIC) {
+                // Get pretransform matrix that rotates the scene according the surface orientation
+                auto srfPreTransform = GetSurfacePretransformMatrix(scDesc, DG::float3{0, 0, 1});
 
-			// Get projection matrix adjusted to the current screen orientation
-			auto proj = GetAdjustedOrthoMatrix(bIsGL, ToDiligent(camera.mOrthoSize), 
-                camera.mNearPlane, camera.mFarPlane);
-			return srfPreTransform * proj;
-		} else {
-			throw std::runtime_error("Invalid Camera Type!");
-		}
+                // Get projection matrix adjusted to the current screen orientation
+                auto proj = GetAdjustedOrthoMatrix(bIsGL, ToDiligent(camera->mOrthoSize), 
+                    camera->mNearPlane, camera->mFarPlane);
+                return srfPreTransform * proj;
+            } else {
+                throw std::runtime_error("Invalid Camera Type!");
+            }
+        } else {
+            return GetSurfacePretransformMatrix(scDesc, DG::float3{0, 0, 1});
+        }
     }
 
     DG::SURFACE_TRANSFORM ToDiligent(
@@ -1139,4 +1143,38 @@ namespace okami::graphics::diligent {
 				return false;
 		}
 	}
+
+    void WritePassShaderMacros(
+        const RenderPass& pass, 
+        ShaderPreprocessorConfig& config) {
+        
+        for (uint i = 0; i < pass.mAttributeCount; ++i) {
+            std::string sv_target = "SV_TARGET";
+            switch (pass.mAttributes[i]) {
+                case RenderAttribute::COLOR:
+                    config.mDefines["COLOR_ATTRIBUTE"] = sv_target + std::to_string(i);
+                    break;
+                case RenderAttribute::ALBEDO:
+                    config.mDefines["ALBEDO_ATTRIBUTE"] = sv_target + std::to_string(i);
+                    break;
+                case RenderAttribute::DEPTH:
+                    config.mDefines["DEPTH_ATTRIBUTE"] = sv_target + std::to_string(i);
+                    break;
+                case RenderAttribute::ENTITY_ID:
+                    config.mDefines["ENTITY_ID_ATTRIBUTE"] = sv_target + std::to_string(i);
+                    break;
+                case RenderAttribute::METALLIC:
+                    config.mDefines["METALLIC_ATTRIBUTE"] = sv_target + std::to_string(i);
+                    break;
+                case RenderAttribute::NORMAL:
+                    config.mDefines["NORMAL_ATTRIBUTE"] = sv_target + std::to_string(i);
+                    break;
+                case RenderAttribute::ROUGHNESS:
+                    config.mDefines["ROUGHNESS_ATTRIBUTE"] = sv_target + std::to_string(i);
+                    break;
+                case RenderAttribute::UV:
+                    config.mDefines["UV_ATTRIBUTE"] = sv_target + std::to_string(i);
+            }
+        }
+    }
 }

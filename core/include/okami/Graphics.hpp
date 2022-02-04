@@ -56,7 +56,7 @@ namespace okami::graphics {
         std::array<RenderAttribute, MaxAttributes> mAttributes;
         uint mAttributeCount = 0;
 
-        bool operator==(const RenderPass& pass);
+        bool operator==(const RenderPass& pass) const;
 
         struct Hasher {
             std::size_t operator()(const RenderPass& p) const noexcept;
@@ -228,8 +228,6 @@ namespace okami::graphics {
         virtual void AddModule(std::unique_ptr<IGraphicsObject>&&) = 0;
         virtual void AddOverlay(IGraphicsObject* object) = 0;
         virtual void RemoveOverlay(IGraphicsObject* object) = 0;
-        virtual core::TextureFormat GetFormat(RenderAttribute attrib) = 0;
-        virtual core::TextureFormat GetDepthFormat(const RenderPass& pass) = 0;
         virtual void SetRenderViews(std::vector<RenderView>&& rvs) = 0;
 
         inline void SetRenderView(RenderView v) {

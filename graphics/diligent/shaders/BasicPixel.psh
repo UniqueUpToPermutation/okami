@@ -5,10 +5,6 @@ struct PSInput {
     float2 UV    : TEXCOORD0;
 };
 
-struct PSOutput { 
-    float4 Color : SV_TARGET0;
-};
-
 cbuffer cbuf_InstanceData {
     StaticInstanceData gInstanceData;
 };
@@ -17,9 +13,11 @@ Texture2D    t_Albedo;
 SamplerState t_Albedo_sampler; // By convention, texture samplers must use the '_sampler' suffix
 
 void main(in PSInput ps_input,
-            out PSOutput ps_output)
+            out PixelData ps_output)
 {
-    ps_output.Color = t_Albedo.Sample(
+    ps_output.mColor = t_Albedo.Sample(
         t_Albedo_sampler, 
         ps_input.UV);
+
+    ps_output.mEntity = gInstanceData.mEntity;
 }

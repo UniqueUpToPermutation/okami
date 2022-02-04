@@ -40,15 +40,12 @@ void TestBackend(GraphicsBackend backend) {
         auto window = display->CreateWindow(windowParams);
 
         Frame frame;
-        auto camera = frame.CreateEntity();
-        frame.Emplace<Camera>(camera);
-
         systems.SetFrame(frame);
         systems.LoadResources();
 
         RenderView view;
         view.bClear = true;
-        view.mCamera = camera;
+        view.mCamera = entt::null;
         view.mTarget = window->GetCanvas();
         
         while (!window->ShouldClose()) {

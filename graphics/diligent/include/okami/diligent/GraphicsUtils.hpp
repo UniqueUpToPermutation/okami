@@ -1,6 +1,7 @@
 #pragma once
 
 #include <okami/diligent/Glfw.hpp>
+#include <okami/diligent/Shader.hpp>
 
 #include <okami/VertexFormat.hpp>
 #include <okami/Texture.hpp>
@@ -43,7 +44,7 @@ namespace okami::graphics::diligent {
     }
 
     DG::float4x4 GetProjection(
-        const core::Camera& camera,
+        const core::Camera* camera,
         const DG::SwapChainDesc& scDesc, 
         bool bIsGL);
 
@@ -67,6 +68,10 @@ namespace okami::graphics::diligent {
     struct InputLayoutDiligent {
         std::vector<DG::LayoutElement> mElements;
     };
+
+    void WritePassShaderMacros(
+        const RenderPass& pass, 
+        ShaderPreprocessorConfig& config);
 
     typedef std::function<void(
         DG::RENDER_DEVICE_TYPE DeviceType, 
