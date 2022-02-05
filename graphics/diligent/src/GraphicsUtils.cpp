@@ -623,6 +623,31 @@ namespace okami::graphics::diligent {
         }
     }
 
+    SurfaceTransform ToOkami(DG::SURFACE_TRANSFORM transform) {
+        switch (transform) {
+            case DG::SURFACE_TRANSFORM_IDENTITY:
+                return SurfaceTransform::IDENTITY;
+            case DG::SURFACE_TRANSFORM_OPTIMAL:
+                return SurfaceTransform::OPTIMAL;
+            case DG::SURFACE_TRANSFORM_ROTATE_90:
+                return SurfaceTransform::ROTATE_90;
+            case DG::SURFACE_TRANSFORM_ROTATE_180:
+                return SurfaceTransform::ROTATE_180;
+            case DG::SURFACE_TRANSFORM_ROTATE_270:
+                return SurfaceTransform::ROTATE_270;
+            case DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR:
+                return SurfaceTransform::HORIZONTAL_MIRROR;
+            case DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90:
+                return SurfaceTransform::HORIZONTAL_MIRROR_ROTATE_90;
+            case DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180:
+                return SurfaceTransform::HORIZONTAL_MIRROR_ROTATE_180;
+            case DG::SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270:
+                return SurfaceTransform::HORIZONTAL_MIRROR_ROTATE_270;
+            default:
+                throw std::runtime_error("Invalid value!");
+        }
+    }
+
     core::TextureFormat ToOkami(DG::TEXTURE_FORMAT format) {
         switch (format) {
         case DG::TEX_FORMAT_R8_SINT:

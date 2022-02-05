@@ -16,52 +16,90 @@ using namespace okami::graphics;
 
 void TestBackend(GraphicsBackend backend) {
 
-    RealtimeGraphicsParams params;
-    params.mDeviceType = backend;
+    RealtimeGraphicsParams gfxParams;
+    gfxParams.mBackend = backend;
+
+    WindowParams windowParams;
 
     switch (backend) {
         case GraphicsBackend::VULKAN:
-            params.mWindowTitle = "okami Diligent-Engine ImGui Test (Vulkan)";
-            break;
-        case GraphicsBackend::OPENGL:
-            params.mWindowTitle = "okami Diligent-Engine ImGui Test (OpenGL)";
+            windowParams.mWindowTitle = "okami Diligent-Engine ImGui Test (Vulkan)";
             break;
         case GraphicsBackend::D3D11:
-            params.mWindowTitle = "okami Diligent-Engine ImGui Test (D3D11)";
+            windowParams.mWindowTitle = "okami Diligent-Engine ImGui Test (D3D11)";
             break;
         case GraphicsBackend::D3D12:
-            params.mWindowTitle = "okami Diligent-Engine ImGui Test (D3D12)";
+            windowParams.mWindowTitle = "okami Diligent-Engine ImGui Test (D3D12)";
             break;
     }
 
     ResourceInterface resources;
     SystemCollection systems;
-    auto display = systems.Add(CreateGLFWDisplay(params));
-    auto renderer = systems.Add(CreateRenderer(display, resources));
-    
-    auto displayInterface = systems.QueryInterface<IDisplay>();
 
-    systems.Add(CreateImGui(renderer, display));
+    systems.Add(CreateGLFWDisplay(&resources, gfxParams));
+    auto display = systems.QueryInterface<IDisplay>();
 
-    bool bShowDemoWindow = true;
+    systems.Add(CreateRenderer(display, resources));
+    auto renderer = systems.QueryInterface<IRenderer>();
 
-    auto imguiInterface = systems.QueryInterface<IImGuiCallback>();
-    imguiInterface->Add([&bShowDemoWindow]() {
-        if (bShowDemoWindow)
-            ImGui::ShowDemoWindow(&bShowDemoWindow);
-    });
+    systems.Add(CreateImGui(display, renderer));
+    auto imgui = systems.QueryInterface<IImGuiSystem>();
 
     systems.Startup();
     {
-        Frame frame;
+        auto mainWindow = display->CreateWindow(windowParams);
+
+        windowParams.mBackbufferWidth = 1024;
+        windowParams.mBackbufferHeight = 756;
+        windowParams.mWindowTitle = "Secondary Window";
+        windowParams.bIsPrimary = false;
+        auto secondaryWindow = display->CreateWindow(windowParams);
+
+        bool bShowDemoWindow1 = true;
+        bool bShowDemoWindow2 = true;
+        
+        imgui->AddOverlayTo(mainWindow);
+        imgui->AddOverlayTo(secondaryWindow);
+
+        imgui->Add(mainWindow, [&bShowDemoWindow1]() {
+            if (bShowDemoWindow1)
+                ImGui::ShowDemoWindow(&bShowDemoWindow1);
+        });
+
+        imgui->Add(secondaryWindow, [&bShowDemoWindow2]() {
+            if (bShowDemoWindow2)
+                ImGui::ShowDemoWindow(&bShowDemoWindow2);
+        });
 
         // Geometry and texture are available to use after this is called.
+        Frame frame;
         systems.SetFrame(frame);
         systems.LoadResources();
 
+        RenderView rv1;
+        rv1.bClear = true;
+        rv1.mCamera = entt::null;
+        rv1.mTarget = mainWindow->GetCanvas();
+
+        RenderView rv2;
+        rv2.bClear = true;
+        rv2.mCamera = entt::null;
+        rv2.mTarget = secondaryWindow->GetCanvas();
+
         Clock clock;
-        while (!displayInterface->ShouldClose()) {
+        while (!mainWindow->ShouldClose()) {
             auto time = clock.GetTime();
+
+            if (secondaryWindow && secondaryWindow->ShouldClose()) {
+                secondaryWindow->Close();
+                secondaryWindow = nullptr;
+            }
+
+            if (secondaryWindow != nullptr)
+                renderer->SetRenderViews({rv1, rv2});
+            else 
+                renderer->SetRenderView(rv1);
+                
             systems.Fork(time);
             systems.Join();
         }
@@ -78,10 +116,6 @@ int main() {
 
 #if VULKAN_SUPPORTED && !PLATFORM_MACOS
     TestBackend(GraphicsBackend::VULKAN);
-#endif
-
-#if GL_SUPPORTED
-    TestBackend(GraphicsBackend::OPENGL);
 #endif
 
 #if D3D11_SUPPORTED

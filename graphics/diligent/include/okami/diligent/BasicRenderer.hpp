@@ -89,8 +89,6 @@ namespace okami::graphics::diligent {
         std::unique_ptr<GeometryImpl>       MoveToGPU(const core::Geometry& geometry);
         std::unique_ptr<TextureImpl>        MoveToGPU(const core::Texture& texture);
 
-        void UpdateFramebuffer(RenderCanvas* canvas);
-
     public:
         BasicRenderer(
             IDisplay* display,
@@ -100,6 +98,8 @@ namespace okami::graphics::diligent {
             const std::vector<RenderView>& views,
             core::SyncObject& syncObject,
             const core::Time& time);
+
+        void UpdateFramebuffer(WeakHandle<RenderCanvas> canvas);
 
         void Startup(marl::WaitGroup& waitGroup) override;
         void Shutdown() override;

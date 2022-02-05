@@ -5,7 +5,7 @@
 #include <okami/GraphicsComponents.hpp>
 #include <okami/Camera.hpp>
 
-#include <okami/diligent/Display.hpp>
+#include <okami/diligent/Glfw.hpp>
 #include <okami/diligent/Im3dSystem.hpp>
 #include <okami/diligent/ImGuiSystem.hpp>
 
@@ -114,7 +114,7 @@ void TestBackend(GraphicsBackend backend) {
             }
         });
 
-        auto imguiInterface = systems.QueryInterface<IImGuiCallback>();
+        auto imguiInterface = systems.QueryInterface<IImGuiSystem>();
         imguiInterface->Add([&selectedEntity]() {
             std::stringstream ss;
             ss << "Pick Result: ";

@@ -175,6 +175,12 @@ namespace okami::core {
             marl::schedule(std::move(managerUpdates));
         }
 
+        void ForEach(std::function<void(WeakHandle<T>)> func) {
+            for (auto& it : mOwnedResources) {
+                func(it);
+            }
+        }
+
         // Should be run on main thread!
         void RunBackend(bool bBlock = false) {
             marl::lock lock(mBackendMutex);

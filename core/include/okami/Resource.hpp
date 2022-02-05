@@ -115,7 +115,7 @@ namespace okami {
 		}
 
 		inline void Destroy() {
-			mRefCounter->Destroy(*this);
+			mRefCounter->Destroy(DownCast<Resource, true>());
 		}
 
 		inline Handle(T* resource, const std::shared_ptr<RefCountWrapper>& refCounter) :

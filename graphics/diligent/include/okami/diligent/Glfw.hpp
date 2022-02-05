@@ -133,7 +133,8 @@ namespace okami::graphics::diligent {
         NativeWindow MakeNativeWindowStruct() const;
         glm::i32vec2 GetFramebufferSize() const override;
         glm::i32vec2 GetWindowSize() const override;
-        bool GetIsFullscreen() const override;
+        bool IsFullscreen() const override;
+        bool IsPrimary() const override;
 
         core::delegate_handle_t 
             AddMouseButtonCallback(
@@ -183,6 +184,8 @@ namespace okami::graphics::diligent {
         void RemoveCursorPosCallback(core::delegate_handle_t) override;
         void RemoveDropCallback(core::delegate_handle_t) override;
         void RemoveCursorEnterCallback(core::delegate_handle_t) override;
+
+        void OnResize(int width, int height);
     
         core::IInputCapture* GetMouseFocus() override;
         core::IInputCapture* GetKeyboardFocus() override;
@@ -194,9 +197,11 @@ namespace okami::graphics::diligent {
         core::KeyState GetState(core::MouseButton mouseButton) const override;
         core::KeyState GetState(core::Key key) const override;
         void SetCursorMode(core::CursorMode cursor) override;
+        core::CursorMode GetCursorMode() const override;
         void SetRawMouseMotion(bool enabled) override;
         bool IsRawMouseMotionSupported() const override;
         glm::dvec2 GetCursorPos() const override;
+        void SetCursorPos(const glm::dvec2& pos) override;
         Handle<RenderCanvas> GetCanvas() const override;
         void SetCursor(ICursor* cursor) override;
 
@@ -207,6 +212,7 @@ namespace okami::graphics::diligent {
 
         const char* GetClipboardText() override;
         void SetClipboardText(const char* text) override;
+        bool IsFocused() const override;
     };
 
     class DisplayGLFW final : 

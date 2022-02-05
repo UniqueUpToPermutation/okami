@@ -231,7 +231,9 @@ namespace okami::core {
         virtual KeyState GetState(MouseButton mouseButton) const = 0;
         virtual KeyState GetState(Key key) const = 0;
         virtual glm::dvec2 GetCursorPos() const = 0;
+        virtual void SetCursorPos(const glm::dvec2& pos) = 0;
         virtual void SetCursorMode(CursorMode cursor) = 0;
+        virtual CursorMode GetCursorMode() const = 0;
         virtual void SetRawMouseMotion(bool enabled) = 0;
         virtual bool IsRawMouseMotionSupported() const = 0;
 
@@ -302,5 +304,9 @@ namespace okami::core {
         virtual void RegisterInterfaces(core::InterfaceCollection& interfaces) = 0;
 
         virtual void WaitForInput() = 0;
+
+        inline void SetCursorPos(double x, double y) {
+            SetCursorPos(glm::dvec2(x, y));
+        }
     };
 }

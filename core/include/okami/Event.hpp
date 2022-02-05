@@ -63,6 +63,12 @@ namespace okami::core {
             return mCurrentHandle;
         }
 
+        inline void ForEachData(std::function<void(UserData)> func) {
+            for (auto& [data, entry] : mEntries) {
+                func(data);
+            }
+        }
+
         inline void Remove(delegate_handle_t handle) {
             auto it = mHandleToIt.find(handle);
 
@@ -75,9 +81,9 @@ namespace okami::core {
         inline void RemoveAll(UserData data) {
             auto range = mEntries.equal_range(data);
 
-            for (auto it = range.first; it != range.second; ++it) {
+            for (auto it = range.first; it != range.second;) {
                 mHandleToIt.erase(it->second.mHandle);
-                mEntries.erase(it);
+                mEntries.erase(it++);
             }
         }
 
@@ -137,10 +143,10 @@ namespace okami::core {
         }
 
         UserData* Remove(delegate_handle_t handle) {
-            for (auto it = mEntries.begin(); it != mEntries.end(); ++it) {
+            for (auto it = mEntries.begin(); it != mEntries.end();) {
                 if (it->mHandle == handle) {
                     UserData* data = it->mData;
-                    mEntries.erase(it);
+                    mEntries.erase(it++);
                     return data;
                 }
             }

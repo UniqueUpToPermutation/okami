@@ -77,7 +77,7 @@ namespace okami::graphics::diligent {
         virtual void RegisterVertexFormats(core::VertexLayoutRegistry& registry) = 0;
         virtual void RegisterResourceInterfaces(core::ResourceInterface& resourceInterface) = 0;
 
-        void* GetBackend() override;
+        void* GetBackend() override final;
     };
 
     class IOverlayModule : 

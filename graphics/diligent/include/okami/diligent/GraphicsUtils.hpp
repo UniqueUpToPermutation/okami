@@ -48,6 +48,8 @@ namespace okami::graphics::diligent {
         const DG::SwapChainDesc& scDesc, 
         bool bIsGL);
 
+    SurfaceTransform ToOkami(DG::SURFACE_TRANSFORM transform);
+
     DG::float4x4 GetSurfacePretransformMatrix(
         const DG::SwapChainDesc& scDesc, 
 		const DG::float3& f3CameraViewAxis);

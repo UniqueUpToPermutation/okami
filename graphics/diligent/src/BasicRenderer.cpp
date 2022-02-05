@@ -124,11 +124,11 @@ namespace okami::graphics::diligent {
         canvas.Free();
     }
 
-    void BasicRenderer::UpdateFramebuffer(RenderCanvas* canvas) {
-        auto impl = GetRenderCanvasImpl(canvas);
+    void BasicRenderer::UpdateFramebuffer(WeakHandle<RenderCanvas> canvas) {
+        auto impl = GetRenderCanvasImpl(canvas.Ptr());
 
         const auto& pass = canvas->GetPassInfo();
-        bool bWindowBackend = false;
+        bool bWindowBackend = canvas->GetWindow() != nullptr;
         bool bForceResize = false;
 
         if (!impl) {
@@ -154,6 +154,7 @@ namespace okami::graphics::diligent {
 
                 impl->mSwapChain = swapChain;
                 bWindowBackend = true;
+                canvas->SetSurfaceTransform(ToOkami(scDesc.PreTransform));
             }
 
             impl->mRenderTargets.resize(pass.mAttributeCount);
@@ -163,9 +164,9 @@ namespace okami::graphics::diligent {
         
         if (!bWindowBackend) {
             // Update if necessary
-            auto size = canvas->GetSize();
+            auto props = canvas->GetProperties();
 
-            if (size.bHasResized || bForceResize) {
+            if (props.bHasResized || bForceResize) {
                 for (auto& rt : impl->mRenderTargets) {
                     if (rt)
                         rt->Release();
@@ -178,8 +179,8 @@ namespace okami::graphics::diligent {
                     TextureDesc dg_desc;
                     dg_desc.BindFlags = BIND_RENDER_TARGET;
                     dg_desc.CPUAccessFlags = CPU_ACCESS_NONE;
-                    dg_desc.Width = size.mWidth;
-                    dg_desc.Height = size.mHeight;
+                    dg_desc.Width = props.mWidth;
+                    dg_desc.Height = props.mHeight;
                     dg_desc.Type = RESOURCE_DIM_TEX_2D;
                     dg_desc.SampleCount = 1;
                     dg_desc.MipLevels = 1;
@@ -195,8 +196,8 @@ namespace okami::graphics::diligent {
                 TextureDesc dg_desc;
                 dg_desc.BindFlags = BIND_RENDER_TARGET;
                 dg_desc.CPUAccessFlags = CPU_ACCESS_NONE;
-                dg_desc.Width = size.mWidth;
-                dg_desc.Height = size.mHeight;
+                dg_desc.Width = props.mWidth;
+                dg_desc.Height = props.mHeight;
                 dg_desc.Type = RESOURCE_DIM_TEX_2D;
                 dg_desc.SampleCount = 1;
                 dg_desc.MipLevels = 1;
@@ -208,8 +209,17 @@ namespace okami::graphics::diligent {
                 mDevice->CreateTexture(dg_desc, nullptr, &tex);
                 impl->mDepthTarget.Attach(tex);
 
+                if (props.mTransform == SurfaceTransform::OPTIMAL) {
+                    throw std::runtime_error("SurfaceTransform::OPTIMAL is not valid for "
+                        "a render canvas that is not backed by a swap chain!");
+                }
+
                 canvas->MakeClean();
             }
+        } else {
+            auto props = canvas->GetProperties();
+            impl->mSwapChain->Resize(props.mWidth, props.mHeight, 
+                ToDiligent(props.mTransform));
         }
     }
 
@@ -486,6 +496,12 @@ namespace okami::graphics::diligent {
 
         // Schedule the updates of resource managers
         mRenderCanvasManager.RunBackend();
+        mRenderCanvasManager.ForEach([this](WeakHandle<RenderCanvas> canvas) {
+            auto properties = canvas->GetProperties();
+            if (properties.bHasResized) {
+                UpdateFramebuffer(canvas);
+            }
+        });
 
         marl::WaitGroup resourceWait;
         mGeometryManager.ScheduleBackend(resourceWait);
@@ -644,14 +660,32 @@ namespace okami::graphics::diligent {
             }
         }
 
-        // Synchronize if necessary
+        // Synchronize swap chains
+        DG::ISwapChain* primarySwapChain = nullptr;
         for (auto rv : views) {
             auto canvasImpl = reinterpret_cast<RenderCanvasImpl*>(
                 rv.mTarget->GetBackend());
 
             if (canvasImpl->mSwapChain) {
-                canvasImpl->mSwapChain->Present();
+                const auto& desc = canvasImpl->mSwapChain->GetDesc();
+
+                if (desc.IsPrimary) {
+                    if (!primarySwapChain) {
+                        primarySwapChain = canvasImpl->mSwapChain.RawPtr();
+                    } else {
+                        std::cout << "WARNING: Multiple primary swap chains detected! " <<
+                            "This may cause performance degredation!" << std::endl;
+                    }
+                    
+                } else {
+                    canvasImpl->mSwapChain->Present(0);
+                }
             }
+        }
+
+        // Present primary chain last
+        if (primarySwapChain) {
+            primarySwapChain->Present(1);
         }
 
         resourceWait.wait();

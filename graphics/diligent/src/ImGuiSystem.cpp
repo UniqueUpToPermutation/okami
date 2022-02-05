@@ -70,7 +70,15 @@ namespace okami::graphics::diligent {
         io.AddInputCharacter(c);
     }
 
-    void ImGuiRenderOverlay::ImGuiImpl::NewFrame(const core::Time& time) {
+    bool ImGuiRenderOverlay::ImGuiImpl::ShouldCaptureMouse() const {
+        return mIO.WantCaptureMouse;
+    }
+
+    bool ImGuiRenderOverlay::ImGuiImpl::ShouldCaptureKeyboard() const {
+        return mIO.WantCaptureKeyboard;
+    }
+
+    void ImGuiRenderOverlay::ImGuiImpl::NewFrame(const core::Time& time, ImGuiIO& globalIO) {
         ImGuiIO& io = mIO;
         IM_ASSERT(io.Fonts->IsBuilt() && "Font atlas not built! It is generally built by the renderer backend. Missing call to renderer _NewFrame() function? e.g. ImGui_ImplOpenGL3_NewFrame().");
 
@@ -93,12 +101,26 @@ namespace okami::graphics::diligent {
 
         // Update game controllers (if enabled and available)
         UpdateGamepads();
+
+        // Copy over the internal IO state
+        globalIO = io;
+    }
+
+    void ImGuiRenderOverlay::ImGuiImpl::EndFrame(ImGuiIO& globalIO) {
+        // Copy back the internal IO state
+        mIO = globalIO;
     }
 
     ImGuiRenderOverlay::ImGuiImpl::ImGuiImpl(
-        IWindow* window) : 
-        mWindow(window) {
-        
+        IWindow* window,
+        std::array<ICursor*, ImGuiMouseCursor_COUNT>& cursors,
+        ImGuiContext* context,
+        const ImGuiIO& defaultIO) : 
+        mWindow(window),
+        mMouseCursors(cursors),
+        mContext(context),
+        mIO(defaultIO) {
+
         ImGuiIO& io = mIO;
 
         io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;         // We can honor GetMouseCursor() values (optional)
@@ -135,8 +157,6 @@ namespace okami::graphics::diligent {
         io.ImeWindowHandle = mWindow->GetWin32Window();
         io.FontGlobalScale = mWindow->GetContentScale();
 
-        mContext = ImGui::CreateContext();
-
         mMouseButtonCallbackHandle = mWindow->AddMouseButtonCallback(
             [this](IInputProvider* input, 
                 core::MouseButton button, 
@@ -144,7 +164,7 @@ namespace okami::graphics::diligent {
                 core::KeyModifiers mods) {
             
             MouseButtonCallback(button, action, mods);
-            return ImGui::GetIO().WantCaptureMouse;
+            return mIO.WantCaptureMouse;
         }, CallbackPriority::GUI, this);
 
         mMouseButtonScrollHandle = mWindow->AddScrollCallback(
@@ -153,7 +173,7 @@ namespace okami::graphics::diligent {
                 double yoffset) {
             
             ScrollCallback(xoffset, yoffset);
-            return ImGui::GetIO().WantCaptureMouse;
+            return mIO.WantCaptureMouse;
         }, CallbackPriority::GUI, this);
 
         mKeyHandle = mWindow->AddKeyCallback(
@@ -164,7 +184,7 @@ namespace okami::graphics::diligent {
                 core::KeyModifiers mods) {
 
             KeyCallback(key, scancode, action, mods);
-            return ImGui::GetIO().WantCaptureKeyboard;
+            return mIO.WantCaptureKeyboard;
         }, CallbackPriority::GUI, this);
 
         mCharHandle = mWindow->AddCharCallback(
@@ -172,8 +192,99 @@ namespace okami::graphics::diligent {
                 unsigned int codepoint) {
 
             CharCallback(codepoint);
-            return ImGui::GetIO().WantCaptureKeyboard;
+            return mIO.WantCaptureKeyboard;
         }, CallbackPriority::GUI, this);
+    }
+
+    void ImGuiRenderOverlay::ImGuiImpl::UpdateMouseCursor() {
+        ImGuiIO& io = mIO;
+        if ((io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange) || 
+            mWindow->GetCursorMode() == CursorMode::DISABLED)
+            return;
+
+        ImGuiMouseCursor imgui_cursor = ImGui::GetMouseCursor();
+        if (imgui_cursor == ImGuiMouseCursor_None || io.MouseDrawCursor)
+        {
+            // Hide OS mouse cursor if imgui is drawing it or if it wants no cursor
+            mWindow->SetCursorMode(CursorMode::HIDDEN);
+        }
+        else
+        {
+            // Show OS mouse cursor
+            // FIXME-PLATFORM: Unfocused windows seems to fail changing the mouse cursor with GLFW 3.2, but 3.3 works here.
+            mWindow->SetCursor(mMouseCursors[imgui_cursor] ? 
+                mMouseCursors[imgui_cursor] : mMouseCursors[ImGuiMouseCursor_Arrow]);
+            mWindow->SetCursorMode(CursorMode::NORMAL);
+        }
+    }
+
+    void ImGuiRenderOverlay::ImGuiImpl::UpdateGamepads() {
+        ImGuiIO& io = mIO;
+        memset(io.NavInputs, 0, sizeof(io.NavInputs));
+        if ((io.ConfigFlags & ImGuiConfigFlags_NavEnableGamepad) == 0)
+            return;
+
+        // Update gamepad inputs
+        #define MAP_BUTTON(NAV_NO, BUTTON_NO)       { if (buttons_count > BUTTON_NO && buttons[BUTTON_NO] == GLFW_PRESS) io.NavInputs[NAV_NO] = 1.0f; }
+        #define MAP_ANALOG(NAV_NO, AXIS_NO, V0, V1) { float v = (axes_count > AXIS_NO) ? axes[AXIS_NO] : V0; v = (v - V0) / (V1 - V0); if (v > 1.0f) v = 1.0f; if (io.NavInputs[NAV_NO] < v) io.NavInputs[NAV_NO] = v; }
+        int axes_count = 0, buttons_count = 0;
+        const float* axes = glfwGetJoystickAxes(GLFW_JOYSTICK_1, &axes_count);
+        const unsigned char* buttons = glfwGetJoystickButtons(GLFW_JOYSTICK_1, &buttons_count);
+        MAP_BUTTON(ImGuiNavInput_Activate,   0);     // Cross / A
+        MAP_BUTTON(ImGuiNavInput_Cancel,     1);     // Circle / B
+        MAP_BUTTON(ImGuiNavInput_Menu,       2);     // Square / X
+        MAP_BUTTON(ImGuiNavInput_Input,      3);     // Triangle / Y
+        MAP_BUTTON(ImGuiNavInput_DpadLeft,   13);    // D-Pad Left
+        MAP_BUTTON(ImGuiNavInput_DpadRight,  11);    // D-Pad Right
+        MAP_BUTTON(ImGuiNavInput_DpadUp,     10);    // D-Pad Up
+        MAP_BUTTON(ImGuiNavInput_DpadDown,   12);    // D-Pad Down
+        MAP_BUTTON(ImGuiNavInput_FocusPrev,  4);     // L1 / LB
+        MAP_BUTTON(ImGuiNavInput_FocusNext,  5);     // R1 / RB
+        MAP_BUTTON(ImGuiNavInput_TweakSlow,  4);     // L1 / LB
+        MAP_BUTTON(ImGuiNavInput_TweakFast,  5);     // R1 / RB
+        MAP_ANALOG(ImGuiNavInput_LStickLeft, 0,  -0.3f,  -0.9f);
+        MAP_ANALOG(ImGuiNavInput_LStickRight,0,  +0.3f,  +0.9f);
+        MAP_ANALOG(ImGuiNavInput_LStickUp,   1,  +0.3f,  +0.9f);
+        MAP_ANALOG(ImGuiNavInput_LStickDown, 1,  -0.3f,  -0.9f);
+        #undef MAP_BUTTON
+        #undef MAP_ANALOG
+        if (axes_count > 0 && buttons_count > 0)
+            io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
+        else
+            io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
+    }
+
+    void ImGuiRenderOverlay::ImGuiImpl::UpdateMousePosAndButtons() {
+        // Update buttons
+        ImGuiIO& io = mIO;
+        for (int i = 0; i < IM_ARRAYSIZE(io.MouseDown); i++)
+
+        {
+            // If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
+            io.MouseDown[i] = mMouseJustPressed[i] || 
+                mWindow->GetState((MouseButton)i) != KeyState::RELEASE;
+            mMouseJustPressed[i] = false;
+        }
+
+        // Update mouse position
+        const ImVec2 mouse_pos_backup = io.MousePos;
+        io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+
+        if (mWindow->IsFocused())
+        {
+            if (io.WantSetMousePos)
+            {
+                mWindow->SetCursorPos(
+                    (double)mouse_pos_backup.x, 
+                    (double)mouse_pos_backup.y);
+            }
+            else
+            {
+                double mouse_x, mouse_y;
+                auto mouse = mWindow->GetCursorPos();
+                io.MousePos = ImVec2((float)mouse.x, (float)mouse.y);
+            }
+        }
     }
 
     ImGuiRenderOverlay::ImGuiImpl::~ImGuiImpl() {
@@ -189,6 +300,9 @@ namespace okami::graphics::diligent {
         core::ISystem* renderer,
         DG::IRenderDevice* device,
         const RenderModuleParams& params) {
+
+        mFirstContext = ImGui::CreateContext(&mSharedAtlas);
+        ImGui::SetCurrentContext(mFirstContext);
 
         auto renderPassFormatProvider = renderer->QueryInterface<IRenderPassFormatProvider>();
 
@@ -210,6 +324,8 @@ namespace okami::graphics::diligent {
 
         mRenderer->CreateDeviceObjects();
         mRenderer->CreateFontsTexture();
+
+        mDefaultIO = ImGui::GetIO();
     }
 
     void ImGuiRenderOverlay::QueueCommands(
@@ -224,34 +340,48 @@ namespace okami::graphics::diligent {
 
         for (auto& [key, impl] : mImGuiImpls) {
             auto canvas = impl->mWindow->GetCanvas();
+            if (canvas == view.mTarget) {
+                ImGui::SetCurrentContext(impl->mContext);
+                ImGui::Render();
 
-            ImGui::SetCurrentContext(impl->mContext);
-
-            auto size = canvas->GetSize();
-            mRenderer->NewFrame(
-                size.mWidth, 
-                size.mHeight, 
-                ToDiligent(size.mTransform));
-            mRenderer->RenderDrawData(context, ImGui::GetDrawData());
-            mRenderer->EndFrame();
+                auto props = canvas->GetProperties();
+                mRenderer->NewFrame(
+                    props.mWidth, 
+                    props.mHeight, 
+                    ToDiligent(props.mTransform));
+                mRenderer->RenderDrawData(context, ImGui::GetDrawData());
+                mRenderer->EndFrame();
+            }
         }
     }
     
     void ImGuiRenderOverlay::Shutdown() {
         mRenderer.reset();
+
+        if (mFirstContext) {
+            ImGui::DestroyContext(mFirstContext);
+        }
+
+        std::vector<IWindow*> windows;
+        for (auto& [window, impl] : mImGuiImpls) {
+            windows.emplace_back(window);
+        }
+
+        for (auto window : windows) {
+            window->GetCanvas()->RemoveOverlay(this);
+        }
     }
 
     void ImGuiRenderOverlay::UpdateCanvas(ImGuiImpl* impl, const Time& time) {
         impl->mWindow->WaitForInput();
 
         ImGui::SetCurrentContext(impl->mContext);
-        ImGui::GetIO() = impl->mIO;
-
-        impl->NewFrame(time);
-
+        
+        impl->NewFrame(time, ImGui::GetIO());
         ImGui::NewFrame();
         mOnGenerateRenderLists.InvokeOnly(impl->mWindow);
         ImGui::EndFrame();
+        impl->EndFrame(ImGui::GetIO());
     }
 
     void ImGuiRenderOverlay::UpdateAllCanvases(const Time& time) {
@@ -266,8 +396,17 @@ namespace okami::graphics::diligent {
         if (mImGuiImpls.find(window) != mImGuiImpls.end()) {
             throw std::runtime_error("Overlay has already been attached to canvas!");
         }
+
+        ImGuiContext* context = mFirstContext;
+
+        if (!context) {
+            context = ImGui::CreateContext(&mSharedAtlas);
+        } else {
+            mFirstContext = nullptr;
+        }
         
-        auto impl = std::make_unique<ImGuiImpl>(window);
+        auto impl = std::make_unique<ImGuiImpl>(
+            window, mMouseCursors, context, mDefaultIO);
         mImGuiImpls.emplace(window, std::move(impl));
     }
 
@@ -303,7 +442,9 @@ namespace okami::graphics::diligent {
         IDisplay* display,
         IRenderer* renderer) :
         mRenderer(renderer),
-        mDisplay(display) {
+        mDisplay(display),
+        mOverlay(mMouseCursors) {
+        mRenderer->AddOverlay(&mOverlay);
     }
 
     ImGuiSystem::ImGuiSystem(
@@ -311,6 +452,7 @@ namespace okami::graphics::diligent {
         IRenderer* renderer, 
         IWindow* window) : 
         ImGuiSystem(display, renderer) {
+        mRenderer->AddOverlay(&mOverlay);
         mOverlay.AddWindow(window);
     }
 
@@ -324,9 +466,11 @@ namespace okami::graphics::diligent {
         return mOverlay.AddCallback(window, std::move(callback));
     }
 
-    void ImGuiSystem::AddOverlayTo(IWindow* window) {
+    IRenderCanvasAttachment* ImGuiSystem::AddOverlayTo(IWindow* window) {
         mOverlay.AddWindow(window);
-        window->GetCanvas()->AddOverlay(&mOverlay);
+        IRenderCanvasAttachment* ptr = &mOverlay;
+        window->GetCanvas()->AddOverlay(ptr);
+        return ptr;
     }
 
     void ImGuiSystem::Remove(
@@ -360,7 +504,7 @@ namespace okami::graphics::diligent {
     }
 
     void ImGuiSystem::RegisterInterfaces(core::InterfaceCollection& interfaces) {
-        interfaces.Add<IImGuiCallback>(this);
+        interfaces.Add<IImGuiSystem>(this);
     }
 
     void ImGuiSystem::Shutdown() {
@@ -399,6 +543,20 @@ namespace okami::graphics::diligent {
 
     void ImGuiSystem::Join(core::Frame& frame) {
         Wait();
+    }
+
+    void ImGuiRenderOverlay::OnAttach(RenderCanvas* canvas) {
+    }
+
+    void ImGuiRenderOverlay::OnDettach(RenderCanvas* canvas) {
+        RemoveWindow(canvas->GetWindow());
+    }
+
+    void ImGuiRenderOverlay::Update(bool bAllowBlock) {
+    }
+
+    void ImGuiRenderOverlay::WaitUntilReady(core::SyncObject& obj) {
+        mRenderReady.wait();
     }
 }
 

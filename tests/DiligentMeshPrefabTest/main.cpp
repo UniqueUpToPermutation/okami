@@ -13,32 +13,35 @@ using namespace okami::graphics;
 
 void TestBackend(GraphicsBackend backend) {
 
-    RealtimeGraphicsParams params;
-    params.mDeviceType = backend;
+    RealtimeGraphicsParams gfxParams;
+    gfxParams.mBackend = backend;
+
+    WindowParams windowParams;
 
     switch (backend) {
         case GraphicsBackend::VULKAN:
-            params.mWindowTitle = "okami Diligent-Engine Mesh Prefab Test (Vulkan)";
-            break;
-        case GraphicsBackend::OPENGL:
-            params.mWindowTitle = "okami Diligent-Engine Mesh Prefab Test (OpenGL)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Mesh Prefab Test (Vulkan)";
             break;
         case GraphicsBackend::D3D11:
-            params.mWindowTitle = "okami Diligent-Engine Mesh Prefab Test (D3D11)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Mesh Prefab Test (D3D11)";
             break;
         case GraphicsBackend::D3D12:
-            params.mWindowTitle = "okami Diligent-Engine Mesh Prefab Test (D3D12)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Mesh Prefab Test (D3D12)";
             break;
     }
 
     ResourceInterface resources;
     SystemCollection systems;
-    auto display = systems.Add(CreateGLFWDisplay(params));
-    auto renderer = systems.Add(CreateRenderer(display, resources));
+    systems.Add(CreateGLFWDisplay(&resources, gfxParams));
+    auto display = systems.QueryInterface<IDisplay>(); 
+
+    systems.Add(CreateRenderer(display, resources));
+    auto renderer = systems.QueryInterface<IRenderer>(); 
 
     systems.Startup();
     {
-        auto displayInterface = systems.QueryInterface<IDisplay>();
+        auto window = display->CreateWindow(windowParams);
+
         auto vertexLayouts = systems.QueryInterface<IVertexLayoutProvider>();
         auto staticMeshLayout = vertexLayouts->GetVertexLayout<StaticMesh>();
 
@@ -48,10 +51,10 @@ void TestBackend(GraphicsBackend backend) {
         auto texture = resources.Load<Texture>("test.png");
 
         // Create a material for that texture
-        BaseMaterial::Data materialData;
+        StaticMeshMaterial::Data materialData;
         materialData.mAlbedo = texture;
-        auto material = resources.Add<BaseMaterial>(
-            std::move(materialData));
+        auto material = resources.Add<StaticMeshMaterial>(
+            StaticMeshMaterial(materialData));
 
         // Create a frame with the static mesh at the origin
         Frame frame;
@@ -79,13 +82,21 @@ void TestBackend(GraphicsBackend backend) {
                 glm::vec3(0.0f, 0.0f, 0.0f) + modelCenter,
                 glm::vec3(0.0f, 1.0f, 0.0f)
             ));
+
+        RenderView rv;
+        rv.bClear = true;
+        rv.mCamera = cameraEntity;
+        rv.mTarget = window->GetCanvas();
         
         Clock clock;
-        while (!displayInterface->ShouldClose()) {
+        while (!window->ShouldClose()) {
             auto time = clock.GetTime();
-            // Rotate the mesh
+
+            // Rotate the mesh and set render view
             meshTransform.mRotation = 
                 glm::angleAxis(time.mTotalTime, glm::dvec3(0.0, 1.0, 0.0));
+            renderer->SetRenderView(rv);
+
             systems.Fork(time);
             systems.Join();
         }
@@ -102,10 +113,6 @@ int main() {
 
 #if VULKAN_SUPPORTED && !PLATFORM_MACOS
     TestBackend(GraphicsBackend::VULKAN);
-#endif
-
-#if GL_SUPPORTED
-    TestBackend(GraphicsBackend::OPENGL);
 #endif
 
 #if D3D11_SUPPORTED

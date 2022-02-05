@@ -22,6 +22,12 @@ namespace okami::graphics::diligent {
         static constexpr DG::Uint32 DefaultInitialVBSize = 1024;
         static constexpr DG::Uint32 DefaultInitialIBSize = 2048;
 
+        std::array<ICursor*, ImGuiMouseCursor_COUNT>& mMouseCursors;
+
+        ImFontAtlas mSharedAtlas;
+        ImGuiContext* mFirstContext = nullptr;
+        ImGuiIO mDefaultIO;
+
         struct ImGuiImpl final : public core::IInputCapture {
             IWindow* mWindow = nullptr;
 
@@ -30,10 +36,11 @@ namespace okami::graphics::diligent {
             core::delegate_handle_t mKeyHandle = 0;
             core::delegate_handle_t mCharHandle = 0;
 
+            std::array<ICursor*, ImGuiMouseCursor_COUNT>& mMouseCursors;
             std::array<bool, ImGuiMouseButton_COUNT> mMouseJustPressed;
             
+            ImGuiContext* mContext;
             ImGuiIO mIO;
-            ImGuiContext* mContext = nullptr;
 
             double mTime = 0.0;
 
@@ -42,7 +49,8 @@ namespace okami::graphics::diligent {
             bool ShouldCaptureMouse() const override;
             bool ShouldCaptureKeyboard() const override;
 
-            void NewFrame(const core::Time& time);
+            void NewFrame(const core::Time& time, ImGuiIO& io);
+            void EndFrame(ImGuiIO& io);
             void UpdateMouseCursor();
             void UpdateGamepads();
             void UpdateMousePosAndButtons();
@@ -62,7 +70,11 @@ namespace okami::graphics::diligent {
                 core::KeyAction action,
                 core::KeyModifiers mods);
             
-            ImGuiImpl(IWindow* window);
+            ImGuiImpl(
+                IWindow* window,
+                std::array<ICursor*, ImGuiMouseCursor_COUNT>& cursors,
+                ImGuiContext* context,
+                const ImGuiIO& defaultIO);
             ~ImGuiImpl();
         };
 
@@ -85,7 +97,6 @@ namespace okami::graphics::diligent {
             const RenderPass& pass,
             const RenderModuleGlobals& globals) override;
         void Shutdown() override;
-        void* GetBackend() override;
 
         void AddWindow(IWindow* window);
         void RemoveWindow(IWindow* window);
@@ -104,14 +115,16 @@ namespace okami::graphics::diligent {
         void Update(bool bAllowBlock = false) override;
         void WaitUntilReady(core::SyncObject& obj) override;
 
-        inline ImGuiRenderOverlay() :
-            mRenderReady(marl::Event::Mode::Manual) {    
+        inline ImGuiRenderOverlay(
+            std::array<ICursor*, ImGuiMouseCursor_COUNT>& cursors) :
+            mRenderReady(marl::Event::Mode::Manual),
+            mMouseCursors(cursors) {    
         }
     };
 
     class ImGuiSystem final : 
         public core::ISystem,
-        public IImGuiCallback {
+        public IImGuiSystem {
     private:
         ImGuiRenderOverlay mOverlay;
         IRenderer* mRenderer;
@@ -129,8 +142,7 @@ namespace okami::graphics::diligent {
             IWindow* window);
         ~ImGuiSystem();
 
-        void AddOverlayTo(IWindow* window);
-
+        IRenderCanvasAttachment* AddOverlayTo(IWindow* window) override;
         core::delegate_handle_t Add(
             IWindow* window,
             immedate_callback_t callback) override;

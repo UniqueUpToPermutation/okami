@@ -13,7 +13,7 @@ namespace okami::graphics::diligent {
         public ISystem {
     public:
         IWindow* mWindow;
-        IImGuiCallback* mImgui;
+        IImGuiSystem* mImgui;
         IIm3dSystem* mIm3d;
         IGizmo* mGizmo;
         
@@ -31,7 +31,7 @@ namespace okami::graphics::diligent {
 
         inline EditorSystem(
             IWindow* window,
-            IImGuiCallback* imgui,
+            IImGuiSystem* imgui,
             IIm3dSystem* im3d,
             IGizmo* gizmo) :
             mWindow(window),
@@ -165,12 +165,12 @@ namespace okami::graphics {
         ISystem* im3d,
         ISystem* gizmo
     ) {
-        IImGuiCallback* _imgui = imgui->QueryInterface<IImGuiCallback>();
+        IImGuiSystem* _imgui = imgui->QueryInterface<IImGuiSystem>();
         IIm3dSystem* _im3d = im3d->QueryInterface<IIm3dSystem>();
         IGizmo* _gizmo = gizmo->QueryInterface<IGizmo>();
 
         if (!_imgui)
-            throw std::runtime_error("imgui does not implement IImGuiCallback!");
+            throw std::runtime_error("imgui does not implement IImGuiSystem!");
         if (!_im3d)
             throw std::runtime_error("im3d does not implement IIm3dSystem!");
         if (!_gizmo)

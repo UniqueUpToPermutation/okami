@@ -105,7 +105,7 @@ namespace okami::graphics {
         virtual void* GetUserData() = 0;
     };
 
-    struct RenderCanvasSize {
+    struct RenderCanvasProperties {
         uint mWidth;
         uint mHeight;
         SurfaceTransform mTransform;
@@ -123,6 +123,13 @@ namespace okami::graphics {
         std::set<IRenderCanvasAttachment*> mOverlays;
 
     public:
+        inline void DettachAll() {
+            for (auto attachment : mOverlays) {
+                attachment->OnDettach(this);
+            }
+            mOverlays.clear();
+        }
+
         inline SurfaceTransform GetSurfaceTransform() const {
             return mSurfaceTransform;
         }
@@ -151,8 +158,8 @@ namespace okami::graphics {
             *this = std::move(other);
         }
 
-        inline RenderCanvasSize GetSize() const {
-            return RenderCanvasSize{
+        inline RenderCanvasProperties GetProperties() const {
+            return RenderCanvasProperties{
                 mWidth,
                 mHeight,
                 mSurfaceTransform,
@@ -279,7 +286,7 @@ namespace okami::graphics {
         virtual glm::i32vec2 GetFramebufferSize() const = 0;
         virtual glm::i32vec2 GetWindowSize() const = 0;
         virtual void SetFramebufferSize(uint width, uint height) = 0;
-        virtual bool GetIsFullscreen() const = 0;
+        virtual bool IsFullscreen() const = 0;
         virtual Handle<RenderCanvas> GetCanvas() const = 0;
         virtual float GetContentScale() const = 0;
         virtual const WindowParams& GetDesc() const = 0;
@@ -287,6 +294,8 @@ namespace okami::graphics {
         virtual uint GetId() const = 0;
         virtual void SetCursor(ICursor* cursor) = 0;
         virtual void* GetWin32Window() = 0;
+        virtual bool IsFocused() const = 0;
+        virtual bool IsPrimary() const = 0;
 
         virtual ~IWindow() = default;
     };
@@ -354,12 +363,13 @@ namespace okami::graphics {
         core::ISystem* gizmo
     );
 
-    class IImGuiCallback {
+    class IImGuiSystem {
     public:
         virtual core::delegate_handle_t Add(
             IWindow* window, 
             immedate_callback_t callback) = 0;
         virtual void Remove(core::delegate_handle_t handle) = 0;
+        virtual IRenderCanvasAttachment* AddOverlayTo(IWindow* window) = 0;
     };
 
     class IIm3dSystem {

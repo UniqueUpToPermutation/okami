@@ -426,6 +426,13 @@ namespace okami::graphics::diligent {
         window_->OnCursorPosEvent(xpos, ypos);
     }
 
+    void GLFWWindowResizeCallback(
+        GLFWwindow* window, int width, int height) {
+        auto window_ = reinterpret_cast<WindowGLFW*>(
+            glfwGetWindowUserPointer(window));
+        window_->OnResize(width, height);
+    }
+
     WindowGLFW::WindowGLFW(
         const WindowParams& params, 
         const RealtimeGraphicsParams& graphicsParams) :
@@ -467,6 +474,8 @@ namespace okami::graphics::diligent {
             mWindow, &GLFWDropCallback);
         glfwSetCursorPosCallback(
             mWindow, &GLFWCursorPosCallback);
+        glfwSetWindowSizeCallback(
+            mWindow, &GLFWWindowResizeCallback);
 
         float scaleX, scaleY;
         glfwGetWindowContentScale(mWindow, &scaleX, &scaleY);
@@ -622,11 +631,17 @@ namespace okami::graphics::diligent {
     }
 
     void WindowGLFW::Close() {
-        if (mWindow)
+        if (mWindow) {
             glfwDestroyWindow(mWindow);
 
-        mWindow = nullptr;
-        mRenderCanvas = nullptr;
+            mWindow = nullptr;
+
+            if (mRenderCanvas) {
+                mRenderCanvas->DettachAll();
+                mRenderCanvas.Destroy();
+                mRenderCanvas = nullptr;
+            }
+        }
     }
 
     void DisplayGLFW::Shutdown() {
@@ -716,6 +731,14 @@ namespace okami::graphics::diligent {
         glfwSetClipboardString(mWindow, text);
     }
 
+    bool WindowGLFW::IsFocused() const {
+    #ifdef __EMSCRIPTEN__
+        return true;
+    #else
+        return glfwGetWindowAttrib(mWindow, GLFW_FOCUSED) != 0;
+    #endif
+    }
+
     NativeWindow WindowGLFW::MakeNativeWindowStruct() const {
     #if PLATFORM_WIN32
 		DG::Win32NativeWindow Window{glfwGetWin32Window(mWindow)};
@@ -745,8 +768,12 @@ namespace okami::graphics::diligent {
         return size;
     }
 
-    bool WindowGLFW::GetIsFullscreen() const {
+    bool WindowGLFW::IsFullscreen() const {
         return mParams.bFullscreen;
+    }
+
+    bool WindowGLFW::IsPrimary() const {
+        return mParams.bIsPrimary;
     }
 
     GraphicsBackend DisplayGLFW::GetRequestedBackend() const {
@@ -916,6 +943,10 @@ namespace okami::graphics::diligent {
         RemoveCapture(mCursorEnterEvent.Remove(h));
     }
 
+    void WindowGLFW::OnResize(int width, int height) {
+        mRenderCanvas->Resize(width, height);
+    }
+
     void WindowGLFW::WaitForInput() {
         mWindowPollEvent.wait();
     }
@@ -932,6 +963,10 @@ namespace okami::graphics::diligent {
         glm::dvec2 result;
         glfwGetCursorPos(mWindow, &result.x, &result.y);
         return result;
+    }
+
+    void WindowGLFW::SetCursorPos(const glm::dvec2& pos) {
+        glfwSetCursorPos(mWindow, pos.x, pos.y);
     }
 
     Handle<RenderCanvas> WindowGLFW::GetCanvas() const {
@@ -962,6 +997,21 @@ namespace okami::graphics::diligent {
             case CursorMode::DISABLED:
                 glfwSetInputMode(mWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                 break;
+        }
+    }
+
+    core::CursorMode WindowGLFW::GetCursorMode() const {
+        auto result = glfwGetInputMode(mWindow, GLFW_CURSOR);
+
+        switch (result) {
+            case GLFW_CURSOR_NORMAL:
+                return core::CursorMode::NORMAL;
+            case GLFW_CURSOR_HIDDEN:
+                return core::CursorMode::HIDDEN;
+            case GLFW_CURSOR_DISABLED:
+                return core::CursorMode::DISABLED;
+            default:
+                throw std::runtime_error("Unrecognized result!");
         }
     }
 
