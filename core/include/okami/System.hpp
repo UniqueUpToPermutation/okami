@@ -69,6 +69,12 @@ namespace okami::core {
             return result;
         }
 
+        inline void Startup() {
+            marl::WaitGroup group;
+            Startup(group);
+            group.wait();
+        }
+
         virtual ~ISystem() = default;
     };
 
