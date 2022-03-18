@@ -33,7 +33,7 @@ void TestBackend(GraphicsBackend backend) {
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
 
     systems.Add(CreateGLFWDisplay(&resources, gfxParams));
@@ -73,18 +73,20 @@ void TestBackend(GraphicsBackend backend) {
 
         // Geometry and texture are available to use after this is called.
         Frame frame;
+        resources.Add(&frame);
+
         systems.SetFrame(frame);
         systems.LoadResources();
 
         RenderView rv1;
         rv1.bClear = true;
         rv1.mCamera = entt::null;
-        rv1.mTarget = mainWindow->GetCanvas();
+        rv1.mTargetId = mainWindow->GetCanvas()->GetResourceId();
 
         RenderView rv2;
         rv2.bClear = true;
         rv2.mCamera = entt::null;
-        rv2.mTarget = secondaryWindow->GetCanvas();
+        rv2.mTargetId = secondaryWindow->GetCanvas()->GetResourceId();
 
         Clock clock;
         while (!mainWindow->ShouldClose()) {
@@ -103,6 +105,8 @@ void TestBackend(GraphicsBackend backend) {
             systems.Fork(time);
             systems.Join();
         }
+
+        resources.Free(&frame);
     }
     systems.Shutdown();
 }

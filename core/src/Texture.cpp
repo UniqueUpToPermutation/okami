@@ -497,4 +497,23 @@ namespace okami::core {
 
 		return Texture(std::move(data));
 	}
+
+	bool Texture::HasLoadParams() const {
+		return mLoadData != nullptr;
+	}
+
+	std::filesystem::path Texture::GetPath() const {
+		if (mLoadData) {
+			return mLoadData->mPath;
+		} else {
+			throw std::runtime_error("Texture doesn't have load data!");
+		}
+	}
+	const LoadParams<Texture>& Texture::GetLoadParams() const {
+		if (mLoadData) {
+			return mLoadData->mParams;
+		} else {
+			throw std::runtime_error("Texture doesn't have load data!");
+		}
+	}
 }

@@ -94,6 +94,7 @@ namespace okami::graphics::diligent {
             DG::IDeviceContext* context,
             const core::Frame& frame,
             const RenderView& view,
+            const RenderCanvas& target,
             const RenderPass& pass,
             const RenderModuleGlobals& globals) override;
         void Shutdown() override;
@@ -109,11 +110,16 @@ namespace okami::graphics::diligent {
         void OnAttach(RenderCanvas* canvas) override;
         void OnDettach(RenderCanvas* canvas) override;
 
+        void DettachAll();
+
         void UpdateCanvas(ImGuiImpl* impl, const core::Time& time);
         void UpdateAllCanvases(const core::Time& time);
 
-        void Update(bool bAllowBlock = false) override;
+        void Update(core::ResourceManager*) override;
         void WaitUntilReady(core::SyncObject& obj) override;
+        
+        bool IsIdle() override;
+        void WaitOnPendingTasks() override;
 
         inline ImGuiRenderOverlay(
             std::array<ICursor*, ImGuiMouseCursor_COUNT>& cursors) :

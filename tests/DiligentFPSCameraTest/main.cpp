@@ -32,7 +32,7 @@ void TestBackend(GraphicsBackend backend) {
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
     systems.Add(CreateGLFWDisplay(&resources, gfxParams));
     auto display = systems.QueryInterface<IDisplay>();
@@ -54,7 +54,7 @@ void TestBackend(GraphicsBackend backend) {
         // Create a geometry object from a built-in prefab
         auto geo = resources.Add(Geometry::Prefabs::MaterialBall(staticMeshLayout));
         // Load a texture from disk
-        auto texture = resources.Load<Texture>("test.png");
+        auto texture = resources.Add(Texture("test.png"));
 
         // Create a material for that texture
         StaticMeshMaterial::Data materialData;
@@ -83,7 +83,7 @@ void TestBackend(GraphicsBackend backend) {
         RenderView rv;
         rv.bClear = true;
         rv.mCamera = cameraEntity;
-        rv.mTarget = window->GetCanvas();
+        rv.mTargetId = window->GetCanvas()->GetResourceId();
 
         Clock clock;
         while (!window->ShouldClose()) {

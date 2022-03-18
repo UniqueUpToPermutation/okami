@@ -11,7 +11,7 @@ using namespace okami::graphics;
 int main() {
     Meta::Register();
 
-    ResourceInterface resources;
+    ResourceManager resources;
 
     marl::Scheduler scheduler(marl::Scheduler::Config::allCores());
     scheduler.bind();
@@ -40,6 +40,9 @@ int main() {
 
         // Create a frame and load resources.
         Frame frame;
+
+        resources.Add(&frame);
+
         systems.SetFrame(frame);
         systems.LoadResources();
         
@@ -58,6 +61,8 @@ int main() {
             systems.Fork(Time{0.0, 0.0});
             systems.Join();
         }
+
+        resources.Free(&frame);
     }
     systems.Shutdown();
 }

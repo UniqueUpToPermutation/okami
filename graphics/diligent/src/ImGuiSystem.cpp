@@ -332,6 +332,7 @@ namespace okami::graphics::diligent {
         DG::IDeviceContext* context, 
         const core::Frame& frame,
         const RenderView& view,
+        const RenderCanvas& target,
         const RenderPass& pass,
         const RenderModuleGlobals& globals) {
         assert(pass.IsFinal());
@@ -340,7 +341,7 @@ namespace okami::graphics::diligent {
 
         for (auto& [key, impl] : mImGuiImpls) {
             auto canvas = impl->mWindow->GetCanvas();
-            if (canvas == view.mTarget) {
+            if (canvas == &target) {
                 ImGui::SetCurrentContext(impl->mContext);
                 ImGui::Render();
 
@@ -508,6 +509,8 @@ namespace okami::graphics::diligent {
     }
 
     void ImGuiSystem::Shutdown() {
+        mOverlay.DettachAll();
+
         for (auto& cursor : mMouseCursors) {
             mDisplay->DestroyCursor(cursor);
             cursor = nullptr;
@@ -548,11 +551,26 @@ namespace okami::graphics::diligent {
     void ImGuiRenderOverlay::OnAttach(RenderCanvas* canvas) {
     }
 
+    void ImGuiRenderOverlay::DettachAll() {
+        for (auto it = mImGuiImpls.begin(); it != mImGuiImpls.end();) {
+            auto& impl = it->second;
+            ++it;
+            impl->mWindow->GetCanvas()->RemoveOverlay(this);
+        }
+    }
+
     void ImGuiRenderOverlay::OnDettach(RenderCanvas* canvas) {
         RemoveWindow(canvas->GetWindow());
     }
 
-    void ImGuiRenderOverlay::Update(bool bAllowBlock) {
+    void ImGuiRenderOverlay::Update(ResourceManager*) {
+    }
+
+    bool ImGuiRenderOverlay::IsIdle() {
+        return true;
+    }
+
+    void ImGuiRenderOverlay::WaitOnPendingTasks() {
     }
 
     void ImGuiRenderOverlay::WaitUntilReady(core::SyncObject& obj) {

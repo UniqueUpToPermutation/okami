@@ -30,7 +30,7 @@ void TestBackend(GraphicsBackend backend) {
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
     systems.Add(CreateGLFWDisplay(&resources, params));
     auto display = systems.QueryInterface<IDisplay>();
@@ -46,6 +46,9 @@ void TestBackend(GraphicsBackend backend) {
         // Create window
         auto window = display->CreateWindow(windowParams);
 
+        Frame frame;
+        resources.Add(&frame);
+
         // Create a geometry object from user-specified data
         Geometry::Data<> data;
         data.mPositions = {
@@ -54,13 +57,13 @@ void TestBackend(GraphicsBackend backend) {
             glm::vec3(-0.5f, -0.5f, 0.0f)
         };
         auto geo = resources.Add(
-            Geometry(staticMeshLayout, std::move(data)));
+            Geometry(staticMeshLayout, std::move(data)), frame);
 
         // Create a static mesh using the specified geometry
-        Frame frame;
         auto geoEntity = frame.CreateEntity();
         frame.Emplace<Transform>(geoEntity);
-        frame.Emplace<StaticMesh>(geoEntity, StaticMesh{geo, nullptr});
+        frame.Emplace<StaticMesh>(geoEntity, 
+            StaticMesh{geo, okami::INVALID_RESOURCE});
 
         // Geometry is a available to use after this is called
         systems.SetFrame(frame);
@@ -69,7 +72,7 @@ void TestBackend(GraphicsBackend backend) {
         RenderView rv;
         rv.bClear = true;
         rv.mCamera = entt::null;
-        rv.mTarget = window->GetCanvas();
+        rv.mTargetId = window->GetCanvas()->GetResourceId();
         
         Clock clock;
         while (!window->ShouldClose()) {
@@ -77,6 +80,9 @@ void TestBackend(GraphicsBackend backend) {
             systems.Fork(clock.GetTime());
             systems.Join();
         }
+
+        // Releases all resources used by the frame 
+        resources.Free(&frame);
     }
     systems.Shutdown();
 }

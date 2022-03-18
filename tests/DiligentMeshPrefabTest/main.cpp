@@ -30,7 +30,7 @@ void TestBackend(GraphicsBackend backend) {
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
     systems.Add(CreateGLFWDisplay(&resources, gfxParams));
     auto display = systems.QueryInterface<IDisplay>(); 
@@ -45,10 +45,14 @@ void TestBackend(GraphicsBackend backend) {
         auto vertexLayouts = systems.QueryInterface<IVertexLayoutProvider>();
         auto staticMeshLayout = vertexLayouts->GetVertexLayout<StaticMesh>();
 
+        Frame frame;
+        resources.Add(&frame);
+
         // Create a geometry object from a built-in prefab
-        auto geo = resources.Add(Geometry::Prefabs::MaterialBall(staticMeshLayout));
+        auto geo = resources.Add(
+            Geometry::Prefabs::MaterialBall(staticMeshLayout), frame);
         // Load a texture from disk
-        auto texture = resources.Load<Texture>("test.png");
+        auto texture = resources.Add(Texture("test.png"), frame);
 
         // Create a material for that texture
         StaticMeshMaterial::Data materialData;
@@ -57,7 +61,6 @@ void TestBackend(GraphicsBackend backend) {
             StaticMeshMaterial(materialData));
 
         // Create a frame with the static mesh at the origin
-        Frame frame;
         auto staticMeshEntity = frame.CreateEntity();
         auto& meshTransform = frame.Emplace<Transform>(staticMeshEntity);
         frame.Emplace<StaticMesh>(staticMeshEntity, StaticMesh{geo, material});
@@ -72,7 +75,7 @@ void TestBackend(GraphicsBackend backend) {
 
         // Apply a transformation based on the bounding box to make sure that
         // the camera is a good distance away from the model
-        auto aabb = geo->GetBoundingBox();
+        auto aabb = resources.Get<Geometry>(geo).GetBoundingBox();
         glm::vec3 modelCenter = (aabb.mUpper + aabb.mLower) / 2.0f;
         float modelRadius = glm::length((aabb.mUpper - aabb.mLower) / 2.0f);
 
@@ -86,7 +89,7 @@ void TestBackend(GraphicsBackend backend) {
         RenderView rv;
         rv.bClear = true;
         rv.mCamera = cameraEntity;
-        rv.mTarget = window->GetCanvas();
+        rv.mTargetId = window->GetCanvas()->GetResourceId();
         
         Clock clock;
         while (!window->ShouldClose()) {
@@ -100,6 +103,8 @@ void TestBackend(GraphicsBackend backend) {
             systems.Fork(time);
             systems.Join();
         }
+
+        resources.Free(&frame);
     }
     systems.Shutdown();
 }

@@ -434,8 +434,10 @@ namespace okami::graphics::diligent {
     }
 
     WindowGLFW::WindowGLFW(
+        ResourceManager* resources,
         const WindowParams& params, 
         const RealtimeGraphicsParams& graphicsParams) :
+        mResources(resources),
         mParams(params), 
         mGraphicsParams(graphicsParams),
         mWindowPollEvent(marl::Event::Mode::Manual) {
@@ -483,9 +485,22 @@ namespace okami::graphics::diligent {
         mContentScale = (scaleX + scaleY) / 2.0;
 
         mNativeWindowStruct = MakeNativeWindowStruct();
+
+        int width, height;
+        glfwGetFramebufferSize(mWindow, &width, &height);
+
+        RenderCanvasDesc desc;
+        desc.mWidth = width;
+        desc.mHeight = height;
+        desc.mPassInfo = RenderPass::Final();
+        desc.mWindow = this;
+
+        mRenderCanvas = RenderCanvas(desc);
+        mResources->Add(&mRenderCanvas);
     }
 
     WindowGLFW::~WindowGLFW() {
+        mRenderCanvas.DettachAll();
         Close();
     }
 
@@ -515,7 +530,7 @@ namespace okami::graphics::diligent {
     }
 
     DisplayGLFW::DisplayGLFW(
-        core::ResourceInterface* resources,
+        core::ResourceManager* resources,
         const RealtimeGraphicsParams& params) :  
         mParams(params),
         mResources(resources) {
@@ -593,25 +608,11 @@ namespace okami::graphics::diligent {
     IWindow* DisplayGLFW::CreateWindow(
         const WindowParams& params) {
 
-        auto ptr = std::make_unique<WindowGLFW>(params, mParams);
+        auto ptr = std::make_unique<WindowGLFW>(
+                mResources, params, mParams);
         auto result = ptr.get();
-        auto size = ptr->GetFramebufferSize();
 
-        RenderPass pass;
-        pass.mAttributes[0] = RenderAttribute::COLOR;
-        pass.mAttributeCount = 1;
-
-        RenderCanvasDesc desc;
-        desc.mWidth = size.x;
-        desc.mHeight = size.y;
-        desc.mWindow = ptr.get();
-        desc.mPassInfo = pass;
-
-        RenderCanvas canvas(desc);
-
-        ptr->mRenderCanvas = mResources->Add<RenderCanvas>(
-            std::move(canvas));
-        ptr->mId = ++mCurrentWindowId;
+        result->mId = mCurrentWindowId++;
 
         mWindows.emplace(ptr->mId, std::move(ptr));
 
@@ -632,15 +633,10 @@ namespace okami::graphics::diligent {
 
     void WindowGLFW::Close() {
         if (mWindow) {
+            mRenderCanvas.DettachAll();
+            mResources->Free(&mRenderCanvas);
             glfwDestroyWindow(mWindow);
-
             mWindow = nullptr;
-
-            if (mRenderCanvas) {
-                mRenderCanvas->DettachAll();
-                mRenderCanvas.Destroy();
-                mRenderCanvas = nullptr;
-            }
         }
     }
 
@@ -708,7 +704,7 @@ namespace okami::graphics::diligent {
         bResizeRequested = true;
         mResize.x = width;
         mResize.y = height;
-        mRenderCanvas->Resize(width, height);
+        OnResize(width, height);
     }
 
     const WindowParams& WindowGLFW::GetDesc() const {
@@ -944,7 +940,7 @@ namespace okami::graphics::diligent {
     }
 
     void WindowGLFW::OnResize(int width, int height) {
-        mRenderCanvas->Resize(width, height);
+        mRenderCanvas.Resize(width, height);
     }
 
     void WindowGLFW::WaitForInput() {
@@ -969,8 +965,12 @@ namespace okami::graphics::diligent {
         glfwSetCursorPos(mWindow, pos.x, pos.y);
     }
 
-    Handle<RenderCanvas> WindowGLFW::GetCanvas() const {
-        return mRenderCanvas;
+    const RenderCanvas* WindowGLFW::GetCanvas() const {
+        return &mRenderCanvas;
+    }
+
+    RenderCanvas* WindowGLFW::GetCanvas()  {
+        return &mRenderCanvas;
     }
 
     void WindowGLFW::SetCursor(ICursor* cursor) {

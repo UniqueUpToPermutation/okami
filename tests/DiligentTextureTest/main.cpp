@@ -29,7 +29,7 @@ void TestBackend(GraphicsBackend backend) {
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
 
     systems.Add(CreateGLFWDisplay(&resources, gfxParams));
@@ -66,12 +66,15 @@ void TestBackend(GraphicsBackend backend) {
             glm::vec2(1.0f, 0.0f),
             glm::vec2(1.0f, 1.0f)
         });
+
+        Frame frame;
+        resources.Add(&frame);
         
         auto geo = resources.Add(
-            Geometry(staticMeshLayout, std::move(data)));
+            Geometry(staticMeshLayout, std::move(data)), frame);
 
         // Load a texture from disk
-        auto texture = resources.Load<Texture>("test.png");
+        auto texture = resources.Add(Texture("test.png"), frame);
 
          // Create a material for that texture
         StaticMeshMaterial::Data materialData;
@@ -79,8 +82,7 @@ void TestBackend(GraphicsBackend backend) {
         auto material = resources.Add<StaticMeshMaterial>(
             StaticMeshMaterial(materialData));
 
-        // Create a frame with the mesh at the origin
-        Frame frame;
+        // Create a mesh at the origin
         auto entity = frame.CreateEntity();
         frame.Emplace<Transform>(entity);
         frame.Emplace<StaticMesh>(entity, StaticMesh{geo, material});
@@ -92,7 +94,7 @@ void TestBackend(GraphicsBackend backend) {
         RenderView rv;
         rv.bClear = true;
         rv.mCamera = entt::null;
-        rv.mTarget = window->GetCanvas();
+        rv.mTargetId = window->GetCanvas()->GetResourceId();
         
         Clock clock;
         while (!window->ShouldClose()) {
@@ -100,6 +102,9 @@ void TestBackend(GraphicsBackend backend) {
             systems.Fork(clock.GetTime());
             systems.Join();
         }
+
+        // Releases all resources used by the frame
+        resources.Free(&frame);
     }
     systems.Shutdown();
 }

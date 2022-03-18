@@ -14,7 +14,7 @@ namespace okami::graphics::diligent {
     }
 
     void IOverlayModule::RegisterResourceInterfaces(
-        core::ResourceInterface& resourceInterface) {
+        core::ResourceManager& resourceInterface) {
 
     }
 }

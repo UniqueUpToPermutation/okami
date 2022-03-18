@@ -1,6 +1,7 @@
 #pragma once
 
 #include <okami/Graphics.hpp>
+#include <okami/ResourceManager.hpp>
 
 #if PLATFORM_WIN32
 #   include <Win32NativeWindow.h>
@@ -68,7 +69,8 @@ namespace okami::graphics::diligent {
         bool bResizeRequested = false;
         glm::uvec2 mResize;
         NativeWindow mNativeWindowStruct;
-        Handle<RenderCanvas> mRenderCanvas;
+        RenderCanvas mRenderCanvas;
+        core::ResourceManager* mResources;
 
         inline bool IsClosed() const {
             return mWindow == nullptr;
@@ -120,6 +122,7 @@ namespace okami::graphics::diligent {
             int entered);
 
         WindowGLFW(
+            core::ResourceManager* resources,
             const WindowParams& params,
             const RealtimeGraphicsParams& graphicsParams);
         ~WindowGLFW();
@@ -202,7 +205,8 @@ namespace okami::graphics::diligent {
         bool IsRawMouseMotionSupported() const override;
         glm::dvec2 GetCursorPos() const override;
         void SetCursorPos(const glm::dvec2& pos) override;
-        Handle<RenderCanvas> GetCanvas() const override;
+        const RenderCanvas* GetCanvas() const override;
+        RenderCanvas* GetCanvas() override;
         void SetCursor(ICursor* cursor) override;
 
         void RegisterInterfaces(core::InterfaceCollection& interfaces) override;
@@ -224,7 +228,7 @@ namespace okami::graphics::diligent {
         std::unordered_map<
             uint, std::unique_ptr<CursorGLFW>> mCursors;
         RealtimeGraphicsParams mParams;
-        core::ResourceInterface* mResources;
+        core::ResourceManager* mResources;
 
         uint mCurrentWindowId = 0;
         uint mCurrentCursorsId = 0;
@@ -233,7 +237,7 @@ namespace okami::graphics::diligent {
 
     public:
         DisplayGLFW(
-            core::ResourceInterface* resourceInterface,
+            core::ResourceManager* resources,
             const RealtimeGraphicsParams& params);
         ~DisplayGLFW() = default;
 

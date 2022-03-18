@@ -27,7 +27,7 @@ void TestBackend(GraphicsBackend backend) {
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
     systems.Add(CreateGLFWDisplay(&resources));
     auto display = systems.QueryInterface<IDisplay>();
@@ -40,19 +40,23 @@ void TestBackend(GraphicsBackend backend) {
         auto window = display->CreateWindow(windowParams);
 
         Frame frame;
+        resources.Add(&frame);
+
         systems.SetFrame(frame);
         systems.LoadResources();
 
         RenderView view;
         view.bClear = true;
         view.mCamera = entt::null;
-        view.mTarget = window->GetCanvas();
+        view.mTargetId = window->GetCanvas()->GetResourceId();
         
         while (!window->ShouldClose()) {
             renderer->SetRenderView(view);
             systems.Fork(Time{0.0, 0.0});
             systems.Join();
         }
+
+        resources.Free(&frame);
     }
     systems.Shutdown();
 }

@@ -2,7 +2,7 @@
 
 #include <okami/PlatformDefs.hpp>
 #include <okami/System.hpp>
-#include <okami/ResourceInterface.hpp>
+#include <okami/Resource.hpp>
 
 #include <entt/entt.hpp>
 
@@ -10,6 +10,9 @@
 #include <filesystem>
 
 namespace okami::core {
+
+
+
     struct HierarchyData {
 		entt::entity mParent;
 		entt::entity mPrevious;
@@ -162,6 +165,13 @@ namespace okami::core {
 		entt::entity mRoot;
 		bool bIsUpdating = false;
 
+		struct LoadDesc {
+			std::filesystem::path mPath;
+			LoadParams<Frame> mLoadParams;
+		};
+
+		std::unique_ptr<LoadDesc> mLoadDesc;
+
 	public:
 		inline void SetUpdating(bool value) {
 			bIsUpdating = value;
@@ -172,6 +182,13 @@ namespace okami::core {
 
 		Frame(const Frame&) = delete;
 		Frame& operator=(const Frame&) = delete;
+
+		inline void SetPath(const std::filesystem::path& path) {
+			if (!mLoadDesc) {
+				mLoadDesc = std::make_unique<LoadDesc>();
+			}
+			mLoadDesc->mPath = path;
+		}
 
 		inline entt::registry& Registry() {
 			return mRegistry;
@@ -185,6 +202,9 @@ namespace okami::core {
 
 		entt::entity CreateEntity(entt::entity parent);
 		void Destroy(entt::entity ent);
+
+		bool HasLoadParams() const override;
+		std::filesystem::path GetPath() const override;
 
 		Frame();
 		~Frame() = default;
@@ -262,9 +282,5 @@ namespace okami::core {
 
 		friend class FrameIO;
 		friend class FrameTable;
-	};
-
-	template <>
-	struct LoadParams<Frame> {
 	};
 }

@@ -15,68 +15,81 @@ using namespace okami::core;
 using namespace okami::graphics;
 
 void TestBackend(GraphicsBackend backend) {
+    RealtimeGraphicsParams gfxParams;
+    gfxParams.mBackend = backend;
 
-    RealtimeGraphicsParams params;
-    params.mDeviceType = backend;
+    WindowParams wndParams;
 
     switch (backend) {
         case GraphicsBackend::VULKAN:
-            params.mWindowTitle = "okami Diligent-Engine Im3d Test (Vulkan)";
-            break;
-        case GraphicsBackend::OPENGL:
-            params.mWindowTitle = "okami Diligent-Engine Im3d Test (OpenGL)";
+            wndParams.mWindowTitle = "okami Diligent-Engine Im3d Test (Vulkan)";
             break;
         case GraphicsBackend::D3D11:
-            params.mWindowTitle = "okami Diligent-Engine Im3d Test (D3D11)";
+            wndParams.mWindowTitle = "okami Diligent-Engine Im3d Test (D3D11)";
             break;
         case GraphicsBackend::D3D12:
-            params.mWindowTitle = "okami Diligent-Engine Im3d Test (D3D12)";
+            wndParams.mWindowTitle = "okami Diligent-Engine Im3d Test (D3D12)";
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
-    auto display = systems.Add(CreateGLFWDisplay(params));
-    auto renderer = systems.Add(CreateRenderer(display, resources));
-    auto displayInterface = systems.QueryInterface<IDisplay>();
+    systems.Add(CreateGLFWDisplay(&resources, gfxParams));
+    auto display = systems.QueryInterface<IDisplay>();
+    
+    systems.Add(CreateRenderer(display, resources));
+    auto renderer = systems.QueryInterface<IRenderer>();
 
     systems.Add(CreateIm3d(renderer));
-
     auto im3dInterface = systems.QueryInterface<IIm3dSystem>();
-    im3dInterface->Add([]() {
-        Im3d::BeginTriangles();
-        Im3d::Vertex(-0.75f, -0.75f, 0.0f, Im3d::Color_Blue);
-        Im3d::Vertex(-0.5f, -0.25f, 0.0f, Im3d::Color_Green);
-        Im3d::Vertex(-0.25f, -0.75f, 0.0f, Im3d::Color_Red);
-        Im3d::End();
-
-        Im3d::BeginLineLoop();
-        Im3d::Vertex(-0.75f, 0.25f, 0.0f, 4.0f, Im3d::Color_Blue);
-        Im3d::Vertex(-0.5f, 0.75f, 0.0f, 4.0f, Im3d::Color_Green);
-        Im3d::Vertex(-0.25f, 0.25f, 0.0f, 4.0f, Im3d::Color_Red);
-        Im3d::End();
-
-        Im3d::DrawPoint(Im3d::Vec3(0.5f, 0.5f, 0.0f), 
-            50.0f, Im3d::Color_Black);
-
-        Im3d::DrawCircleFilled(Im3d::Vec3(0.5f, -0.5f, 0.0f), 
-            Im3d::Vec3(0.0f, 0.0f, -1.0f), 0.25f);
-    });
 
     systems.Startup();
     {
-        Frame frame;
+        auto window = display->CreateWindow(wndParams);
 
-        // Geometry and texture are available to use after this is called.
+        im3dInterface->Add(window, []() {
+            Im3d::BeginTriangles();
+            Im3d::Vertex(-0.75f, -0.75f, 0.0f, Im3d::Color_Blue);
+            Im3d::Vertex(-0.5f, -0.25f, 0.0f, Im3d::Color_Green);
+            Im3d::Vertex(-0.25f, -0.75f, 0.0f, Im3d::Color_Red);
+            Im3d::End();
+
+            // Algorithm for lines isn't perfect, 
+            // lines at depth 0.0 will be culled currently.
+            Im3d::BeginLineLoop();
+            Im3d::Vertex(-0.75f, 0.25f, 0.1f, 4.0f, Im3d::Color_Blue);
+            Im3d::Vertex(-0.5f, 0.75f, 0.1f, 4.0f, Im3d::Color_Green);
+            Im3d::Vertex(-0.25f, 0.25f, 0.1f, 4.0f, Im3d::Color_Red);
+            Im3d::End();
+
+            Im3d::DrawPoint(Im3d::Vec3(0.5f, 0.5f, 0.0f), 
+                50.0f, Im3d::Color_Black);
+
+            Im3d::DrawCircleFilled(Im3d::Vec3(0.5f, -0.5f, 0.0f), 
+                Im3d::Vec3(0.0f, 0.0f, -1.0f), 0.25f);
+        });
+
+        Frame frame;
+        resources.Add(&frame);
+
         systems.SetFrame(frame);
         systems.LoadResources();
 
+        RenderView rv;
+        rv.bClear = true;
+        rv.mCamera = entt::null;
+        rv.mTargetId = window->GetCanvas()->GetResourceId();
+
         Clock clock;
-        while (!displayInterface->ShouldClose()) {
+        while (!window->ShouldClose()) {
+            renderer->SetRenderView(rv);
+            
             auto time = clock.GetTime();
             systems.Fork(time);
             systems.Join();
         }
+
+        resources.Free(&frame);
     }
     systems.Shutdown();
 }
@@ -91,11 +104,6 @@ int main() {
 #if VULKAN_SUPPORTED && !PLATFORM_MACOS
     TestBackend(GraphicsBackend::VULKAN);
 #endif
-
-#if GL_SUPPORTED
-    TestBackend(GraphicsBackend::OPENGL);
-#endif
-
 
 #if D3D11_SUPPORTED
     TestBackend(GraphicsBackend::D3D11);

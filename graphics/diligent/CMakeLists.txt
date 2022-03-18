@@ -26,7 +26,6 @@ list(APPEND SOURCE
     src/Shader.cpp
     src/Graphics.cpp
     src/SpriteBatch.cpp
-    src/SpriteModule.cpp
     src/ImGuiSystem.cpp
     src/Im3dModule.cpp
     src/Im3dSystem.cpp

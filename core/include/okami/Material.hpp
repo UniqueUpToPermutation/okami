@@ -14,7 +14,7 @@ namespace okami::core {
     class BaseMaterial : public Resource {
     public:
         struct Data {
-            Handle<Texture> mAlbedo;
+            resource_id_t mAlbedo = INVALID_RESOURCE;
             glm::vec4 mAlbedoFactor = 
                 glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
         };
@@ -34,6 +34,8 @@ namespace okami::core {
         }
 
         entt::meta_type GetType() const override;
+        bool HasLoadParams() const override;
+		std::filesystem::path GetPath() const override;
     
         static void Register();
     };

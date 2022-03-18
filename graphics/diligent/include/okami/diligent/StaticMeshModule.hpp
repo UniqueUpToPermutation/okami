@@ -8,6 +8,7 @@
 
 #include <okami/Resource.hpp>
 #include <okami/ResourceManager.hpp>
+#include <okami/ResourceBackend.hpp>
 #include <okami/GraphicsComponents.hpp>
 
 #include <RefCntAutoPtr.hpp>
@@ -17,8 +18,7 @@ namespace DG = Diligent;
 
 namespace okami::graphics::diligent {
     class StaticMeshModule : 
-        public IRenderModule,
-        public core::IResourceManager<core::StaticMeshMaterial> {
+        public IRenderModule {
     public:
         struct Pipeline {
             DG::RefCntAutoPtr<DG::IShader>          mPS;
@@ -27,6 +27,11 @@ namespace okami::graphics::diligent {
 
             DG::RefCntAutoPtr<DG::IShaderResourceBinding>
                 mDefaultBinding;
+        };
+
+        struct StaticMeshMaterialBackend {
+            std::vector<DG::RefCntAutoPtr<
+                DG::IShaderResourceBinding>>        mBindings;
         };
 
     private:
@@ -41,53 +46,55 @@ namespace okami::graphics::diligent {
             int, RenderPass::Hasher>                mPipelineLookup;
         std::vector<Pipeline>                       mPipelines;
 
-        core::ResourceManager<
-            core::StaticMeshMaterial>               mMaterialManager;
+        core::ResourceBackend<
+            core::StaticMeshMaterial,
+            StaticMeshMaterialBackend>              mMaterialBackend;
 
-        struct StaticMeshMaterialImpl {
-            std::vector<DG::RefCntAutoPtr<
-                DG::IShaderResourceBinding>> mBindings;
-        };
+        StaticMeshMaterialBackend                   mDefaultMaterial;
 
-        StaticMeshMaterialImpl                      mDefaultMaterial;
+        core::ResourceBackend<
+            core::Geometry,
+            GeometryBackend>*                       mGeometryBackend;
+        core::ResourceBackend<
+            core::Texture,
+            TextureBackend>*                        mTextureBackend;
 
         void InitializeMaterial(
             const core::StaticMeshMaterial::Data& materialData,
-            StaticMeshMaterialImpl& impl);
+            StaticMeshMaterialBackend& backend);
 
     public:
-        StaticMeshModule();
+        StaticMeshModule(
+            core::ResourceBackend<
+                core::Geometry, GeometryBackend>* geometryBackend,
+            core::ResourceBackend<
+                core::Texture, TextureBackend>* textureBackend);
 
-        void OnDestroy(WeakHandle<core::StaticMeshMaterial> material);
-        void OnFinalize(WeakHandle<core::StaticMeshMaterial> material);
+        void OnFinalize(
+            const core::StaticMeshMaterial& frontendIn,
+            core::StaticMeshMaterial& frontendOut,
+            StaticMeshMaterialBackend& backend);
+        void OnDestroy(
+            StaticMeshMaterialBackend& backend);
 
         void Startup(
             core::ISystem* renderer,
             DG::IRenderDevice* device,
             const RenderModuleParams& params) override;
         void Update(
-            bool bAllowBlock) override;
+            core::ResourceManager*) override;
         void QueueCommands(
             DG::IDeviceContext* context,
             const core::Frame& frame,
             const RenderView& view,
+            const RenderCanvas& canvas,
             const RenderPass& pass,
             const RenderModuleGlobals& globals) override;
         void WaitUntilReady(core::SyncObject& obj) override;
         void Shutdown() override;
         void RegisterVertexFormats(core::VertexLayoutRegistry& registry) override;
-        void RegisterResourceInterfaces(core::ResourceInterface& resourceInterface) override;
-    
-        Handle<core::StaticMeshMaterial> Load(
-            const std::filesystem::path& path, 
-            const core::LoadParams<core::StaticMeshMaterial>& params, 
-            resource_id_t newResId) override;
-        Handle<core::StaticMeshMaterial> Add(
-            core::StaticMeshMaterial&& obj, 
-            resource_id_t newResId) override;
-        Handle<core::StaticMeshMaterial> Add(
-            core::StaticMeshMaterial&& obj, 
-            const std::filesystem::path& path, 
-            resource_id_t newResId) override;
+        void RegisterResourceInterfaces(core::ResourceManager& resourceInterface) override;
+        bool IsIdle() override;
+        void WaitOnPendingTasks() override;
     };
 }

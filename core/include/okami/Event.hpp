@@ -50,6 +50,12 @@ namespace okami::core {
         delegate_handle_t mCurrentHandle = 0;
 
     public:
+        inline void Clear() {
+            mEntries.clear();
+            mHandleToIt.clear();
+            mCurrentHandle = 0;
+        }
+
         inline delegate_handle_t Add(UserData data, std::function<void(_ArgTypes...)> function) {
             mCurrentHandle++;
 
@@ -143,10 +149,10 @@ namespace okami::core {
         }
 
         UserData* Remove(delegate_handle_t handle) {
-            for (auto it = mEntries.begin(); it != mEntries.end();) {
+            for (auto it = mEntries.begin(); it != mEntries.end(); ++it) {
                 if (it->mHandle == handle) {
                     UserData* data = it->mData;
-                    mEntries.erase(it++);
+                    mEntries.erase(it);
                     return data;
                 }
             }

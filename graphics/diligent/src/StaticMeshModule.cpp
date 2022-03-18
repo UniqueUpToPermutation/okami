@@ -115,11 +115,41 @@ namespace okami::graphics::diligent {
         return pipeline;
     }
 
-    StaticMeshModule::StaticMeshModule() :
-        mMaterialManager(
-            []() { return StaticMeshMaterial(); },
-            [this](WeakHandle<StaticMeshMaterial> mat) { OnDestroy(mat); }),
-        mFormat(core::VertexFormat::PositionUVNormal()) {
+    StaticMeshModule::StaticMeshModule(
+        core::ResourceBackend<
+            core::Geometry, GeometryBackend>* geometryBackend,
+        core::ResourceBackend<
+            core::Texture, TextureBackend>* textureBackend) :
+        mFormat(core::VertexFormat::PositionUVNormal()),
+        mMaterialBackend(
+            [](const StaticMeshMaterial&) { 
+                return StaticMeshMaterialBackend(); 
+            },
+            nullptr,
+            [this](const StaticMeshMaterial& frontendIn,
+                StaticMeshMaterial& frontendOut,
+                StaticMeshMaterialBackend& backend) {
+                OnFinalize(frontendIn, frontendOut, backend);
+            },
+            [this](StaticMeshMaterialBackend& backend) { 
+                OnDestroy(backend);
+            }),
+        mGeometryBackend(geometryBackend),
+        mTextureBackend(textureBackend) {        
+    }
+
+    void StaticMeshModule::OnFinalize(
+        const core::StaticMeshMaterial& frontendIn,
+        core::StaticMeshMaterial& frontendOut,
+        StaticMeshMaterialBackend& backend) {
+
+        InitializeMaterial(frontendIn.GetData(), backend);
+        frontendOut = core::StaticMeshMaterial(frontendIn);
+    }
+
+    void StaticMeshModule::OnDestroy(
+        StaticMeshMaterialBackend& backend) {
+        backend.mBindings.clear();
     }
     
     void StaticMeshModule::Startup(
@@ -136,8 +166,10 @@ namespace okami::graphics::diligent {
         mDefaultTexture = params.mDefaultTexture;
 
         core::InterfaceCollection interfaces(renderer);
-        auto globalBuffersProvider = interfaces.Query<IGlobalsBufferProvider>();
-        auto renderPassFormatProvider = interfaces.Query<IRenderPassFormatProvider>();
+        auto globalBuffersProvider = 
+            interfaces.Query<IGlobalsBufferProvider>();
+        auto renderPassFormatProvider = 
+            interfaces.Query<IRenderPassFormatProvider>();
 
         if (!globalBuffersProvider) {
             throw std::runtime_error("Renderer does not implement"
@@ -169,14 +201,23 @@ namespace okami::graphics::diligent {
     }
 
     void StaticMeshModule::Update(
-        bool bAllowBlock) {
-        mMaterialManager.RunBackend(bAllowBlock);    
+        core::ResourceManager*) {
+        mMaterialBackend.Run();
+    }
+
+    bool StaticMeshModule::IsIdle() {
+        return mMaterialBackend.IsIdle();
+    }
+
+    void StaticMeshModule::WaitOnPendingTasks() {
+        mMaterialBackend.LoadCounter().wait();
     }
 
     void StaticMeshModule::QueueCommands(
         DG::IDeviceContext* context,
         const core::Frame& frame,
         const RenderView& view,
+        const RenderCanvas& target,
         const RenderPass& pass,
         const RenderModuleGlobals& globals) {
 
@@ -210,26 +251,28 @@ namespace okami::graphics::diligent {
             } else {
                 call.mWorldTransform = DG::float4x4::Identity();
             }
-            
-            auto geometryImpl = reinterpret_cast<GeometryImpl*>
-                (call.mStaticMesh.mGeometry->GetBackend());
+
+            auto geo = mGeometryBackend->TryGet(staticMesh.mGeometry);
+            if (!geo)
+                continue;
 
             // Setup vertex buffers
-            DG::IBuffer* vertBuffers[] = { geometryImpl->mVertexBuffers[0] };
+            DG::IBuffer* vertBuffers[] = { 
+                geo->mVertexBuffers[0] 
+            };
             DG::Uint64 offsets[] = { 0 };
             context->SetVertexBuffers(0, 1, vertBuffers, offsets, 
                 RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_NONE);
-            if (geometryImpl->mIndexBuffer) {
-                context->SetIndexBuffer(geometryImpl->mIndexBuffer, 0, 
+            if (geo->mIndexBuffer) {
+                context->SetIndexBuffer(geo->mIndexBuffer, 0, 
                     RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
             }
 
             // Bind shader resources
-            if (call.mStaticMesh.mMaterial) {
-                auto materialImpl = reinterpret_cast<StaticMeshMaterialImpl*>
-                    (call.mStaticMesh.mMaterial->GetBackend());
+            auto mat = mMaterialBackend.TryGet(call.mStaticMesh.mMaterial);
+            if (mat) {
                 context->CommitShaderResources(
-                    materialImpl->mBindings[pipelineId],
+                    mat->mBindings[pipelineId],
                     RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
             } else {
                 context->CommitShaderResources(
@@ -245,8 +288,8 @@ namespace okami::graphics::diligent {
             mInstanceData.Write(context, instanceData);
             
             // Submit draw call to GPU
-            const auto& geoDesc = call.mStaticMesh.mGeometry->GetDesc();
-            if (geometryImpl->mIndexBuffer) {
+            const auto& geoDesc = geo->mDesc;
+            if (geo->mIndexBuffer) {
                 DG::DrawIndexedAttribs attribs;
                 attribs.NumIndices = geoDesc.mIndexedAttribs.mNumIndices;
                 attribs.IndexType = ToDiligent(geoDesc.mIndexedAttribs.mIndexType);
@@ -263,7 +306,7 @@ namespace okami::graphics::diligent {
     }
 
     void StaticMeshModule::Shutdown() {
-        mDefaultMaterial = StaticMeshMaterialImpl();
+        mDefaultMaterial = StaticMeshMaterialBackend();
         mVS.Release();
         mInstanceData = DynamicUniformBuffer<HLSL::StaticInstanceData>();
         mPipelines.clear();
@@ -280,62 +323,28 @@ namespace okami::graphics::diligent {
     }
 
     void StaticMeshModule::RegisterResourceInterfaces(
-        core::ResourceInterface& resourceInterface) {
-        resourceInterface.Register<StaticMeshMaterial>(this);
-    }
-    
-    Handle<core::StaticMeshMaterial> StaticMeshModule::Load(
-        const std::filesystem::path& path, 
-        const core::LoadParams<core::StaticMeshMaterial>& params, 
-        resource_id_t newResId) {
-        throw std::runtime_error("Not supported for StaticMeshMaterial!");
-    }
-
-    Handle<core::StaticMeshMaterial> StaticMeshModule::Add(
-        core::StaticMeshMaterial&& obj, 
-        resource_id_t newResId) {
-
-        auto finalizer = [this](WeakHandle<StaticMeshMaterial> mat) {
-            OnFinalize(mat);
-        };
-
-        return mMaterialManager.Add(std::move(obj),
-            newResId,
-            finalizer);
-    }
-
-    Handle<core::StaticMeshMaterial> StaticMeshModule::Add(
-        core::StaticMeshMaterial&& obj, 
-        const std::filesystem::path& path, 
-        resource_id_t newResId) {
-        throw std::runtime_error("Not supported for StaticMeshMaterial!");
-    }
-
-    void StaticMeshModule::OnDestroy(WeakHandle<StaticMeshMaterial> material) {
-        auto impl = reinterpret_cast<StaticMeshMaterialImpl*>(material->GetBackend());
-        delete impl;
-
-        material.Free();
-    }
-
-    void StaticMeshModule::OnFinalize(WeakHandle<StaticMeshMaterial> material) {
-        auto& data = material->GetData();
-
-        auto impl = std::make_unique<StaticMeshMaterialImpl>();
-        InitializeMaterial(data, *impl);
-        material->SetBackend(impl.release());
+        core::ResourceManager& resourceInterface) {
+        resourceInterface.Register<StaticMeshMaterial>(
+            &mMaterialBackend);
     }
 
     void StaticMeshModule::InitializeMaterial(
         const core::StaticMeshMaterial::Data& data,
-        StaticMeshMaterialImpl& impl) {
+        StaticMeshMaterialBackend& impl) {
 
-        DG::ITexture* albedo;
-        if (data.mAlbedo) {
-            data.mAlbedo->OnLoadEvent().wait();
-            albedo = GetTextureImpl(data.mAlbedo)->mTexture;
-        } else
-            albedo = mDefaultTexture;
+        auto getTexture = [
+            textures = mTextureBackend, 
+            &defaultTex = mDefaultTexture](resource_id_t id) {
+            auto backend = textures->TryGet(id);
+            if (backend) {
+                backend->mEvent->wait();
+                return backend->mTexture;
+            } else {
+                return defaultTex;
+            }
+        };
+
+        auto albedo = getTexture(data.mAlbedo);
        
         for (auto& pipeline : mPipelines) {
             DG::IShaderResourceBinding* binding = nullptr;

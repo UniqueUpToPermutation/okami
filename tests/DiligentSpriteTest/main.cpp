@@ -64,7 +64,7 @@ void TestBackend(GraphicsBackend backend) {
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
     systems.Add(CreateGLFWDisplay(&resources, gfxParams));
     auto display = systems.QueryInterface<IDisplay>();
@@ -73,7 +73,7 @@ void TestBackend(GraphicsBackend backend) {
     auto renderer = systems.QueryInterface<IRenderer>();
 
     systems.Add(CreateUpdaterSystem(&SpriteUpdater));
-
+    
     systems.Startup();
     {
         auto window = display->CreateWindow(windowParams);
@@ -83,9 +83,10 @@ void TestBackend(GraphicsBackend backend) {
         auto staticMeshLayout = vertexLayouts->GetVertexLayout<StaticMesh>();
 
         // Load a texture from disk
-        auto spriteTexture = resources.Load<Texture>("sprite.png");
+        auto spriteTexture = resources.Add(Texture("sprite.png"));
 
         Frame frame;
+        resources.Add(&frame);
 
         // Create an orthographic camera for 2D rendering
         auto cameraEntity = frame.CreateEntity();
@@ -106,7 +107,7 @@ void TestBackend(GraphicsBackend backend) {
 		constexpr uint obj_count = 350;
         constexpr float scale = 0.5;
 
-        auto& texDesc = spriteTexture->GetDesc();
+        auto& texDesc = resources.Get<Texture>(spriteTexture).GetDesc();
 
         auto initialScreenSize = window->GetFramebufferSize();
         for (uint i = 0; i < obj_count; ++i) {
@@ -139,7 +140,7 @@ void TestBackend(GraphicsBackend backend) {
         RenderView rv;
         rv.bClear = true;
         rv.mCamera = cameraEntity;
-        rv.mTarget = window->GetCanvas();
+        rv.mTargetId = window->GetCanvas()->GetResourceId();
 
         Clock clock;
         while (!window->ShouldClose()) {
@@ -151,6 +152,8 @@ void TestBackend(GraphicsBackend backend) {
             systems.Fork(time);
             systems.Join();
         }
+
+        resources.Free(&frame);
     }
     systems.Shutdown();
 }

@@ -49,7 +49,7 @@ namespace okami::graphics {
         METALLIC,
         ENTITY_ID
     };
-
+    
     struct RenderPass {
         static constexpr uint MaxAttributes = 8u;
 
@@ -138,6 +138,19 @@ namespace okami::graphics {
             mSurfaceTransform = transform;
         }
 
+        inline bool HasLoadParams() const override {
+            return false;
+        }
+
+		inline std::filesystem::path GetPath() const override {
+            throw std::runtime_error("Type doesn't have path!");
+        }
+
+        inline const core::LoadParams<RenderCanvas>& 
+            GetLoadParams() const {
+            throw std::runtime_error("Type doesn't have load params!");
+        }
+
         RenderCanvas(const RenderCanvas&) = delete;
         RenderCanvas& operator=(const RenderCanvas&) = delete;
 
@@ -217,6 +230,7 @@ namespace okami::graphics {
             mPassInfo(desc.mPassInfo),
             mWindow(desc.mWindow) {
         }
+        RenderCanvas() = default;
 
         ~RenderCanvas();
 
@@ -225,7 +239,7 @@ namespace okami::graphics {
     };
 
     struct RenderView {
-        Handle<RenderCanvas> mTarget;
+        resource_id_t mTargetId;
         entt::entity mCamera = entt::null;
         bool bClear = true;
     };
@@ -287,7 +301,8 @@ namespace okami::graphics {
         virtual glm::i32vec2 GetWindowSize() const = 0;
         virtual void SetFramebufferSize(uint width, uint height) = 0;
         virtual bool IsFullscreen() const = 0;
-        virtual Handle<RenderCanvas> GetCanvas() const = 0;
+        virtual RenderCanvas* GetCanvas() = 0;
+        virtual const RenderCanvas* GetCanvas() const = 0;
         virtual float GetContentScale() const = 0;
         virtual const WindowParams& GetDesc() const = 0;
         virtual const void* GetNativeWindow() const = 0;
@@ -331,12 +346,12 @@ namespace okami::graphics {
     };
 
     std::unique_ptr<core::ISystem> CreateGLFWDisplay(
-        core::ResourceInterface* resourceInterface,
+        core::ResourceManager* resourceInterface,
         const RealtimeGraphicsParams& params = RealtimeGraphicsParams());
 
     std::unique_ptr<core::ISystem> CreateRenderer(
         IDisplay* displaySystem, 
-        core::ResourceInterface& resources);
+        core::ResourceManager& resources);
 
     std::unique_ptr<core::ISystem> CreateImGui(
         IDisplay* display,

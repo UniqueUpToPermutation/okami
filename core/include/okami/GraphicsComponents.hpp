@@ -6,21 +6,25 @@
 
 namespace okami::core {
 
-    class StaticMeshMaterial : public BaseMaterial {
+    class StaticMeshMaterial final : public BaseMaterial {
     public:
-        inline StaticMeshMaterial(const Data& data) : BaseMaterial(data) {
+        StaticMeshMaterial() = default;
+        StaticMeshMaterial(const BaseMaterial::Data& data) : 
+            BaseMaterial(data) {    
         }
 
-        inline StaticMeshMaterial() = default;
+        inline const LoadParams<StaticMeshMaterial>& GetLoadParams() const {
+            throw std::runtime_error("Materials don't have load params!");
+        }
     };
 
     struct StaticMesh {
-        Handle<Geometry> mGeometry;
-        Handle<StaticMeshMaterial> mMaterial;
+        resource_id_t mGeometry = INVALID_RESOURCE;
+        resource_id_t mMaterial = INVALID_RESOURCE;
     };
 
     struct Sprite {
-        Handle<Texture> mTexture;
+        resource_id_t mTexture;
         glm::vec4 mColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
         glm::vec2 mOrigin = glm::vec2(0.0f, 0.0f);
         int mLayer = 0;

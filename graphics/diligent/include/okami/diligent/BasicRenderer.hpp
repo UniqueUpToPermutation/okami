@@ -2,7 +2,7 @@
 
 #include <okami/System.hpp>
 #include <okami/ResourceManager.hpp>
-#include <okami/ResourceInterface.hpp>
+#include <okami/ResourceBackend.hpp>
 #include <okami/Geometry.hpp>
 #include <okami/Texture.hpp>
 #include <okami/Material.hpp>
@@ -32,15 +32,13 @@ namespace okami::graphics::diligent {
 
     class BasicRenderer final : 
         public core::ISystem,
-        public core::IResourceManager<core::Geometry>,
-        public core::IResourceManager<core::Texture>,
-        public core::IResourceManager<RenderCanvas>,
         public core::IVertexLayoutProvider,
         public IRenderer,
         public IGlobalsBufferProvider,
         public IRenderPassFormatProvider {
     public:
-        struct RenderCanvasImpl {
+        struct RenderCanvasBackend {
+            bool bInitialized = false;
             DG::RefCntAutoPtr<DG::ISwapChain>
                 mSwapChain;
 
@@ -55,7 +53,7 @@ namespace okami::graphics::diligent {
         DG::RefCntAutoPtr<DG::IEngineFactory>       mEngineFactory;
         std::vector<DG::RefCntAutoPtr<DG::IDeviceContext>>   
             mContexts;
-        core::ResourceInterface&                    mResourceInterface;
+        core::ResourceManager&                      mResourceInterface;
 
         RenderPass                                  mColorPass;
         RenderPass                                  mDepthPass;
@@ -79,27 +77,31 @@ namespace okami::graphics::diligent {
         std::set<IOverlayModule*>                   mOverlays;
         std::set<std::unique_ptr<IRenderModule>>    mRenderModules;
 
-        core::ResourceManager<core::Geometry>       mGeometryManager;
-        core::ResourceManager<core::Texture>        mTextureManager;
-        core::ResourceManager<RenderCanvas>         mRenderCanvasManager;
+        core::ResourceBackend<
+            core::Geometry, GeometryBackend>        mGeometryBackend;
+        core::ResourceBackend<
+            core::Texture, TextureBackend>          mTextureBackend;
+        core::ResourceBackend<
+            RenderCanvas, RenderCanvasBackend>      mRenderCanvasBackend;
 
         DynamicUniformBuffer<
             HLSL::SceneGlobals>                     mSceneGlobals;
 
-        std::unique_ptr<GeometryImpl>       MoveToGPU(const core::Geometry& geometry);
-        std::unique_ptr<TextureImpl>        MoveToGPU(const core::Texture& texture);
+        GeometryBackend     MoveToGPU(const core::Geometry& geometry);
+        TextureBackend      MoveToGPU(const core::Texture& texture);
 
     public:
         BasicRenderer(
             IDisplay* display,
-            core::ResourceInterface& resources);
+            core::ResourceManager& resources);
 
         void Render(core::Frame& frame,
             const std::vector<RenderView>& views,
             core::SyncObject& syncObject,
             const core::Time& time);
 
-        void UpdateFramebuffer(WeakHandle<RenderCanvas> canvas);
+        void UpdateFramebuffer(
+            RenderCanvas& frontend, RenderCanvasBackend& backend);
 
         void Startup(marl::WaitGroup& waitGroup) override;
         void Shutdown() override;
@@ -119,43 +121,31 @@ namespace okami::graphics::diligent {
             const entt::meta_type& type) const override;
 
         // Geometry resource handlers
-        void OnFinalize(WeakHandle<core::Geometry> geometry);
-        void OnDestroy(WeakHandle<core::Geometry> geometry);
-        Handle<core::Geometry> Load(
+        void OnFinalize(
+            const core::Geometry& geometryIn,
+            core::Geometry& geometryOut,
+            GeometryBackend& backend);
+        void OnDestroy(GeometryBackend& geometry);
+        core::Geometry LoadFrontendGeometry(
             const std::filesystem::path& path, 
-            const core::LoadParams<core::Geometry>& params, 
-            resource_id_t newResId) override;
-        Handle<core::Geometry> Add(core::Geometry&& obj, 
-            resource_id_t newResId) override;
-        Handle<core::Geometry> Add(core::Geometry&& obj, 
-            const std::filesystem::path& path, 
-            resource_id_t newResId) override;
+            const core::LoadParams<core::Geometry>& params);
+        GeometryBackend Construct(const core::Geometry& geometry);
 
         // Texture resource handlers
-        void OnFinalize(WeakHandle<core::Texture> texture);
-        void OnDestroy(WeakHandle<core::Texture> texture);
-        Handle<core::Texture> Load(
-            const std::filesystem::path& path, 
-            const core::LoadParams<core::Texture>& params, 
-            resource_id_t newResId) override;
-        Handle<core::Texture> Add(core::Texture&& obj, 
-            resource_id_t newResId) override;
-        Handle<core::Texture> Add(core::Texture&& obj, 
-            const std::filesystem::path& path, 
-            resource_id_t newResId) override;
+        void OnFinalize(
+            const core::Texture& textureIn,
+            core::Texture& textureOut,
+            TextureBackend& backend);
+        void OnDestroy(TextureBackend& texture);
+        TextureBackend Construct(const core::Texture& texture);
 
-        // Texture resource handlers
-        void OnFinalize(WeakHandle<RenderCanvas> canvas);
-        void OnDestroy(WeakHandle<RenderCanvas> canvas);
-        Handle<RenderCanvas> Load(
-            const std::filesystem::path& path, 
-            const core::LoadParams<RenderCanvas>& params, 
-            resource_id_t newResId) override;
-        Handle<RenderCanvas> Add(RenderCanvas&& obj, 
-            resource_id_t newResId) override;
-        Handle<RenderCanvas> Add(RenderCanvas&& obj, 
-            const std::filesystem::path& path, 
-            resource_id_t newResId) override;
+        // RenderCanvas resource handlers
+        void OnFinalize(
+            const RenderCanvas& canvasIn,
+            RenderCanvas& canvasOut,
+            RenderCanvasBackend& backend);
+        void OnDestroy(RenderCanvasBackend& canvas);
+        RenderCanvasBackend Construct(const RenderCanvas& canvas);
 
         void AddModule(std::unique_ptr<IGraphicsObject>&&) override;
         void AddOverlay(IGraphicsObject* object) override;

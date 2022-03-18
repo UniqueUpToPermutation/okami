@@ -178,7 +178,7 @@ namespace okami::graphics::diligent {
         SyncObject& syncObject,
         const Time& time) {
 
-        marl::schedule([inputProvider = mInputProvider,
+        marl::Task task([inputProvider = mInputProvider,
             &reads = mReads,
             &writes = mWrites,
             &event = mWaitEvent,
@@ -224,7 +224,9 @@ namespace okami::graphics::diligent {
                     controller.FlushUpdate(transform);
                 }
             });
-        });
+        }, marl::Task::Flags::SameThread);
+
+        marl::schedule(std::move(task));
     }
     void FirstPersonCameraSystem::Join(Frame& frame) {
         Wait();

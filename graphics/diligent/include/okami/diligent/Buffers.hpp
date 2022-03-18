@@ -62,11 +62,11 @@ namespace okami::graphics::diligent {
 			mCount(count) {
 
 			DG::BufferDesc dg_desc;
-			dg_desc.Name           = "Dyanmic Globals Buffer";
-			dg_desc.Size  		  = sizeof(T) * count;
-			dg_desc.Usage          = DG::USAGE_DYNAMIC;
-			dg_desc.BindFlags      = DG::BIND_UNIFORM_BUFFER;
-			dg_desc.CPUAccessFlags = DG::CPU_ACCESS_WRITE;
+			dg_desc.Name           	= "Dyanmic Uniform Buffer";
+			dg_desc.Size  		  	= sizeof(T) * count;
+			dg_desc.Usage          	= DG::USAGE_DYNAMIC;
+			dg_desc.BindFlags      	= DG::BIND_UNIFORM_BUFFER;
+			dg_desc.CPUAccessFlags 	= DG::CPU_ACCESS_WRITE;
 
             DG::IBuffer* buf = nullptr;
 			device->CreateBuffer(dg_desc, nullptr, &buf);

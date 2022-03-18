@@ -70,12 +70,12 @@ namespace okami::graphics::diligent {
         DG::IDeviceContext* context,
         const core::Frame& frame,
         const RenderView& view,
+        const RenderCanvas& target,
         const RenderPass& pass,
         const RenderModuleGlobals& globals) {
         assert(pass.IsFinal());
 
-        auto target = view.mTarget.Ptr();
-        auto it = mCanvasInfos.find(target);
+        auto it = mCanvasInfos.find(&target);
         
         if (it != mCanvasInfos.end()) {
             mRenderReady.wait();
@@ -258,7 +258,26 @@ namespace okami::graphics::diligent {
         RemoveCanvas(canvas);
     }
 
-    void Im3dRenderOverlay::Update(bool bAllowBlock) {
+    void Im3dRenderOverlay::DettachAll() {
+        for (auto it = mCanvasInfos.begin(); 
+            it != mCanvasInfos.end();) {
+            auto& info = it->second;
+            ++it;
+            info->mCanvas->RemoveOverlay(this);
+        }
+
+        mOnUpdate.Clear();
+        mOnUpdateNoDepth.Clear();
+    }
+
+    void Im3dRenderOverlay::Update(core::ResourceManager*) {
+    }
+
+    bool Im3dRenderOverlay::IsIdle() {
+        return true;
+    }
+
+    void Im3dRenderOverlay::WaitOnPendingTasks() {
     }
 
     void Im3dRenderOverlay::WaitUntilReady(core::SyncObject& obj) {
@@ -340,6 +359,7 @@ namespace okami::graphics::diligent {
     Im3dSystem::Im3dSystem(
         IRenderer* renderer) : 
         mRenderer(renderer) {
+        renderer->AddOverlay(&mOverlay);
     }
 
     Im3dSystem::Im3dSystem(
@@ -351,7 +371,8 @@ namespace okami::graphics::diligent {
     Im3dSystem::Im3dSystem(
         IRenderer* renderer,
         IInputProvider* input,
-        RenderCanvas* canvas) {
+        RenderCanvas* canvas) :
+            Im3dSystem(renderer) {
         AttachTo(canvas, input);
     }
 
@@ -378,17 +399,23 @@ namespace okami::graphics::diligent {
         mOverlay.mOnUpdate.Remove(handle);
     }
 
+    void Im3dSystem::AttachTo(RenderCanvas* canvas, IInputProvider* input) {
+        canvas->AddOverlay(&mOverlay);
+        mOverlay.AddCanvas(canvas, input, 1.0);
+    }
+
     void Im3dSystem::DettachFrom(RenderCanvas* canvas) {
         canvas->RemoveOverlay(&mOverlay);
     }
 
     void Im3dSystem::Startup(marl::WaitGroup& waitGroup) {
     }
+
     void Im3dSystem::RegisterInterfaces(core::InterfaceCollection& interfaces) {
         interfaces.Add<IIm3dSystem>(this);
     }
     void Im3dSystem::Shutdown() {
-
+        mOverlay.DettachAll();
     }
     void Im3dSystem::LoadResources(marl::WaitGroup& waitGroup) {
     }
@@ -401,7 +428,9 @@ namespace okami::graphics::diligent {
         core::SyncObject& syncObject,
         const core::Time& time) {
         marl::schedule([
+            renderReady = mOverlay.mRenderReady,
             &overlay = mOverlay]() {
+            defer(renderReady.signal());
             overlay.UpdateAllCanvases();
         });
     }

@@ -4,7 +4,7 @@
 #include <okami/BoundingBox.hpp>
 #include <okami/VertexFormat.hpp>
 #include <okami/Resource.hpp>
-#include <okami/ResourceInterface.hpp>
+#include <okami/ResourceManager.hpp>
 #include <okami/System.hpp>
 
 #include <glm/vec2.hpp>
@@ -18,7 +18,9 @@ namespace okami::core {
 	class Geometry;
 
 	template <>
-	struct LoadParams<Geometry>;
+	struct LoadParams<Geometry> {
+		entt::meta_type mComponentType;
+	};
 
     struct BufferDesc {
         uint32_t mSizeInBytes;
@@ -233,8 +235,21 @@ namespace okami::core {
 			}
 		};
 
+		struct LoadData {
+			std::filesystem::path mPath;
+			LoadParams<Geometry> mParams;
+
+			LoadData() = default;
+			inline LoadData(const std::filesystem::path& path,
+				const LoadParams<Geometry>& params) :
+				mPath(path),
+				mParams(params) {
+			}
+		};
+
 	private:
 		RawData mData;
+		std::unique_ptr<LoadData> mLoadData;
 		uint64_t mFlags;
 
 	public:
@@ -293,6 +308,15 @@ namespace okami::core {
 		Geometry(Geometry&&) = default;
 		Geometry& operator=(Geometry&&) = default;
 
+		inline Geometry(const std::filesystem::path& path,
+			const LoadParams<Geometry>& params = LoadParams<Geometry>()) :
+			mLoadData(std::make_unique<Geometry::LoadData>(path, params)) {
+		}
+
+		inline void SetDesc(const Desc& desc) { 
+			mData.mDesc = desc;
+		}
+
 		inline const Desc& GetDesc() const {
 			return mData.mDesc;
 		}
@@ -301,7 +325,14 @@ namespace okami::core {
 			return mData.mBoundingBox;
 		}
 
+		inline void SetBoundingBox(const BoundingBox& box) { 
+			mData.mBoundingBox = box;
+		}
+
 		entt::meta_type GetType() const override;
+		bool HasLoadParams() const override;
+		std::filesystem::path GetPath() const override;
+		const LoadParams<Geometry>& GetLoadParams() const;
 
 		static void Register();
 
@@ -319,11 +350,6 @@ namespace okami::core {
 		static Geometry Load(const std::filesystem::path& path, 
 			const VertexFormat& layout);
     };
-
-	template <>
-	struct LoadParams<Geometry> {
-		entt::meta_type mComponentType;
-	};
 
 	template <typename T>
 	struct V4Packer;

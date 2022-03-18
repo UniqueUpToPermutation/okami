@@ -8,6 +8,10 @@
 #include <okami/diligent/Shader.hpp>
 #include <okami/diligent/GraphicsUtils.hpp>
 
+#include <okami/diligent/SpriteModule.hpp>
+
+#include <filesystem>
+
 using namespace Diligent;
 
 // Load shader locations in TEXT into a lookup
@@ -15,38 +19,63 @@ void MakeShaderMap(okami::core::file_map_t* map);
 
 namespace okami::graphics::diligent {
 
+    DG::ITexture* GetTextureBackend(TextureBackend* backend) {
+        return backend->mTexture.RawPtr();
+    };
+
     BasicRenderer::BasicRenderer(
         IDisplay* display,
-        core::ResourceInterface& resources) : 
+        core::ResourceManager& resources) : 
         mDisplay(display),
-        mGeometryManager(
-            []() { return core::Geometry(); },
-            [this](WeakHandle<core::Geometry> geo) { OnDestroy(geo); }),
-        mTextureManager(
-            []() { return core::Texture(); },
-            [this](WeakHandle<core::Texture> tex) { OnDestroy(tex); }),
-        mRenderCanvasManager(
-            []() -> RenderCanvas { throw std::runtime_error("Error!"); },
-            [this](WeakHandle<RenderCanvas> canvas) { OnDestroy(canvas); }),
+        mGeometryBackend(
+            [this](const core::Geometry& geo) { 
+                return Construct(geo); },
+            [this](const std::filesystem::path& path, 
+                const core::LoadParams<core::Geometry>& params) {
+                return LoadFrontendGeometry(path, params); },
+            [this](const core::Geometry& geoIn,
+                core::Geometry& geoOut,
+                GeometryBackend& backend) {
+                OnFinalize(geoIn, geoOut, backend); },
+            [this](GeometryBackend& backend) {
+                OnDestroy(backend); }),
+        mTextureBackend(
+            [this](const core::Texture& geo) { 
+                return Construct(geo); },
+            &core::Texture::Load,
+            [this](const core::Texture& texIn,
+                core::Texture& texOut,
+                TextureBackend& backend) {
+                OnFinalize(texIn, texOut, backend); },
+            [this](TextureBackend& backend) {
+                OnDestroy(backend); }),
+        mRenderCanvasBackend(
+            [this](const RenderCanvas& canvas) {
+                return Construct(canvas); },
+            nullptr,
+            [this](const RenderCanvas& canvIn,
+                RenderCanvas& canvOut,
+                RenderCanvasBackend& backend) {
+                OnFinalize(canvIn, canvOut, backend); },
+            [this](RenderCanvasBackend& backend) {
+                OnDestroy(backend); }),
         mResourceInterface(resources) {
 
-        // Associate the renderer with the geometry 
-        resources.Register<core::Geometry>(this);
-        resources.Register<core::Texture>(this);
-        resources.Register<RenderCanvas>(this);
+        // Associate the renderer with the correct resource types 
+        resources.Register<core::Geometry>(&mGeometryBackend);
+        resources.Register<core::Texture>(&mTextureBackend);
+        resources.Register<RenderCanvas>(&mRenderCanvasBackend);
     }
 
-    void BasicRenderer::OnDestroy(WeakHandle<core::Geometry> geometry) {
-        auto impl = reinterpret_cast<GeometryImpl*>(geometry->GetBackend());
-        delete impl;
-        geometry.Free();
+    void BasicRenderer::OnDestroy(GeometryBackend& geometry) {
+        geometry = GeometryBackend();
     }
 
-    std::unique_ptr<GeometryImpl>
+   GeometryBackend
         BasicRenderer::MoveToGPU(const core::Geometry& geometry) {
-        auto impl = std::make_unique<GeometryImpl>();
+        GeometryBackend result(geometry.GetDesc());
 
-        const auto& geoDesc = geometry.GetDesc();
+        const auto& geoDesc = result.mDesc;
         const auto& data = geometry.DataCPU();
 
         for (auto& vertBuffer : data.mVertexBuffers) {
@@ -69,7 +98,7 @@ namespace okami::graphics::diligent {
                 throw std::runtime_error("Failed to create vertex buffer!");
             }
 
-            impl->mVertexBuffers.emplace_back(buffer);
+            result.mVertexBuffers.emplace_back(buffer);
         }
 
         if (geoDesc.bIsIndexed) {
@@ -92,50 +121,72 @@ namespace okami::graphics::diligent {
                 throw std::runtime_error("Failed to create index buffer!");
             }
 
-            impl->mIndexBuffer.Attach(buffer);
+            result.mIndexBuffer.Attach(buffer);
         }
 
-        return impl;
+        return result;
     }
 
-    void BasicRenderer::OnFinalize(WeakHandle<core::Geometry> geometry) {
-        auto impl = MoveToGPU(*geometry);
-        geometry->DeallocCPU();
-        geometry->SetBackend(impl.release());
+    void BasicRenderer::OnFinalize(
+        const core::Geometry& geometryIn,
+        core::Geometry& geometryOut,
+        GeometryBackend& backend) {
+
+        backend = MoveToGPU(geometryIn);
+
+        geometryOut.DeallocCPU();
+        geometryOut.SetDesc(geometryIn.GetDesc());
+        geometryOut.SetBoundingBox(geometryIn.GetBoundingBox());
+
+        backend.mEvent->signal();
     }
 
-    void BasicRenderer::OnDestroy(WeakHandle<core::Texture> tex) {
-        auto impl = GetTextureImpl(tex);
-        delete impl;
-        tex.Free();
+    void BasicRenderer::OnDestroy(TextureBackend& texture) {
+        texture = TextureBackend();
     }
 
-    void BasicRenderer::OnFinalize(WeakHandle<RenderCanvas> canvas) {
-        UpdateFramebuffer(canvas);
+    core::Geometry BasicRenderer::LoadFrontendGeometry(
+        const std::filesystem::path& path, 
+        const core::LoadParams<core::Geometry>& params) {
+        auto& layout = mVertexLayouts.Get(params.mComponentType);
+        return core::Geometry::Load(path, layout);
     }
 
-    inline BasicRenderer::RenderCanvasImpl* GetRenderCanvasImpl(RenderCanvas* canvas) {
-        return reinterpret_cast<BasicRenderer::RenderCanvasImpl*>(canvas->GetBackend());
+    GeometryBackend BasicRenderer::Construct(const core::Geometry& geo) {
+        return GeometryBackend(geo.GetDesc());
     }
 
-    void BasicRenderer::OnDestroy(WeakHandle<RenderCanvas> canvas) {
-        auto impl = GetRenderCanvasImpl(canvas);
-        delete impl;
-        canvas.Free();
+    TextureBackend BasicRenderer::Construct(const core::Texture& tex) {
+        return TextureBackend();
     }
 
-    void BasicRenderer::UpdateFramebuffer(WeakHandle<RenderCanvas> canvas) {
-        auto impl = GetRenderCanvasImpl(canvas.Ptr());
+    void BasicRenderer::OnFinalize(
+        const RenderCanvas& canvasIn,
+        RenderCanvas& canvasOut,
+        RenderCanvasBackend& backend) {
+        UpdateFramebuffer(canvasOut, backend);
+    }
 
-        const auto& pass = canvas->GetPassInfo();
-        bool bWindowBackend = canvas->GetWindow() != nullptr;
+    void BasicRenderer::OnDestroy(RenderCanvasBackend& canvas) {
+        canvas = RenderCanvasBackend();
+    }
+
+    BasicRenderer::RenderCanvasBackend 
+        BasicRenderer::Construct(const RenderCanvas&) {
+        return RenderCanvasBackend();
+    }
+
+    void BasicRenderer::UpdateFramebuffer(
+        RenderCanvas& frontend, 
+        RenderCanvasBackend& backend) {
+
+        const auto& pass = frontend.GetPassInfo();
+        bool bWindowBackend = frontend.GetWindow() != nullptr;
         bool bForceResize = false;
 
-        if (!impl) {
+        if (!backend.bInitialized) {
             // Create the backend
-            impl = new RenderCanvasImpl();
-            
-            auto window = canvas->GetWindow();
+            auto window = frontend.GetWindow();
 
             if (window) {
                 if (!pass.IsFinal()) {
@@ -152,28 +203,28 @@ namespace okami::graphics::diligent {
                     throw std::runtime_error("Swap chain has improper color format!");
                 }
 
-                impl->mSwapChain = swapChain;
+                backend.mSwapChain = swapChain;
                 bWindowBackend = true;
-                canvas->SetSurfaceTransform(ToOkami(scDesc.PreTransform));
+                frontend.SetSurfaceTransform(ToOkami(scDesc.PreTransform));
             }
 
-            impl->mRenderTargets.resize(pass.mAttributeCount);
+            backend.mRenderTargets.resize(pass.mAttributeCount);
             bForceResize = true;
-            canvas->SetBackend(impl);
+            backend.bInitialized = true;
         } 
         
         if (!bWindowBackend) {
             // Update if necessary
-            auto props = canvas->GetProperties();
+            auto props = frontend.GetProperties();
 
             if (props.bHasResized || bForceResize) {
-                for (auto& rt : impl->mRenderTargets) {
+                for (auto& rt : backend.mRenderTargets) {
                     if (rt)
                         rt->Release();
                 }
 
-                if (impl->mDepthTarget)
-                    impl->mDepthTarget->Release();
+                if (backend.mDepthTarget)
+                    backend.mDepthTarget->Release();
 
                 for (uint i = 0; i < pass.mAttributeCount; ++i) {
                     TextureDesc dg_desc;
@@ -190,7 +241,7 @@ namespace okami::graphics::diligent {
 
                     DG::ITexture* tex = nullptr;
                     mDevice->CreateTexture(dg_desc, nullptr, &tex);
-                    impl->mRenderTargets[i].Attach(tex);
+                    backend.mRenderTargets[i].Attach(tex);
                 }
 
                 TextureDesc dg_desc;
@@ -207,25 +258,25 @@ namespace okami::graphics::diligent {
 
                 DG::ITexture* tex = nullptr;
                 mDevice->CreateTexture(dg_desc, nullptr, &tex);
-                impl->mDepthTarget.Attach(tex);
+                backend.mDepthTarget.Attach(tex);
 
                 if (props.mTransform == SurfaceTransform::OPTIMAL) {
                     throw std::runtime_error("SurfaceTransform::OPTIMAL is not valid for "
                         "a render canvas that is not backed by a swap chain!");
                 }
-
-                canvas->MakeClean();
             }
         } else {
-            auto props = canvas->GetProperties();
-            impl->mSwapChain->Resize(props.mWidth, props.mHeight, 
+            auto props = frontend.GetProperties();
+            backend.mSwapChain->Resize(props.mWidth, props.mHeight, 
                 ToDiligent(props.mTransform));
         }
+
+        frontend.MakeClean();
     }
 
-    std::unique_ptr<TextureImpl> 
+    TextureBackend
         BasicRenderer::MoveToGPU(const core::Texture& texture) {
-        auto impl = std::make_unique<TextureImpl>();
+        TextureBackend result;
 
         const auto& texDesc = texture.GetDesc();
         const auto& data = texture.DataCPU();
@@ -261,15 +312,22 @@ namespace okami::graphics::diligent {
 
         ITexture* dg_texture = nullptr;
         mDevice->CreateTexture(dg_desc, &dg_data, &dg_texture);
-        impl->mTexture.Attach(dg_texture);
+        result.mTexture.Attach(dg_texture);
 
-        return impl;
+        return result;
     }
 
-    void BasicRenderer::OnFinalize(WeakHandle<core::Texture> texture) {
-        auto impl = MoveToGPU(*texture);
-        texture->DeallocCPU();
-        texture->SetBackend(impl.release());
+    void BasicRenderer::OnFinalize(
+        const core::Texture& textureIn,
+        core::Texture& textureOut,
+        TextureBackend& backend) {
+
+        backend = MoveToGPU(textureIn);
+
+        textureOut.DeallocCPU();
+        textureOut.SetDesc(textureIn.GetDesc());
+
+        backend.mEvent->signal();
     }
 
     void BasicRenderer::Startup(marl::WaitGroup& waitGroup) {
@@ -344,10 +402,14 @@ namespace okami::graphics::diligent {
         // Create globals buffer
         mSceneGlobals = DynamicUniformBuffer<HLSL::SceneGlobals>(mDevice);
 
-        AddModule(std::make_unique<StaticMeshModule>());
+        AddModule(std::make_unique<StaticMeshModule>(
+            &mGeometryBackend, &mTextureBackend));
+        AddModule(std::make_unique<
+            SpriteModule<TextureBackend, &GetTextureBackend>>(
+                &mTextureBackend));
 
         // This should spawn requested render canvas backends.
-        mRenderCanvasManager.RunBackend(true);
+        mRenderCanvasBackend.Run();
 
         mColorPass = RenderPass::Final();
 
@@ -380,105 +442,66 @@ namespace okami::graphics::diligent {
     }
 
     void BasicRenderer::LoadResources(marl::WaitGroup& waitGroup) {
-        mGeometryManager.ScheduleBackend(waitGroup, true);
-        mTextureManager.ScheduleBackend(waitGroup, true);
-        mRenderCanvasManager.ScheduleBackend(waitGroup, true);
+        
+        waitGroup.add();
+        marl::Task geoTask([
+            &geoBackend = mGeometryBackend,
+            waitGroup]() {
+            defer(waitGroup.done());
 
-        for (auto& module : mRenderModules) { 
-            module->Update(true);
+            do {
+                geoBackend.Run();
+                geoBackend.LoadCounter().wait();
+            } while (!geoBackend.IsIdle());
+        }, marl::Task::Flags::SameThread);
+
+        waitGroup.add();
+        marl::Task texTask([
+            &texBackend = mTextureBackend,
+            waitGroup]() {
+            defer(waitGroup.done());
+
+            do {
+                texBackend.Run();
+                texBackend.LoadCounter().wait();
+            } while (!texBackend.IsIdle());
+        }, marl::Task::Flags::SameThread);
+
+        waitGroup.add();
+        marl::Task canvTask([
+            &canvBackend = mRenderCanvasBackend,
+            waitGroup]() {
+            defer(waitGroup.done());
+
+            do {
+                canvBackend.Run();
+                canvBackend.LoadCounter().wait();
+            } while (!canvBackend.IsIdle());
+        }, marl::Task::Flags::SameThread);
+
+        marl::schedule(std::move(geoTask));
+        marl::schedule(std::move(texTask));
+        marl::schedule(std::move(canvTask));
+
+        for (auto& module : mRenderModules) {
+            waitGroup.add();
+            marl::Task modTask([
+                &module,
+                &resources = mResourceInterface,
+                waitGroup]() {
+                defer(waitGroup.done());
+
+                do {
+                    module->Update(&resources);
+                    module->WaitOnPendingTasks();
+                } while (!module->IsIdle());
+            }, marl::Task::Flags::SameThread);
+
+            marl::schedule(std::move(modTask));
         }
     }
 
     void BasicRenderer::SetFrame(core::Frame& frame) {
-    }
-
-    Handle<core::Geometry> BasicRenderer::Load(
-        const std::filesystem::path& path, 
-        const core::LoadParams<core::Geometry>& params, 
-        resource_id_t newResId) {
-
-        auto loader = [this](const std::filesystem::path& path, 
-            const core::LoadParams<core::Geometry>& params) {
-            auto layout = GetVertexLayout(params.mComponentType);
-            return core::Geometry::Load(path, layout);
-        };
-
-        auto finalizer = [this](WeakHandle<core::Geometry> geo) {
-            OnFinalize(geo);
-        };
-
-        return mGeometryManager.Load(path, params, newResId, loader, finalizer);
-    } 
-
-    Handle<core::Geometry> BasicRenderer::Add(core::Geometry&& obj, 
-        resource_id_t newResId) {
-        auto finalizer = [this](WeakHandle<core::Geometry> geo) {
-            OnFinalize(geo);
-        };
-        return mGeometryManager.Add(std::move(obj), newResId, finalizer);
-    }
-
-    Handle<core::Geometry> BasicRenderer::Add(core::Geometry&& obj, 
-        const std::filesystem::path& path, 
-        resource_id_t newResId) {
-        auto finalizer = [this](WeakHandle<core::Geometry> geo) {
-            OnFinalize(geo);
-        };
-        return mGeometryManager.Add(std::move(obj), path, newResId, finalizer);
-    }
-
-    Handle<core::Texture> BasicRenderer::Load(
-        const std::filesystem::path& path, 
-        const core::LoadParams<core::Texture>& params, 
-        resource_id_t newResId) {
-        auto loader = [](const std::filesystem::path& path, 
-            const core::LoadParams<core::Texture>& params) {
-            return core::Texture::Load(path, params);
-        };
-
-        auto finalizer = [this](WeakHandle<core::Texture> tex) {
-            OnFinalize(tex);
-        };
-
-        return mTextureManager.Load(path, params, newResId, loader, finalizer);
-    }
-
-    Handle<core::Texture> BasicRenderer::Add(core::Texture&& obj, 
-        resource_id_t newResId) {
-        auto finalizer = [this](WeakHandle<core::Texture> tex) {
-            OnFinalize(tex);
-        };
-        return mTextureManager.Add(std::move(obj), newResId, finalizer);
-    }
-
-    Handle<core::Texture> BasicRenderer::Add(core::Texture&& obj, 
-        const std::filesystem::path& path, 
-        resource_id_t newResId) {
-        auto finalizer = [this](WeakHandle<core::Texture> tex) {
-            OnFinalize(tex);
-        };
-        return mTextureManager.Add(std::move(obj), path, newResId, finalizer);
-    }
-
-    Handle<RenderCanvas> BasicRenderer::Load(
-        const std::filesystem::path& path, 
-        const core::LoadParams<RenderCanvas>& params, 
-        resource_id_t newResId) {
-        throw std::runtime_error("Not implemented!");
-    }
-
-    Handle<RenderCanvas> BasicRenderer::Add(RenderCanvas&& obj, 
-        resource_id_t newResId) {
-        auto finalizer = [this](WeakHandle<RenderCanvas> canvas) {
-            OnFinalize(canvas);
-        };
-        return mRenderCanvasManager.Add(std::move(obj), newResId, finalizer);
-    }
-
-    Handle<RenderCanvas> BasicRenderer::Add(RenderCanvas&& obj, 
-        const std::filesystem::path& path, 
-        resource_id_t newResId) {
-        throw std::runtime_error("Not implemented!");
     }
 
     const core::VertexFormat& BasicRenderer::GetVertexLayout(
@@ -495,20 +518,23 @@ namespace okami::graphics::diligent {
         const core::Time& time) {
 
         // Schedule the updates of resource managers
-        mRenderCanvasManager.RunBackend();
-        mRenderCanvasManager.ForEach([this](WeakHandle<RenderCanvas> canvas) {
-            auto properties = canvas->GetProperties();
-            if (properties.bHasResized) {
-                UpdateFramebuffer(canvas);
+        mRenderCanvasBackend.Run();
+        mRenderCanvasBackend.ForEach([this, &resources = mResourceInterface]
+            (resource_id_t id, RenderCanvasBackend& backend) {
+            auto frontend = resources.TryGet<RenderCanvas>(id);
+            if (frontend) {
+                auto properties = frontend->GetProperties();
+                if (properties.bHasResized) {
+                    UpdateFramebuffer(*frontend, backend);
+                }
             }
         });
 
-        marl::WaitGroup resourceWait;
-        mGeometryManager.ScheduleBackend(resourceWait);
-        mTextureManager.ScheduleBackend(resourceWait);
+        mGeometryBackend.Run();
+        mTextureBackend.Run();
 
         for (auto& module : mRenderModules) { 
-            module->Update(false);
+            module->Update(&mResourceInterface);
         }
 
         syncObject.WaitUntilFinished<core::Camera>();
@@ -517,15 +543,19 @@ namespace okami::graphics::diligent {
 
         std::vector<RenderView> viewsSorted(views);
         std::sort(viewsSorted.begin(), viewsSorted.end(),
-            [](const RenderView& rv1, const RenderView& rv2) {
-            uint rv1_i = rv1.mTarget->GetWindow() == nullptr ? 0 : 1;
-            uint rv2_i = rv2.mTarget->GetWindow() == nullptr ? 0 : 1;
+            [&resources = mResourceInterface](const RenderView& rv1, const RenderView& rv2) {
+            auto& target1 = resources.Get<RenderCanvas>(rv1.mTargetId);
+            auto& target2 = resources.Get<RenderCanvas>(rv2.mTargetId);
+
+            uint rv1_i = target1.GetWindow() == nullptr ? 0 : 1;
+            uint rv2_i = target2.GetWindow() == nullptr ? 0 : 1;
             return rv1_i < rv2_i;
         });
 
         for (auto rv : views) {
-            uint width = rv.mTarget->GetWidth();
-            uint height = rv.mTarget->GetHeight();
+            auto& target = mResourceInterface.Get<RenderCanvas>(rv.mTargetId);
+            uint width = target.GetWidth();
+            uint height = target.GetHeight();
 
             // Queue up render calls and compute transforms
             HLSL::SceneGlobals shaderGlobals;
@@ -555,14 +585,14 @@ namespace okami::graphics::diligent {
                 cameraPtr = &camera;
             }
             
-            auto renderCanvas = GetRenderCanvasImpl(rv.mTarget);
+            auto& targetBackend = mRenderCanvasBackend.Get(rv.mTargetId);
             DG::SwapChainDesc scDesc;
-            if (renderCanvas->mSwapChain) {
-                scDesc = renderCanvas->mSwapChain->GetDesc();
+            if (targetBackend.mSwapChain) {
+                scDesc = targetBackend.mSwapChain->GetDesc();
             } else {
                 scDesc.Width = width;
                 scDesc.Height = height;
-                scDesc.PreTransform = ToDiligent(rv.mTarget->GetSurfaceTransform());
+                scDesc.PreTransform = ToDiligent(target.GetSurfaceTransform());
             }
 
             rmGlobals.mProjection = GetProjection(cameraPtr, scDesc, false);
@@ -596,89 +626,88 @@ namespace okami::graphics::diligent {
         
             auto immediateContext = mContexts[0];
 
-            auto canvasImpl = reinterpret_cast<RenderCanvasImpl*>(rv.mTarget->GetBackend());
-            if (canvasImpl) {
-                const auto& pass = rv.mTarget->GetPassInfo();
-                std::vector<ITextureView*> rtvs(pass.mAttributeCount);
-                ITextureView* dsv = nullptr;
+            const auto& pass = target.GetPassInfo();
+            std::vector<ITextureView*> rtvs(pass.mAttributeCount);
+            ITextureView* dsv = nullptr;
 
-                if (!canvasImpl->mSwapChain) {
-                    for (uint i = 0; i < pass.mAttributeCount; ++i) {
-                        rtvs[i] = canvasImpl->mRenderTargets[i]
-                            ->GetDefaultView(DG::TEXTURE_VIEW_RENDER_TARGET);
-                    }
-
-                    dsv = canvasImpl->mDepthTarget->GetDefaultView(
-                        DG::TEXTURE_VIEW_DEPTH_STENCIL);
-                } else {
-                    rtvs[0] = canvasImpl->mSwapChain->GetCurrentBackBufferRTV();
-                    dsv = canvasImpl->mSwapChain->GetDepthBufferDSV();
+            if (!targetBackend.mSwapChain) {
+                for (uint i = 0; i < pass.mAttributeCount; ++i) {
+                    rtvs[i] = targetBackend.mRenderTargets[i]
+                        ->GetDefaultView(DG::TEXTURE_VIEW_RENDER_TARGET);
                 }
 
-                immediateContext->SetRenderTargets(rtvs.size(), rtvs.data(), dsv, 
-                    RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+                dsv = targetBackend.mDepthTarget->GetDefaultView(
+                    DG::TEXTURE_VIEW_DEPTH_STENCIL);
+            } else {
+                rtvs[0] = targetBackend.mSwapChain->GetCurrentBackBufferRTV();
+                dsv = targetBackend.mSwapChain->GetDepthBufferDSV();
+            }
 
-                // Move globals to GPU
-                mSceneGlobals.Write(immediateContext, shaderGlobals);
+            immediateContext->SetRenderTargets(rtvs.size(), rtvs.data(), dsv, 
+                RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
-                // Clear screen
-                if (rv.bClear) {
-                    float color[] = { 0.3f, 0.3f, 0.3f, 1.0f };
-                    for (uint i = 0; i < pass.mAttributeCount; ++i) {
-                        immediateContext->ClearRenderTarget(rtvs[i], 
-                            color, 
-                            RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-                    }
-                    immediateContext->ClearDepthStencil(dsv,
-                        DG::CLEAR_DEPTH_FLAG, 1.0f, 0, 
-                        DG::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+            // Move globals to GPU
+            mSceneGlobals.Write(immediateContext, shaderGlobals);
+
+            // Clear screen
+            if (rv.bClear) {
+                float color[] = { 0.3f, 0.3f, 0.3f, 1.0f };
+                for (uint i = 0; i < pass.mAttributeCount; ++i) {
+                    immediateContext->ClearRenderTarget(rtvs[i], 
+                        color, 
+                        RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
                 }
+                immediateContext->ClearDepthStencil(dsv,
+                    DG::CLEAR_DEPTH_FLAG, 1.0f, 0, 
+                    DG::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+            }
 
-                for (auto& module : mRenderModules) {
-                    module->WaitUntilReady(syncObject);
-                    module->QueueCommands(immediateContext,
-                        frame,
-                        rv,
-                        pass,
-                        rmGlobals);
-                }
+            for (auto& module : mRenderModules) {
+                module->WaitUntilReady(syncObject);
+                module->QueueCommands(immediateContext,
+                    frame,
+                    rv,
+                    target,
+                    pass,
+                    rmGlobals);
+            }
 
-                for (auto overlayIt = rv.mTarget->GetOverlaysBegin();
-                    overlayIt != rv.mTarget->GetOverlaysEnd();
-                    ++overlayIt) {
-                    
-                    auto overlayImpl = 
-                        reinterpret_cast<IRenderModule*>(
-                            (*overlayIt)->GetUserData());
+            for (auto overlayIt = target.GetOverlaysBegin();
+                overlayIt != target.GetOverlaysEnd();
+                ++overlayIt) {
+                
+                auto overlayImpl = 
+                    reinterpret_cast<IRenderModule*>(
+                        (*overlayIt)->GetUserData());
 
-                    overlayImpl->QueueCommands(immediateContext,
-                        frame,
-                        rv,
-                        pass,
-                        rmGlobals);
-                }
+                overlayImpl->QueueCommands(immediateContext,
+                    frame,
+                    rv,
+                    target,
+                    pass,
+                    rmGlobals);
             }
         }
 
         // Synchronize swap chains
         DG::ISwapChain* primarySwapChain = nullptr;
         for (auto rv : views) {
-            auto canvasImpl = reinterpret_cast<RenderCanvasImpl*>(
-                rv.mTarget->GetBackend());
+            
+            auto& targetBackend = mRenderCanvasBackend.Get(rv.mTargetId);
 
-            if (canvasImpl->mSwapChain) {
-                const auto& desc = canvasImpl->mSwapChain->GetDesc();
+            if (targetBackend.mSwapChain) {
+                const auto& desc = targetBackend.mSwapChain->GetDesc();
 
                 if (desc.IsPrimary) {
                     if (!primarySwapChain) {
-                        primarySwapChain = canvasImpl->mSwapChain.RawPtr();
+                        primarySwapChain = targetBackend.mSwapChain.RawPtr();
                     } else {
                         std::cout << "WARNING: Multiple primary swap chains detected! " <<
                             "This may cause performance degredation!" << std::endl;
                     }
                     
                 } else {
-                    canvasImpl->mSwapChain->Present(0);
+                    targetBackend.mSwapChain->Present(0);
                 }
             }
         }
@@ -687,8 +716,6 @@ namespace okami::graphics::diligent {
         if (primarySwapChain) {
             primarySwapChain->Present(1);
         }
-
-        resourceWait.wait();
     }
 
     void BasicRenderer::Fork(core::Frame& frame, 
@@ -727,9 +754,9 @@ namespace okami::graphics::diligent {
             overlay->Shutdown();
         }
 
-        mGeometryManager.Shutdown();
-        mTextureManager.Shutdown();
-        mRenderCanvasManager.Shutdown();
+        mGeometryBackend.Shutdown();
+        mTextureBackend.Shutdown();
+        mRenderCanvasBackend.Shutdown();
 
         mSceneGlobals = DynamicUniformBuffer<HLSL::SceneGlobals>();
 

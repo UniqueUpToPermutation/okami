@@ -125,6 +125,13 @@
 		"stack": "cpp",
 		"stop_token": "cpp",
 		"*.hlsl": "hlsl",
-		"*.gsh" : "hlsl"
+		"*.gsh": "hlsl",
+		"cassert": "cpp",
+		"cerrno": "cpp",
+		"cfloat": "cpp",
+		"ciso646": "cpp",
+		"climits": "cpp",
+		"filesystem": "cpp",
+		"cstdbool": "cpp"
 	}
 }

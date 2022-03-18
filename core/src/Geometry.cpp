@@ -387,6 +387,26 @@ namespace okami::core {
         return result;
     }
 
+	bool Geometry::HasLoadParams() const {
+		return mLoadData != nullptr;
+	}
+
+	std::filesystem::path Geometry::GetPath() const {
+		if (mLoadData) {
+			return mLoadData->mPath;
+		} else {
+			throw std::runtime_error("Geometry has no load data!");
+		}
+	}
+
+	const LoadParams<Geometry>& Geometry::GetLoadParams() const {
+		if (mLoadData) {
+			return mLoadData->mParams;
+		} else {
+			throw std::runtime_error("Geometry has no load data!");
+		}
+	}
+
     Geometry Geometry::Load(
         const std::filesystem::path& path, 
         const VertexFormat& layout) {
