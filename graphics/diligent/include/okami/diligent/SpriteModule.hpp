@@ -1,18 +1,29 @@
 #pragma once
 
 #include <okami/Frame.hpp>
+#include <okami/Transform.hpp>
+#include <okami/ResourceBackend.hpp>
 #include <okami/GraphicsComponents.hpp>
+
 #include <okami/diligent/SpriteBatch.hpp>
 #include <okami/diligent/GraphicsUtils.hpp>
+#include <okami/diligent/Buffers.hpp>
+#include <okami/diligent/RenderModule.hpp>
 
 namespace okami::graphics::diligent {
-    typedef DG::ITexture*(*get_texture_impl_t)(void*);
 
-    class SpriteModule {
+    template <typename backendT>
+    using get_texture_impl_t = DG::ITexture*(*)(backendT*);
+
+    template <typename textureBackendT, 
+        get_texture_impl_t<textureBackendT> getTexture>
+    class SpriteModule : public IRenderModule {
     private:
         SpriteBatchPipeline mPipeline;
         SpriteBatchState mState;
         SpriteBatch mBatch;
+        core::ResourceBackend<
+            core::Texture, textureBackendT>* mTextures;
 
         struct RenderCall  {
             DG::float3 mPosition;
@@ -22,23 +33,71 @@ namespace okami::graphics::diligent {
         };
 
     public:
-        SpriteModule() = default;
+        SpriteModule(core::ResourceBackend<
+            core::Texture, textureBackendT>* textures) :
+            mTextures(textures) {
+        }
 
-        void Startup(DG::IRenderDevice* device, 
-            DG::ISwapChain* swapChain,
-            DynamicUniformBuffer<HLSL::SceneGlobals>& globals,
-            core::IVirtualFileSystem* vfilesystem);
-        void RequestSync(core::SyncObject& syncObject);
-        void Shutdown();
+        void Startup(
+            core::ISystem* renderer,
+            DG::IRenderDevice* device,
+            const RenderModuleParams& params) override {
 
-        template <get_texture_impl_t GetImpl>
-        void Render(DG::IDeviceContext* context,  
-            core::Frame& frame,
-            core::SyncObject& syncObject) {
+            core::InterfaceCollection interfaces(renderer);
+            auto globalBuffersProvider = 
+                interfaces.Query<IGlobalsBufferProvider>();
+            auto renderPassFormatProvider = 
+                interfaces.Query<IRenderPassFormatProvider>();
 
-            syncObject.WaitUntilFinished<core::Transform>();
-            syncObject.WaitUntilFinished<core::Sprite>();
+            if (!globalBuffersProvider) {
+                throw std::runtime_error("Renderer does not implement"
+                    " IGlobalsBufferProvider!");
+            }
 
+            if (!renderPassFormatProvider) {
+                throw std::runtime_error("Renderer does not implement"
+                    " IRenderPassFormatProvider!");
+            }
+
+            auto globals = globalBuffersProvider->GetGlobalsBuffer();
+
+            auto colorBufferFormat = 
+                renderPassFormatProvider->GetFormat(RenderAttribute::COLOR);
+            auto depthBufferFormat = 
+                renderPassFormatProvider->GetDepthFormat(RenderPass::Final());
+
+            auto shaders = SpriteShaders::LoadDefaults(
+                device, params.mFileSystem);
+            mPipeline = SpriteBatchPipeline(
+                device,
+                *globals,
+                shaders,
+                colorBufferFormat,
+                depthBufferFormat,
+                1,
+                DG::FILTER_TYPE_LINEAR);
+
+            mState = SpriteBatchState(mPipeline);
+            mBatch = SpriteBatch(device);
+        }
+
+        void Update(core::ResourceManager* resourceManager) override {
+        }
+
+        bool IsIdle() override {
+            return true;
+        }
+
+        void WaitOnPendingTasks() override {
+        }
+
+        void QueueCommands(
+            DG::IDeviceContext* context,
+            const core::Frame& frame,
+            const RenderView& rv,
+            const RenderCanvas& target,
+            const RenderPass& pass,
+            const RenderModuleGlobals& globals) override {
             auto view = frame.Registry().view
                 <core::Transform, core::Sprite>();
 
@@ -46,8 +105,8 @@ namespace okami::graphics::diligent {
             calls.reserve(view.size_hint());
 
             for (auto e : view) {
-                const auto& transform = view.get<core::Transform>(e);
-                const auto& sprite = view.get<core::Sprite>(e);
+                const auto& transform = view.get<const core::Transform>(e);
+                const auto& sprite = view.get<const core::Sprite>(e);
                 const auto& rot = transform.mRotation;
 
                 RenderCall call;
@@ -63,7 +122,7 @@ namespace okami::graphics::diligent {
 
             std::sort(calls.begin(), calls.end(), 
                 [](const RenderCall& c1, const RenderCall& c2) {
-                return c1.mSprite.mTexture.Ptr() < c2.mSprite.mTexture.Ptr();
+                return c1.mSprite.mTexture < c2.mSprite.mTexture;
             });
             std::stable_sort(calls.begin(), calls.end(),
                 [](const RenderCall& c1, const RenderCall& c2) {
@@ -72,8 +131,11 @@ namespace okami::graphics::diligent {
 
             mBatch.Begin(context, &mState);
             for (auto& c : calls) {
-                const auto& desc = c.mSprite.mTexture->GetDesc();
-                DG::float2 size(desc.mWidth, desc.mHeight);
+                auto& backend = mTextures->Get(c.mSprite.mTexture);
+                DG::ITexture* texture = getTexture(&backend);
+
+                const auto& desc = texture->GetDesc();
+                DG::float2 size(desc.Width, desc.Height);
                 DG::float2 scaledSize = c.mScale * size;
                 
                 SpriteRect rect{
@@ -82,7 +144,7 @@ namespace okami::graphics::diligent {
                 };
 
                 mBatch.Draw(
-                    GetImpl(c.mSprite.mTexture->GetBackend()), 
+                    texture, 
                     c.mPosition,
                     scaledSize, 
                     rect,
@@ -91,6 +153,25 @@ namespace okami::graphics::diligent {
                     ToDiligent(c.mSprite.mColor));
             }
             mBatch.End();
+        }
+
+        void WaitUntilReady(core::SyncObject& obj) override {
+            obj.WaitUntilFinished<core::Transform>();
+            obj.WaitUntilFinished<core::Sprite>();
+        }
+
+        void Shutdown() override {
+            mBatch = SpriteBatch();
+            mState = SpriteBatchState();
+            mPipeline = SpriteBatchPipeline();
+        }
+
+        void RegisterVertexFormats(
+            core::VertexLayoutRegistry& registry) override {
+        }
+
+        void RegisterResourceInterfaces(
+            core::ResourceManager& resourceInterface) override {
         }
     };
 }

@@ -1,4 +1,5 @@
 #include <okami/Okami.hpp>
+#include <okami/ResourceManager.hpp>
 #include <okami/Transform.hpp>
 
 #include <marl/defer.h>
@@ -12,22 +13,24 @@ int main() {
     scheduler.bind();
     defer(scheduler.unbind());
 
-    ResourceInterface resources;
+    ResourceManager resources;
 
     SystemCollection systems;
-    systems.Add(FrameSystemFactory(resources));
 
     systems.Startup();
     {
         Frame frame;
         auto entity = frame.CreateEntity(frame.GetRoot());
         frame.Emplace<Transform>(entity, Transform());
+        resources.Add(&frame);
 
         systems.SetFrame(frame);
         systems.LoadResources();
     
         systems.Fork(Time{0.0, 0.0});
         systems.Join();
+
+        resources.Free(&frame);
     }
     systems.Shutdown();
 }

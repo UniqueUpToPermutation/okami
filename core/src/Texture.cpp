@@ -11,6 +11,12 @@ using namespace entt;
 
 namespace okami::core {
 
+	TextureFormat TextureFormat::UNKNOWN() {
+		return TextureFormat{
+			0, ValueType::UNDEFINED, false, false
+		};
+	}
+
 	TextureFormat TextureFormat::RGBA32_FLOAT() {
 		return TextureFormat{
 			4, ValueType::FLOAT32, false, true
@@ -490,5 +496,24 @@ namespace okami::core {
 		}
 
 		return Texture(std::move(data));
+	}
+
+	bool Texture::HasLoadParams() const {
+		return mLoadData != nullptr;
+	}
+
+	std::filesystem::path Texture::GetPath() const {
+		if (mLoadData) {
+			return mLoadData->mPath;
+		} else {
+			throw std::runtime_error("Texture doesn't have load data!");
+		}
+	}
+	const LoadParams<Texture>& Texture::GetLoadParams() const {
+		if (mLoadData) {
+			return mLoadData->mParams;
+		} else {
+			throw std::runtime_error("Texture doesn't have load data!");
+		}
 	}
 }

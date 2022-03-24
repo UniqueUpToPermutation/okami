@@ -2,6 +2,7 @@
 
 #include <okami/System.hpp>
 #include <okami/Transform.hpp>
+#include <okami/Input.hpp>
 
 #include <glm/vec3.hpp>
 
@@ -32,5 +33,5 @@ namespace okami::graphics {
         void FlushUpdate(core::Transform& output);
     };
 
-    std::unique_ptr<core::ISystem> CreateFPSCameraSystem(core::ISystem* inputSystem);
+    std::unique_ptr<core::ISystem> CreateFPSCameraSystem(core::IInputProvider* input);
 }

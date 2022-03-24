@@ -2,7 +2,7 @@
 
 #include <okami/PlatformDefs.hpp>
 #include <okami/Resource.hpp>
-#include <okami/ResourceInterface.hpp>
+#include <okami/ResourceManager.hpp>
 #include <okami/VertexFormat.hpp>
 
 #include <glm/vec4.hpp>
@@ -36,6 +36,7 @@ namespace okami::core {
         bool bNormalized;
         bool bLinear;
 
+        static TextureFormat UNKNOWN();
         static TextureFormat RGBA32_FLOAT();
         static TextureFormat RGBA32_UINT();
         static TextureFormat RGBA32_SINT();
@@ -131,7 +132,7 @@ namespace okami::core {
         uint mSlice;
 	};
 
-    class Texture : public Resource {
+    class Texture final : public Resource {
     public:
         struct Desc {
             ResourceDimension mType;
@@ -187,9 +188,22 @@ namespace okami::core {
                 mData.clear();
             }
         };
+
+        struct LoadData {
+            std::filesystem::path mPath;
+            LoadParams<Texture> mParams;
+
+            LoadData() = default;
+            inline LoadData(
+                const std::filesystem::path& path,
+                const LoadParams<Texture>& params) :
+                mPath(path), mParams(params) {
+            }
+        };
     
     private:
         Data mData;
+        std::unique_ptr<LoadData> mLoadData;
 
     public:
         inline Data& DataCPU() {
@@ -212,6 +226,11 @@ namespace okami::core {
             mData(std::move(data)) {
         }
 
+        inline Texture(const std::filesystem::path& path, 
+            const LoadParams<Texture> params = LoadParams<Texture>()) :
+            mLoadData(std::make_unique<Texture::LoadData>(path, params)) {
+        }
+
         Texture() = default;
         Texture(const Texture&) = delete;
         Texture& operator=(const Texture&) = delete;
@@ -222,7 +241,14 @@ namespace okami::core {
             return mData.mDesc;
         }
 
+        inline void SetDesc(const Desc& desc) {
+            mData.mDesc = desc;
+        }
+
         entt::meta_type GetType() const override;
+        bool HasLoadParams() const override;
+		std::filesystem::path GetPath() const override;
+        const LoadParams<Texture>& GetLoadParams() const;
 
         static void Register();
 

@@ -1,5 +1,6 @@
 #include <okami/Okami.hpp>
 #include <okami/Graphics.hpp>
+#include <okami/Camera.hpp>
 
 #include <iostream>
 #include <marl/defer.h>
@@ -9,41 +10,53 @@ using namespace okami::graphics;
 
 void TestBackend(GraphicsBackend backend) {
 
-    RealtimeGraphicsParams params;
-    params.mDeviceType = backend;
+    RealtimeGraphicsParams graphicsParams;
+    WindowParams windowParams;
+
+    graphicsParams.mBackend = backend;
 
     switch (backend) {
         case GraphicsBackend::VULKAN:
-            params.mWindowTitle = "okami Diligent-Engine Test (Vulkan)";
-            break;
-        case GraphicsBackend::OPENGL:
-            params.mWindowTitle = "okami Diligent-Engine Test (OpenGL)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Test (Vulkan)";
             break;
         case GraphicsBackend::D3D11:
-            params.mWindowTitle = "okami Diligent-Engine Test (D3D11)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Test (D3D11)";
             break;
         case GraphicsBackend::D3D12:
-            params.mWindowTitle = "okami Diligent-Engine Test (D3D12)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Test (D3D12)";
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
-    auto display = systems.Add(CreateGLFWDisplay(params));
-    auto renderer = systems.Add(CreateRenderer(display, resources));
+    systems.Add(CreateGLFWDisplay(&resources));
+    auto display = systems.QueryInterface<IDisplay>();
+
+    systems.Add(CreateRenderer(display, resources));
+    auto renderer = systems.QueryInterface<IRenderer>();
 
     systems.Startup();
     {
-        Frame frame;
+        auto window = display->CreateWindow(windowParams);
 
-        auto window = systems.QueryInterface<IDisplay>();
+        Frame frame;
+        resources.Add(&frame);
+
         systems.SetFrame(frame);
         systems.LoadResources();
+
+        RenderView view;
+        view.bClear = true;
+        view.mCamera = entt::null;
+        view.mTargetId = window->GetCanvas()->GetResourceId();
         
         while (!window->ShouldClose()) {
+            renderer->SetRenderView(view);
             systems.Fork(Time{0.0, 0.0});
             systems.Join();
         }
+
+        resources.Free(&frame);
     }
     systems.Shutdown();
 }
@@ -57,10 +70,6 @@ int main() {
 
 #if VULKAN_SUPPORTED && !PLATFORM_MACOS
     TestBackend(GraphicsBackend::VULKAN);
-#endif
-
-#if GL_SUPPORTED
-    TestBackend(GraphicsBackend::OPENGL);
 #endif
 
 #if D3D11_SUPPORTED

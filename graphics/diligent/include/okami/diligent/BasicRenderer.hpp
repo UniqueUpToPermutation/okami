@@ -2,18 +2,19 @@
 
 #include <okami/System.hpp>
 #include <okami/ResourceManager.hpp>
-#include <okami/ResourceInterface.hpp>
+#include <okami/ResourceBackend.hpp>
 #include <okami/Geometry.hpp>
 #include <okami/Texture.hpp>
 #include <okami/Material.hpp>
 #include <okami/Graphics.hpp>
 
-#include <okami/diligent/Display.hpp>
+#include <okami/diligent/Glfw.hpp>
 #include <okami/diligent/Buffers.hpp>
 #include <okami/diligent/SpriteModule.hpp>
 #include <okami/diligent/RenderModule.hpp>
 #include <okami/diligent/SceneGlobals.hpp>
 #include <okami/diligent/TextureCapture.hpp>
+#include <okami/diligent/StaticMeshModule.hpp>
 
 #include <RenderDevice.h>
 #include <SwapChain.h>
@@ -31,106 +32,77 @@ namespace okami::graphics::diligent {
 
     class BasicRenderer final : 
         public core::ISystem,
-        public core::IResourceManager<core::Geometry>,
-        public core::IResourceManager<core::Texture>,
-        public core::IResourceManager<core::BaseMaterial>,
         public core::IVertexLayoutProvider,
         public IRenderer,
         public IGlobalsBufferProvider,
-        public IEntityPick {
+        public IRenderPassFormatProvider {
     public:
-      struct GeometryImpl {
-        std::vector<DG::RefCntAutoPtr<DG::IBuffer>>
-            mVertexBuffers;
-        DG::RefCntAutoPtr<DG::IBuffer>
-            mIndexBuffer;
-        };
+        struct RenderCanvasBackend {
+            bool bInitialized = false;
+            DG::RefCntAutoPtr<DG::ISwapChain>
+                mSwapChain;
 
-        struct TextureImpl {
+            std::vector<DG::RefCntAutoPtr<DG::ITexture>>
+                mRenderTargets;
             DG::RefCntAutoPtr<DG::ITexture>
-                mTexture;
+                mDepthTarget;
         };
-
-        struct BaseMaterialImpl {
-            DG::RefCntAutoPtr<DG::IShaderResourceBinding>
-                mBinding;
-        };
-
+        
     private:
         DG::RefCntAutoPtr<DG::IRenderDevice>        mDevice;
         DG::RefCntAutoPtr<DG::IEngineFactory>       mEngineFactory;
         std::vector<DG::RefCntAutoPtr<DG::IDeviceContext>>   
             mContexts;
-        DG::RefCntAutoPtr<DG::ISwapChain>           mSwapChain;
-        core::ISystem*                              mDisplaySystem;
+        core::ResourceManager&                      mResourceInterface;
+
+        RenderPass                                  mColorPass;
+        RenderPass                                  mDepthPass;
+        RenderPass                                  mEntityIdPass;
+
+        DG::TEXTURE_FORMAT                          mColorFormat = DG::TEX_FORMAT_UNKNOWN;
+        DG::TEXTURE_FORMAT                          mDepthFormat = DG::TEX_FORMAT_UNKNOWN;
+
+        std::vector<RenderView>                     mRenderViews;
+        
+        DG::SwapChainDesc                           mDefaultSCDesc;
+
         core::VertexLayoutRegistry                  mVertexLayouts;
-        INativeWindowProvider*                      mNativeWindowProvider;
-        IDisplay*                                   mDisplay;
+        IDisplay*                                   mDisplay = nullptr;
+
         GraphicsBackend                             mBackend;
         marl::WaitGroup                             mRenderFinished;
-
-        DG::RefCntAutoPtr<DG::ITexture>             mColorBuffer;
-        DG::RefCntAutoPtr<DG::ITexture>             mDepthBuffer;
+    
         DG::RefCntAutoPtr<DG::ITexture>             mDefaultTexture;
-        std::set<IRenderModule*>                    mOverlays;
 
-        struct StaticMeshPipeline {
-            DG::RefCntAutoPtr<DG::IShader>          mVS;
-            DG::RefCntAutoPtr<DG::IShader>          mPSColor;
-            
-            DG::RefCntAutoPtr<DG::IPipelineState>   mStateDepth;
-            DG::RefCntAutoPtr<DG::IPipelineState>   mStateColor;
-            DG::RefCntAutoPtr<DG::IPipelineState>   mStateColorEntityPick;
+        std::set<IOverlayModule*>                   mOverlays;
+        std::set<std::unique_ptr<IRenderModule>>    mRenderModules;
 
-            DG::Uint32                              mAlbedoIdx;
-
-            DG::RefCntAutoPtr<DG::IShaderResourceBinding>
-                mDefaultBindingDepth;
-            DG::RefCntAutoPtr<DG::IShaderResourceBinding>
-                mDefaultBindingColor;
-            DG::RefCntAutoPtr<DG::IShaderResourceBinding>
-                mDefaultBindingColorPick;
-        } mStaticMeshPipeline;
-
-
-        bool                                        bEntityPickEnabled = false;
-        DG::RefCntAutoPtr<DG::ITexture>             mEntityPickTexture;
-        core::MessagePipe<EntityPickRequest>        mEntityPickRequests;
-        TextureCapturePick                          mEntityPicker;
-        std::vector<entt::id_type>                  mEntityResultBuffer;
-        std::vector<core::Promise<entt::entity>>    mEntityResultPromises;
-        std::vector<glm::vec3>                      mEntityQueryBuffer;
-
-        SpriteModule                                mSpriteModule;
-
-        core::ResourceManager<core::Geometry>       mGeometryManager;
-        core::ResourceManager<core::Texture>        mTextureManager;
-        core::ResourceManager<core::BaseMaterial>   mBaseMaterialManager;
+        core::ResourceBackend<
+            core::Geometry, GeometryBackend>        mGeometryBackend;
+        core::ResourceBackend<
+            core::Texture, TextureBackend>          mTextureBackend;
+        core::ResourceBackend<
+            RenderCanvas, RenderCanvasBackend>      mRenderCanvasBackend;
 
         DynamicUniformBuffer<
             HLSL::SceneGlobals>                     mSceneGlobals;
-        DynamicUniformBuffer<
-            HLSL::StaticInstanceData>               mInstanceData;
 
-        std::unique_ptr<GeometryImpl>       MoveToGPU(const core::Geometry& geometry);
-        std::unique_ptr<TextureImpl>        MoveToGPU(const core::Texture& texture);
-        std::unique_ptr<BaseMaterialImpl>   MoveToGPU(const core::BaseMaterial& material);
-
-        StaticMeshPipeline CreateStaticMeshPipeline(
-            core::IVirtualFileSystem* fileLoader);
-
-        void UpdateFramebuffers();
+        GeometryBackend     MoveToGPU(const core::Geometry& geometry);
+        TextureBackend      MoveToGPU(const core::Texture& texture);
 
     public:
         BasicRenderer(
-            core::ISystem* displaySystem, 
-            core::ResourceInterface& resources);
+            IDisplay* display,
+            core::ResourceManager& resources);
 
         void Render(core::Frame& frame,
+            const std::vector<RenderView>& views,
             core::SyncObject& syncObject,
             const core::Time& time);
 
-        void EnableInterface(const entt::meta_type&) override;
+        void UpdateFramebuffer(
+            RenderCanvas& frontend, RenderCanvasBackend& backend);
+
         void Startup(marl::WaitGroup& waitGroup) override;
         void Shutdown() override;
 
@@ -149,52 +121,42 @@ namespace okami::graphics::diligent {
             const entt::meta_type& type) const override;
 
         // Geometry resource handlers
-        void OnFinalize(core::Geometry* geometry);
-        void OnDestroy(core::Geometry* geometry);
-        core::Handle<core::Geometry> Load(
+        void OnFinalize(
+            const core::Geometry& geometryIn,
+            core::Geometry& geometryOut,
+            GeometryBackend& backend);
+        void OnDestroy(GeometryBackend& geometry);
+        core::Geometry LoadFrontendGeometry(
             const std::filesystem::path& path, 
-            const core::LoadParams<core::Geometry>& params, 
-            core::resource_id_t newResId) override;
-        core::Handle<core::Geometry> Add(core::Geometry&& obj, 
-            core::resource_id_t newResId) override;
-        core::Handle<core::Geometry> Add(core::Geometry&& obj, 
-            const std::filesystem::path& path, 
-            core::resource_id_t newResId) override;
+            const core::LoadParams<core::Geometry>& params);
+        GeometryBackend Construct(const core::Geometry& geometry);
 
         // Texture resource handlers
-        void OnFinalize(core::Texture* texture);
-        void OnDestroy(core::Texture* texture);
-        core::Handle<core::Texture> Load(
-            const std::filesystem::path& path, 
-            const core::LoadParams<core::Texture>& params, 
-            core::resource_id_t newResId) override;
-        core::Handle<core::Texture> Add(core::Texture&& obj, 
-            core::resource_id_t newResId) override;
-        core::Handle<core::Texture> Add(core::Texture&& obj, 
-            const std::filesystem::path& path, 
-            core::resource_id_t newResId) override;
+        void OnFinalize(
+            const core::Texture& textureIn,
+            core::Texture& textureOut,
+            TextureBackend& backend);
+        void OnDestroy(TextureBackend& texture);
+        TextureBackend Construct(const core::Texture& texture);
 
-        // Base material handlers
-        void OnFinalize(core::BaseMaterial* material);
-        void OnDestroy(core::BaseMaterial* material);
-        core::Handle<core::BaseMaterial> Load(
-            const std::filesystem::path& path, 
-            const core::LoadParams<core::BaseMaterial>& params, 
-            core::resource_id_t newResId) override;
-        core::Handle<core::BaseMaterial> Add(core::BaseMaterial&& obj, 
-            core::resource_id_t newResId) override;
-        core::Handle<core::BaseMaterial> Add(core::BaseMaterial&& obj, 
-            const std::filesystem::path& path, 
-            core::resource_id_t newResId) override;
+        // RenderCanvas resource handlers
+        void OnFinalize(
+            const RenderCanvas& canvasIn,
+            RenderCanvas& canvasOut,
+            RenderCanvasBackend& backend);
+        void OnDestroy(RenderCanvasBackend& canvas);
+        RenderCanvasBackend Construct(const RenderCanvas& canvas);
 
         void AddModule(std::unique_ptr<IGraphicsObject>&&) override;
         void AddOverlay(IGraphicsObject* object) override;
         void RemoveOverlay(IGraphicsObject* object) override;
-        glm::i32vec2 GetRenderArea() const override;
+
+        DG::TEXTURE_FORMAT GetFormat(RenderAttribute attrib) override;
+        DG::TEXTURE_FORMAT GetDepthFormat(const RenderPass& pass) override;
 
         DynamicUniformBuffer<HLSL::SceneGlobals>*
             GetGlobalsBuffer() override;
 
-        core::Future<entt::entity> Pick(const glm::vec2& position) override;
+        void SetRenderViews(std::vector<RenderView>&& rvs) override;
     };
 }

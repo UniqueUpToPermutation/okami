@@ -4,9 +4,13 @@
 #include <okami/Embed.hpp>
 
 #include <okami/diligent/BasicRenderer.hpp>
-#include <okami/diligent/Display.hpp>
+#include <okami/diligent/Glfw.hpp>
 #include <okami/diligent/Shader.hpp>
 #include <okami/diligent/GraphicsUtils.hpp>
+
+#include <okami/diligent/SpriteModule.hpp>
+
+#include <filesystem>
 
 using namespace Diligent;
 
@@ -15,72 +19,63 @@ void MakeShaderMap(okami::core::file_map_t* map);
 
 namespace okami::graphics::diligent {
 
-    inline DG::ITexture* GetDiligentTextureImpl(void* backend) {
-        return reinterpret_cast<BasicRenderer::TextureImpl*>(backend)->mTexture;
+    DG::ITexture* GetTextureBackend(TextureBackend* backend) {
+        return backend->mTexture.RawPtr();
+    };
+
+    BasicRenderer::BasicRenderer(
+        IDisplay* display,
+        core::ResourceManager& resources) : 
+        mDisplay(display),
+        mGeometryBackend(
+            [this](const core::Geometry& geo) { 
+                return Construct(geo); },
+            [this](const std::filesystem::path& path, 
+                const core::LoadParams<core::Geometry>& params) {
+                return LoadFrontendGeometry(path, params); },
+            [this](const core::Geometry& geoIn,
+                core::Geometry& geoOut,
+                GeometryBackend& backend) {
+                OnFinalize(geoIn, geoOut, backend); },
+            [this](GeometryBackend& backend) {
+                OnDestroy(backend); }),
+        mTextureBackend(
+            [this](const core::Texture& geo) { 
+                return Construct(geo); },
+            &core::Texture::Load,
+            [this](const core::Texture& texIn,
+                core::Texture& texOut,
+                TextureBackend& backend) {
+                OnFinalize(texIn, texOut, backend); },
+            [this](TextureBackend& backend) {
+                OnDestroy(backend); }),
+        mRenderCanvasBackend(
+            [this](const RenderCanvas& canvas) {
+                return Construct(canvas); },
+            nullptr,
+            [this](const RenderCanvas& canvIn,
+                RenderCanvas& canvOut,
+                RenderCanvasBackend& backend) {
+                OnFinalize(canvIn, canvOut, backend); },
+            [this](RenderCanvasBackend& backend) {
+                OnDestroy(backend); }),
+        mResourceInterface(resources) {
+
+        // Associate the renderer with the correct resource types 
+        resources.Register<core::Geometry>(&mGeometryBackend);
+        resources.Register<core::Texture>(&mTextureBackend);
+        resources.Register<RenderCanvas>(&mRenderCanvasBackend);
     }
 
-    void GetEngineInitializationAttribs(
-        DG::RENDER_DEVICE_TYPE DeviceType, 
-        DG::EngineCreateInfo& EngineCI, 
-        DG::SwapChainDesc& SCDesc) {
-        
-		SCDesc.ColorBufferFormat            = TEX_FORMAT_RGBA8_UNORM_SRGB;
-        EngineCI.Features.GeometryShaders   = DEVICE_FEATURE_STATE_ENABLED;
-        EngineCI.Features.Tessellation 		= DEVICE_FEATURE_STATE_ENABLED;
-    
-        if (DeviceType == RENDER_DEVICE_TYPE_GL) {
-            EngineCI.Features.SeparablePrograms = DEVICE_FEATURE_STATE_ENABLED;
-        }
+    void BasicRenderer::OnDestroy(GeometryBackend& geometry) {
+        geometry = GeometryBackend();
     }
 
-    BasicRenderer::BasicRenderer(core::ISystem* displaySystem, core::ResourceInterface& resources) : 
-        mDisplaySystem(displaySystem), 
-        mGeometryManager(
-            []() { return core::Geometry(); },
-            [this](core::Geometry* geo) { OnDestroy(geo); }),
-        mTextureManager(
-            []() { return core::Texture(); },
-            [this](core::Texture* tex) { OnDestroy(tex); }),
-        mBaseMaterialManager(
-            []() { return core::BaseMaterial(); },
-            [this](core::BaseMaterial* mat) { OnDestroy(mat); }) {
-
-        // Associate the renderer with the geometry 
-        resources.Register<core::Geometry>(this);
-        resources.Register<core::Texture>(this);
-        resources.Register<core::BaseMaterial>(this);
-
-        core::InterfaceCollection displayInterfaces(mDisplaySystem);
-        auto windowProvider = displayInterfaces.Query<INativeWindowProvider>();
-        auto display = displayInterfaces.Query<IDisplay>();
-
-        if (!windowProvider) {
-            throw std::runtime_error("Error: Display does not expose"
-                " INativeWindowProvider interface!");
-        }
-
-        if (!display) {
-            throw std::runtime_error("Error: Display does not expose"
-                " IDisplay interface!");
-        }
-
-        mNativeWindowProvider = windowProvider;
-        mDisplay = display;
-
-        mBackend = mDisplay->GetRequestedBackend();
-    }
-
-    void BasicRenderer::OnDestroy(core::Geometry* geometry) {
-        auto impl = reinterpret_cast<GeometryImpl*>(geometry->GetBackend());
-        delete impl;
-        delete geometry;
-    }
-
-    std::unique_ptr<BasicRenderer::GeometryImpl>
+   GeometryBackend
         BasicRenderer::MoveToGPU(const core::Geometry& geometry) {
-        auto impl = std::make_unique<GeometryImpl>();
+        GeometryBackend result(geometry.GetDesc());
 
-        const auto& geoDesc = geometry.GetDesc();
+        const auto& geoDesc = result.mDesc;
         const auto& data = geometry.DataCPU();
 
         for (auto& vertBuffer : data.mVertexBuffers) {
@@ -103,7 +98,7 @@ namespace okami::graphics::diligent {
                 throw std::runtime_error("Failed to create vertex buffer!");
             }
 
-            impl->mVertexBuffers.emplace_back(buffer);
+            result.mVertexBuffers.emplace_back(buffer);
         }
 
         if (geoDesc.bIsIndexed) {
@@ -126,27 +121,162 @@ namespace okami::graphics::diligent {
                 throw std::runtime_error("Failed to create index buffer!");
             }
 
-            impl->mIndexBuffer.Attach(buffer);
+            result.mIndexBuffer.Attach(buffer);
         }
 
-        return impl;
+        return result;
     }
 
-    void BasicRenderer::OnFinalize(core::Geometry* geometry) {
-        auto impl = MoveToGPU(*geometry);
-        geometry->DeallocCPU();
-        geometry->SetBackend(impl.release());
+    void BasicRenderer::OnFinalize(
+        const core::Geometry& geometryIn,
+        core::Geometry& geometryOut,
+        GeometryBackend& backend) {
+
+        backend = MoveToGPU(geometryIn);
+
+        geometryOut.DeallocCPU();
+        geometryOut.SetDesc(geometryIn.GetDesc());
+        geometryOut.SetBoundingBox(geometryIn.GetBoundingBox());
+
+        backend.mEvent->signal();
     }
 
-    void BasicRenderer::OnDestroy(core::Texture* tex) {
-        auto impl = reinterpret_cast<BasicRenderer::TextureImpl*>(tex->GetBackend());
-        delete impl;
-        delete tex;
+    void BasicRenderer::OnDestroy(TextureBackend& texture) {
+        texture = TextureBackend();
     }
 
-    std::unique_ptr<BasicRenderer::TextureImpl> 
+    core::Geometry BasicRenderer::LoadFrontendGeometry(
+        const std::filesystem::path& path, 
+        const core::LoadParams<core::Geometry>& params) {
+        auto& layout = mVertexLayouts.Get(params.mComponentType);
+        return core::Geometry::Load(path, layout);
+    }
+
+    GeometryBackend BasicRenderer::Construct(const core::Geometry& geo) {
+        return GeometryBackend(geo.GetDesc());
+    }
+
+    TextureBackend BasicRenderer::Construct(const core::Texture& tex) {
+        return TextureBackend();
+    }
+
+    void BasicRenderer::OnFinalize(
+        const RenderCanvas& canvasIn,
+        RenderCanvas& canvasOut,
+        RenderCanvasBackend& backend) {
+        UpdateFramebuffer(canvasOut, backend);
+    }
+
+    void BasicRenderer::OnDestroy(RenderCanvasBackend& canvas) {
+        canvas = RenderCanvasBackend();
+    }
+
+    BasicRenderer::RenderCanvasBackend 
+        BasicRenderer::Construct(const RenderCanvas&) {
+        return RenderCanvasBackend();
+    }
+
+    void BasicRenderer::UpdateFramebuffer(
+        RenderCanvas& frontend, 
+        RenderCanvasBackend& backend) {
+
+        const auto& pass = frontend.GetPassInfo();
+        bool bWindowBackend = frontend.GetWindow() != nullptr;
+        bool bForceResize = false;
+
+        if (!backend.bInitialized) {
+            // Create the backend
+            auto window = frontend.GetWindow();
+
+            if (window) {
+                if (!pass.IsFinal()) {
+                    throw std::runtime_error("All passes that write to "
+                        "a RenderCanvas backended by a window must be final!");
+                }
+
+                DG::ISwapChain* swapChain = nullptr;
+                CreateSwapChain(mDevice, mContexts[0], &swapChain,
+                    mDefaultSCDesc, mEngineFactory, window);
+
+                const auto& scDesc = swapChain->GetDesc();
+                if (mColorFormat != scDesc.ColorBufferFormat) {
+                    throw std::runtime_error("Swap chain has improper color format!");
+                }
+
+                backend.mSwapChain = swapChain;
+                bWindowBackend = true;
+                frontend.SetSurfaceTransform(ToOkami(scDesc.PreTransform));
+            }
+
+            backend.mRenderTargets.resize(pass.mAttributeCount);
+            bForceResize = true;
+            backend.bInitialized = true;
+        } 
+        
+        if (!bWindowBackend) {
+            // Update if necessary
+            auto props = frontend.GetProperties();
+
+            if (props.bHasResized || bForceResize) {
+                for (auto& rt : backend.mRenderTargets) {
+                    if (rt)
+                        rt->Release();
+                }
+
+                if (backend.mDepthTarget)
+                    backend.mDepthTarget->Release();
+
+                for (uint i = 0; i < pass.mAttributeCount; ++i) {
+                    TextureDesc dg_desc;
+                    dg_desc.BindFlags = BIND_RENDER_TARGET;
+                    dg_desc.CPUAccessFlags = CPU_ACCESS_NONE;
+                    dg_desc.Width = props.mWidth;
+                    dg_desc.Height = props.mHeight;
+                    dg_desc.Type = RESOURCE_DIM_TEX_2D;
+                    dg_desc.SampleCount = 1;
+                    dg_desc.MipLevels = 1;
+                    dg_desc.Name = "Render Canvas RT Backend";
+                    dg_desc.Format = 
+                        GetFormat(pass.mAttributes[i]);
+
+                    DG::ITexture* tex = nullptr;
+                    mDevice->CreateTexture(dg_desc, nullptr, &tex);
+                    backend.mRenderTargets[i].Attach(tex);
+                }
+
+                TextureDesc dg_desc;
+                dg_desc.BindFlags = BIND_RENDER_TARGET;
+                dg_desc.CPUAccessFlags = CPU_ACCESS_NONE;
+                dg_desc.Width = props.mWidth;
+                dg_desc.Height = props.mHeight;
+                dg_desc.Type = RESOURCE_DIM_TEX_2D;
+                dg_desc.SampleCount = 1;
+                dg_desc.MipLevels = 1;
+                dg_desc.Name = "Render Canvas DS Backend";
+                dg_desc.Format = 
+                    GetDepthFormat(pass);
+
+                DG::ITexture* tex = nullptr;
+                mDevice->CreateTexture(dg_desc, nullptr, &tex);
+                backend.mDepthTarget.Attach(tex);
+
+                if (props.mTransform == SurfaceTransform::OPTIMAL) {
+                    throw std::runtime_error("SurfaceTransform::OPTIMAL is not valid for "
+                        "a render canvas that is not backed by a swap chain!");
+                }
+            }
+        } else {
+            auto props = frontend.GetProperties();
+            backend.mSwapChain->Resize(props.mWidth, props.mHeight, 
+                ToDiligent(props.mTransform));
+        }
+
+        frontend.MakeClean();
+    }
+
+    TextureBackend
         BasicRenderer::MoveToGPU(const core::Texture& texture) {
-        auto impl = std::make_unique<TextureImpl>();
+        TextureBackend result;
 
         const auto& texDesc = texture.GetDesc();
         const auto& data = texture.DataCPU();
@@ -182,242 +312,125 @@ namespace okami::graphics::diligent {
 
         ITexture* dg_texture = nullptr;
         mDevice->CreateTexture(dg_desc, &dg_data, &dg_texture);
-        impl->mTexture.Attach(dg_texture);
+        result.mTexture.Attach(dg_texture);
 
-        return impl;
+        return result;
     }
 
-    void BasicRenderer::OnFinalize(core::Texture* texture) {
-        auto impl = MoveToGPU(*texture);
-        texture->DeallocCPU();
-        texture->SetBackend(impl.release());
-    }
+    void BasicRenderer::OnFinalize(
+        const core::Texture& textureIn,
+        core::Texture& textureOut,
+        TextureBackend& backend) {
 
-    std::unique_ptr<BasicRenderer::BaseMaterialImpl> 
-        BasicRenderer::MoveToGPU(const core::BaseMaterial& material) {
-        auto impl = std::make_unique<BasicRenderer::BaseMaterialImpl>();
-        auto data = material.GetData();
+        backend = MoveToGPU(textureIn);
 
-        DG::ITexture* albedo;
-        if (data.mAlbedo) {
-            data.mAlbedo->OnLoadEvent().wait();
-            albedo = GetDiligentTextureImpl(data.mAlbedo->GetBackend());
-        } else
-            albedo = mDefaultTexture;
-       
-        DG::IShaderResourceBinding* binding = nullptr;
-        mStaticMeshPipeline.mStateColor->CreateShaderResourceBinding(
-            &binding, true);
+        textureOut.DeallocCPU();
+        textureOut.SetDesc(textureIn.GetDesc());
 
-        binding->GetVariableByIndex(DG::SHADER_TYPE_PIXEL, 
-            mStaticMeshPipeline.mAlbedoIdx)->Set(
-                albedo->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE));
-
-        impl->mBinding = binding;
-        return impl;
-    }
-
-    void BasicRenderer::OnFinalize(core::BaseMaterial* material) {
-        auto impl = MoveToGPU(*material);
-        material->SetBackend(impl.release());
-    }
-
-    void BasicRenderer::OnDestroy(core::BaseMaterial* material) {
-        auto impl = reinterpret_cast<BaseMaterialImpl*>(material->GetBackend());
-        delete impl;
-        delete material;
-    }
-
-    BasicRenderer::StaticMeshPipeline 
-        BasicRenderer::CreateStaticMeshPipeline(
-            core::IVirtualFileSystem* fileLoader) {
-
-        ShaderParams paramsStaticMeshVS(
-            "BasicVert.vsh", DG::SHADER_TYPE_VERTEX, "Static Mesh VS");
-        ShaderParams paramsStaticMeshPSColor(
-            "BasicPixel.psh", DG::SHADER_TYPE_PIXEL, "Static Mesh PS Color");
-
-        bool bAddLineNumbers = mBackend != GraphicsBackend::OPENGL;
-
-        BasicRenderer::StaticMeshPipeline pipeline;
-
-        pipeline.mVS.Attach(CompileEmbeddedShader(
-            mDevice, paramsStaticMeshVS, fileLoader, bAddLineNumbers));
-        pipeline.mPSColor.Attach(CompileEmbeddedShader(
-            mDevice, paramsStaticMeshPSColor, fileLoader, bAddLineNumbers));
-
-        // Create pipeline
-        GraphicsPipelineStateCreateInfo PSOCreateInfo;
-        PSOCreateInfo.PSODesc.Name = "Static Mesh";
-        PSOCreateInfo.PSODesc.PipelineType = PIPELINE_TYPE_GRAPHICS;
-        PSOCreateInfo.GraphicsPipeline.NumRenderTargets             = 1;
-        PSOCreateInfo.GraphicsPipeline.RTVFormats[0]                = mSwapChain->GetDesc().ColorBufferFormat;
-        PSOCreateInfo.GraphicsPipeline.DSVFormat                    = mSwapChain->GetDesc().DepthBufferFormat;
-        PSOCreateInfo.GraphicsPipeline.PrimitiveTopology            = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        PSOCreateInfo.GraphicsPipeline.RasterizerDesc.CullMode      = CULL_MODE_BACK;
-        PSOCreateInfo.GraphicsPipeline.DepthStencilDesc.DepthEnable = true;
-
-        InputLayoutDiligent layout = ToDiligent(mVertexLayouts.Get<core::StaticMesh>());
-        PSOCreateInfo.GraphicsPipeline.InputLayout.LayoutElements = layout.mElements.data();
-        PSOCreateInfo.GraphicsPipeline.InputLayout.NumElements = layout.mElements.size();
-
-        PSOCreateInfo.pVS = pipeline.mVS;
-
-        ShaderResourceVariableDesc DepthVars[] = {
-            {SHADER_TYPE_VERTEX, "cbuf_SceneGlobals", 
-                SHADER_RESOURCE_VARIABLE_TYPE_STATIC},
-            {SHADER_TYPE_VERTEX, "cbuf_InstanceData", 
-                SHADER_RESOURCE_VARIABLE_TYPE_STATIC},
-        };
-
-        PSOCreateInfo.PSODesc.ResourceLayout.Variables    = DepthVars;
-        PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(DepthVars);
-        PSOCreateInfo.PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
-
-        DG::IPipelineState* depthPipeline = nullptr;
-        mDevice->CreateGraphicsPipelineState(PSOCreateInfo, &depthPipeline);
-        pipeline.mStateDepth.Attach(depthPipeline);
-
-        // Create color
-        ShaderResourceVariableDesc ColorVars[] = {
-            {SHADER_TYPE_PIXEL, "t_Albedo", 
-                SHADER_RESOURCE_VARIABLE_TYPE_MUTABLE},
-            {SHADER_TYPE_VERTEX, "cbuf_SceneGlobals", 
-                SHADER_RESOURCE_VARIABLE_TYPE_STATIC},
-            {SHADER_TYPE_VERTEX, "cbuf_InstanceData", 
-                SHADER_RESOURCE_VARIABLE_TYPE_STATIC},
-            {SHADER_TYPE_PIXEL, "cbuf_InstanceData", 
-                SHADER_RESOURCE_VARIABLE_TYPE_STATIC}
-        };
-        pipeline.mAlbedoIdx = 0;
-
-        PSOCreateInfo.PSODesc.ResourceLayout.Variables    = ColorVars;
-        PSOCreateInfo.PSODesc.ResourceLayout.NumVariables = _countof(ColorVars);
-
-        SamplerDesc SamLinearClampDesc {
-            FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, FILTER_TYPE_LINEAR, 
-            TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
-        };
-        ImmutableSamplerDesc ImtblSamplers[] = {
-            {SHADER_TYPE_PIXEL, "t_Albedo", SamLinearClampDesc}
-        };
-        PSOCreateInfo.PSODesc.ResourceLayout.ImmutableSamplers    = ImtblSamplers;
-        PSOCreateInfo.PSODesc.ResourceLayout.NumImmutableSamplers = _countof(ImtblSamplers);
-
-        PSOCreateInfo.pPS = pipeline.mPSColor;
-
-        DG::IPipelineState* colorPipeline = nullptr;
-        mDevice->CreateGraphicsPipelineState(PSOCreateInfo, &colorPipeline);
-        pipeline.mStateColor.Attach(colorPipeline);
-
-        if (bEntityPickEnabled) {
-            PSOCreateInfo.GraphicsPipeline.NumRenderTargets = 2;
-            PSOCreateInfo.GraphicsPipeline.RTVFormats[0] = mSwapChain->GetDesc().ColorBufferFormat;
-            PSOCreateInfo.GraphicsPipeline.RTVFormats[1] = DG::TEX_FORMAT_R32_SINT;
-            PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[1].BlendEnable = false;
-            PSOCreateInfo.GraphicsPipeline.BlendDesc.RenderTargets[1].LogicOperationEnable = false;
-
-            DG::IPipelineState* colorPipelinePick = nullptr;
-            mDevice->CreateGraphicsPipelineState(PSOCreateInfo, &colorPipelinePick);
-            pipeline.mStateColorEntityPick.Attach(colorPipelinePick);
-        }
-
-        // Set the scene globals buffer
-        pipeline.mStateDepth->GetStaticVariableByName(
-            DG::SHADER_TYPE_VERTEX, "cbuf_SceneGlobals")->Set(mSceneGlobals.Get());
-        pipeline.mStateDepth->GetStaticVariableByName(
-            DG::SHADER_TYPE_VERTEX, "cbuf_InstanceData")->Set(mInstanceData.Get());
-    
-        pipeline.mStateColor->GetStaticVariableByName(
-            DG::SHADER_TYPE_VERTEX, "cbuf_SceneGlobals")->Set(mSceneGlobals.Get());
-        pipeline.mStateColor->GetStaticVariableByName(
-            DG::SHADER_TYPE_VERTEX, "cbuf_InstanceData")->Set(mInstanceData.Get());
-        pipeline.mStateColor->GetStaticVariableByName(
-            DG::SHADER_TYPE_PIXEL, "cbuf_InstanceData")->Set(mInstanceData.Get());
-    
-        if (bEntityPickEnabled) {
-            pipeline.mStateColorEntityPick->GetStaticVariableByName(
-                DG::SHADER_TYPE_VERTEX, "cbuf_SceneGlobals")->Set(mSceneGlobals.Get());
-            pipeline.mStateColorEntityPick->GetStaticVariableByName(
-                DG::SHADER_TYPE_VERTEX, "cbuf_InstanceData")->Set(mInstanceData.Get());
-            pipeline.mStateColorEntityPick->GetStaticVariableByName(
-                DG::SHADER_TYPE_PIXEL, "cbuf_InstanceData")->Set(mInstanceData.Get());
-        }
-
-        return pipeline;
-    }
-
-    void BasicRenderer::EnableInterface(const entt::meta_type& interfaceType) {
-        if (interfaceType == entt::resolve<IEntityPick>()) {
-
-            if (mBackend == GraphicsBackend::OPENGL) {
-                throw std::runtime_error("Entity picking not supported in OpenGL!");
-            }
-
-            bEntityPickEnabled = true;
-        } else {
-            throw std::runtime_error("Requested interface not supported!");
-        }
+        backend.mEvent->signal();
     }
 
     void BasicRenderer::Startup(marl::WaitGroup& waitGroup) {
         // Load shaders
         core::EmbeddedFileLoader fileLoader(&MakeShaderMap);
 
-        if (mDisplay->GetRequestedBackend() == GraphicsBackend::OPENGL)
-            mNativeWindowProvider->GLMakeContextCurrent();
-
         // Create the graphics device and swap chain
         DG::IEngineFactory* factory = nullptr;
         DG::IRenderDevice* device  = nullptr;
         std::vector<DG::IDeviceContext*> contexts;
-        DG::ISwapChain* swapChain = nullptr;
 
-        CreateDeviceAndSwapChain(mDisplay, mNativeWindowProvider, 
-            &factory, &device, contexts, &swapChain, 
-            &GetEngineInitializationAttribs);
+        if (mDisplay->GetRequestedBackend() == GraphicsBackend::VULKAN) {
+            mColorFormat = DG::TEX_FORMAT_BGRA8_UNORM_SRGB;
+        } else {
+            mColorFormat = DG::TEX_FORMAT_RGBA8_UNORM_SRGB;
+        }
+        mDepthFormat = DG::TEX_FORMAT_D32_FLOAT;
+
+        auto getInitializationAttribs = [this, 
+            colorFormat = mColorFormat,
+            depthFormat = mDepthFormat](
+            DG::RENDER_DEVICE_TYPE DeviceType, 
+            DG::EngineCreateInfo& EngineCI, 
+            DG::SwapChainDesc& scDesc) {
+
+            scDesc.ColorBufferFormat            = colorFormat;
+            scDesc.DepthBufferFormat            = depthFormat;
+            EngineCI.Features.GeometryShaders   = DEVICE_FEATURE_STATE_ENABLED;
+            EngineCI.Features.Tessellation 		= DEVICE_FEATURE_STATE_ENABLED;
+        };
+
+        CreateDevice(mDisplay->GetRequestedBackend(), 
+            &factory, &device, contexts, &mDefaultSCDesc, 
+            getInitializationAttribs);
 
         mEngineFactory.Attach(factory);
         mDevice.Attach(device);
-        mSwapChain.Attach(swapChain);
 
         for (auto context : contexts) {
             mContexts.emplace_back(
                 DG::RefCntAutoPtr<DG::IDeviceContext>(context));
         }
 
-        mVertexLayouts.Register<core::StaticMesh>(core::VertexFormat::PositionUV());
+        // Create the default texture
+        const uint defaultTexWidth = 16;
+        const uint defaultTexHeight = 16;
+
+        DG::TextureDesc defaultTexDesc;
+        defaultTexDesc.BindFlags = DG::BIND_SHADER_RESOURCE;
+        defaultTexDesc.Format = DG::TEX_FORMAT_RGBA8_UNORM_SRGB;
+        defaultTexDesc.Width = defaultTexWidth;
+        defaultTexDesc.Height = defaultTexHeight;
+        defaultTexDesc.MipLevels = 1;
+        defaultTexDesc.Type = DG::RESOURCE_DIM_TEX_2D;
+        
+        std::vector<uint8_t> defaultTexDataRaw(4 * defaultTexWidth * defaultTexHeight);
+        std::fill(defaultTexDataRaw.begin(), defaultTexDataRaw.end(), 255u);
+
+        std::vector<DG::TextureSubResData> subData(1);
+        subData[0].Stride = 4 * defaultTexWidth;
+        subData[0].pData = defaultTexDataRaw.data();
+
+        DG::TextureData defaultTexData;
+        defaultTexData.NumSubresources = 1;
+        defaultTexData.pContext = mContexts[0];
+        defaultTexData.pSubResources = subData.data();
+
+        DG::ITexture* defaultTexture = nullptr;
+        mDevice->CreateTexture(defaultTexDesc, &defaultTexData, &defaultTexture);
+        mDefaultTexture.Attach(defaultTexture);
 
         // Create globals buffer
         mSceneGlobals = DynamicUniformBuffer<HLSL::SceneGlobals>(mDevice);
-        mInstanceData = DynamicUniformBuffer<HLSL::StaticInstanceData>(mDevice);
 
-        mStaticMeshPipeline = CreateStaticMeshPipeline(&fileLoader);
+        AddModule(std::make_unique<StaticMeshModule>(
+            &mGeometryBackend, &mTextureBackend));
+        AddModule(std::make_unique<
+            SpriteModule<TextureBackend, &GetTextureBackend>>(
+                &mTextureBackend));
 
-        auto basicTexture = core::Texture::Prefabs::SolidColor(
-            16, 16, 
-            glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-        mDefaultTexture = MoveToGPU(basicTexture)->mTexture;
-        mStaticMeshPipeline.mDefaultBindingColor = 
-            MoveToGPU(core::BaseMaterial())->mBinding;
+        // This should spawn requested render canvas backends.
+        mRenderCanvasBackend.Run();
 
-        mSpriteModule.Startup(mDevice, mSwapChain, mSceneGlobals, &fileLoader);
+        mColorPass = RenderPass::Final();
 
         RenderModuleParams params;
+        params.mFileSystem = &fileLoader;
+        params.mDefaultTexture = mDefaultTexture;
+        params.mRequestedRenderPasses = {
+            mColorPass,
+        };
 
-        for (auto overlay : mOverlays) {
-            overlay->Startup(this, mDevice, mSwapChain, params);
+        for (auto& module : mRenderModules) {
+            module->Startup(this, mDevice, params);
         }
 
-        if (bEntityPickEnabled) {
-            DG::TextureDesc desc;
-            desc.Type = DG::RESOURCE_DIM_TEX_2D;
-            desc.Format = DG::TEX_FORMAT_R32_SINT;
-            mEntityPicker = TextureCapturePick(mDevice, desc, 32);
+        for (auto overlay : mOverlays) {
+            overlay->Startup(this, mDevice, params);
+        }
 
-            mEntityResultBuffer.resize(mEntityPicker.GetMaxQueries());
-            mEntityQueryBuffer.resize(mEntityPicker.GetMaxQueries());
-            mEntityResultPromises.resize(mEntityPicker.GetMaxQueries());
+        for (auto& module : mRenderModules) {
+            module->RegisterResourceInterfaces(mResourceInterface);
+            module->RegisterVertexFormats(mVertexLayouts);
         }
     }
 
@@ -425,110 +438,70 @@ namespace okami::graphics::diligent {
         interfaces.Add<core::IVertexLayoutProvider>(this);
         interfaces.Add<IRenderer>(this);
         interfaces.Add<IGlobalsBufferProvider>(this);
-
-        if (bEntityPickEnabled)
-            interfaces.Add<IEntityPick>(this);
+        interfaces.Add<IRenderPassFormatProvider>(this);
     }
 
     void BasicRenderer::LoadResources(marl::WaitGroup& waitGroup) {
-        mGeometryManager.ScheduleBackend(waitGroup, true);
-        mTextureManager.ScheduleBackend(waitGroup, true);
-        mBaseMaterialManager.ScheduleBackend(waitGroup, true);
+        
+        waitGroup.add();
+        marl::Task geoTask([
+            &geoBackend = mGeometryBackend,
+            waitGroup]() {
+            defer(waitGroup.done());
+
+            do {
+                geoBackend.Run();
+                geoBackend.LoadCounter().wait();
+            } while (!geoBackend.IsIdle());
+        }, marl::Task::Flags::SameThread);
+
+        waitGroup.add();
+        marl::Task texTask([
+            &texBackend = mTextureBackend,
+            waitGroup]() {
+            defer(waitGroup.done());
+
+            do {
+                texBackend.Run();
+                texBackend.LoadCounter().wait();
+            } while (!texBackend.IsIdle());
+        }, marl::Task::Flags::SameThread);
+
+        waitGroup.add();
+        marl::Task canvTask([
+            &canvBackend = mRenderCanvasBackend,
+            waitGroup]() {
+            defer(waitGroup.done());
+
+            do {
+                canvBackend.Run();
+                canvBackend.LoadCounter().wait();
+            } while (!canvBackend.IsIdle());
+        }, marl::Task::Flags::SameThread);
+
+        marl::schedule(std::move(geoTask));
+        marl::schedule(std::move(texTask));
+        marl::schedule(std::move(canvTask));
+
+        for (auto& module : mRenderModules) {
+            waitGroup.add();
+            marl::Task modTask([
+                &module,
+                &resources = mResourceInterface,
+                waitGroup]() {
+                defer(waitGroup.done());
+
+                do {
+                    module->Update(&resources);
+                    module->WaitOnPendingTasks();
+                } while (!module->IsIdle());
+            }, marl::Task::Flags::SameThread);
+
+            marl::schedule(std::move(modTask));
+        }
     }
 
     void BasicRenderer::SetFrame(core::Frame& frame) {
-    }
-
-    core::Handle<core::Geometry> BasicRenderer::Load(
-        const std::filesystem::path& path, 
-        const core::LoadParams<core::Geometry>& params, 
-        core::resource_id_t newResId) {
-
-        auto loader = [this](const std::filesystem::path& path, 
-            const core::LoadParams<core::Geometry>& params) {
-            auto layout = GetVertexLayout(params.mComponentType);
-            return core::Geometry::Load(path, layout);
-        };
-
-        auto finalizer = [this](core::Geometry* geo) {
-            OnFinalize(geo);
-        };
-
-        return mGeometryManager.Load(path, params, newResId, loader, finalizer);
-    } 
-
-    core::Handle<core::Geometry> BasicRenderer::Add(core::Geometry&& obj, 
-        core::resource_id_t newResId) {
-        auto finalizer = [this](core::Geometry* geo) {
-            OnFinalize(geo);
-        };
-        return mGeometryManager.Add(std::move(obj), newResId, finalizer);
-    }
-
-    core::Handle<core::Geometry> BasicRenderer::Add(core::Geometry&& obj, 
-        const std::filesystem::path& path, 
-        core::resource_id_t newResId) {
-        auto finalizer = [this](core::Geometry* geo) {
-            OnFinalize(geo);
-        };
-        return mGeometryManager.Add(std::move(obj), path, newResId, finalizer);
-    }
-
-    core::Handle<core::Texture> BasicRenderer::Load(
-        const std::filesystem::path& path, 
-        const core::LoadParams<core::Texture>& params, 
-        core::resource_id_t newResId) {
-        auto loader = [](const std::filesystem::path& path, 
-            const core::LoadParams<core::Texture>& params) {
-            return core::Texture::Load(path, params);
-        };
-
-        auto finalizer = [this](core::Texture* tex) {
-            OnFinalize(tex);
-        };
-
-        return mTextureManager.Load(path, params, newResId, loader, finalizer);
-    }
-
-    core::Handle<core::Texture> BasicRenderer::Add(core::Texture&& obj, 
-        core::resource_id_t newResId) {
-        auto finalizer = [this](core::Texture* tex) {
-            OnFinalize(tex);
-        };
-        return mTextureManager.Add(std::move(obj), newResId, finalizer);
-    }
-
-    core::Handle<core::Texture> BasicRenderer::Add(core::Texture&& obj, 
-        const std::filesystem::path& path, 
-        core::resource_id_t newResId) {
-        auto finalizer = [this](core::Texture* tex) {
-            OnFinalize(tex);
-        };
-        return mTextureManager.Add(std::move(obj), path, newResId, finalizer);
-    }
-
-    core::Handle<core::BaseMaterial> BasicRenderer::Load(
-        const std::filesystem::path& path, 
-        const core::LoadParams<core::BaseMaterial>& params, 
-        core::resource_id_t newResId) {
-        throw std::runtime_error("Not implemented!");
-    }
-
-    core::Handle<core::BaseMaterial> BasicRenderer::Add(core::BaseMaterial&& obj, 
-        core::resource_id_t newResId) {
-        auto finalizer = [this](core::BaseMaterial* mat) {
-            OnFinalize(mat);
-        };
-        return mBaseMaterialManager.Add(std::move(obj), newResId, finalizer);
-    }
-
-    core::Handle<core::BaseMaterial> BasicRenderer::Add(core::BaseMaterial&& obj, 
-        const std::filesystem::path& path, 
-        core::resource_id_t newResId) {
-        auto finalizer = [this](core::BaseMaterial* mat) {
-            OnFinalize(mat);
-        };
-        return mBaseMaterialManager.Add(std::move(obj), path, newResId, finalizer);
     }
 
     const core::VertexFormat& BasicRenderer::GetVertexLayout(
@@ -537,129 +510,99 @@ namespace okami::graphics::diligent {
     }
 
     void BasicRenderer::RequestSync(core::SyncObject& syncObject) {
-        mSpriteModule.RequestSync(syncObject);
-    }
-
-    void BasicRenderer::UpdateFramebuffers() {
-        glm::uvec2 requestedSize;
-
-        auto sz = mDisplay->GetFramebufferSize();
-        auto& scDesc = mSwapChain->GetDesc();
-        
-        if (sz.x != scDesc.Width || sz.y != scDesc.Height) {
-            mSwapChain->Resize(sz.x, sz.y);
-        }
-        requestedSize = sz;
-
-        if (bEntityPickEnabled) {
-            if (!mEntityPickTexture || 
-                mEntityPickTexture->GetDesc().Width != requestedSize.x ||
-                mEntityPickTexture->GetDesc().Height != requestedSize.y) {
-
-                DG::TextureDesc desc;
-                desc.Width = requestedSize.x;
-                desc.Height = requestedSize.y;
-                desc.MipLevels = 1;
-                desc.Type = DG::RESOURCE_DIM_TEX_2D;
-                desc.SampleCount = 1;
-                desc.Name = "Entity Pick Buffer";
-                desc.Usage = DG::USAGE_DEFAULT;
-                desc.Format = DG::TEX_FORMAT_R32_SINT;
-                desc.BindFlags = DG::BIND_RENDER_TARGET;
-
-                DG::ITexture* entityPickBuffer = nullptr;
-                mDevice->CreateTexture(desc, nullptr, &entityPickBuffer);
-                mEntityPickTexture.Attach(entityPickBuffer);
-            }
-        }
-
-        if (!mColorBuffer ||
-            mColorBuffer->GetDesc().Width != requestedSize.x ||
-            mColorBuffer->GetDesc().Height != requestedSize.y) {
-                DG::TextureDesc desc;
-                desc.Width = requestedSize.x;
-                desc.Height = requestedSize.y;
-                desc.MipLevels = 1;
-                desc.Type = DG::RESOURCE_DIM_TEX_2D;
-                desc.SampleCount = 1;
-                desc.Name = "Color Buffer";
-                desc.Usage = DG::USAGE_DEFAULT;
-                desc.Format = mSwapChain->GetDesc().ColorBufferFormat;
-                desc.BindFlags = DG::BIND_RENDER_TARGET;
-
-                DG::ITexture* entityPickBuffer = nullptr;
-                mDevice->CreateTexture(desc, nullptr, &entityPickBuffer);
-                mColorBuffer.Attach(entityPickBuffer);
-        }
-
-        if (!mDepthBuffer ||
-            mDepthBuffer->GetDesc().Width != requestedSize.x ||
-            mDepthBuffer->GetDesc().Height != requestedSize.y) {
-                DG::TextureDesc desc;
-                desc.Width = requestedSize.x;
-                desc.Height = requestedSize.y;
-                desc.MipLevels = 1;
-                desc.Type = DG::RESOURCE_DIM_TEX_2D;
-                desc.SampleCount = 1;
-                desc.Name = "Depth Buffer";
-                desc.Usage = DG::USAGE_DEFAULT;
-                desc.Format = mSwapChain->GetDesc().DepthBufferFormat;
-                desc.BindFlags = DG::BIND_DEPTH_STENCIL;
-
-                DG::ITexture* entityPickBuffer = nullptr;
-                mDevice->CreateTexture(desc, nullptr, &entityPickBuffer);
-                mDepthBuffer.Attach(entityPickBuffer);
-        }
     }
 
     void BasicRenderer::Render(core::Frame& frame,
+        const std::vector<RenderView>& views,
         core::SyncObject& syncObject,
         const core::Time& time) {
 
-        UpdateFramebuffers();
+        // Schedule the updates of resource managers
+        mRenderCanvasBackend.Run();
+        mRenderCanvasBackend.ForEach([this, &resources = mResourceInterface]
+            (resource_id_t id, RenderCanvasBackend& backend) {
+            auto frontend = resources.TryGet<RenderCanvas>(id);
+            if (frontend) {
+                auto properties = frontend->GetProperties();
+                if (properties.bHasResized) {
+                    UpdateFramebuffer(*frontend, backend);
+                }
+            }
+        });
 
-        syncObject.WaitUntilFinished<core::Transform>();
+        mGeometryBackend.Run();
+        mTextureBackend.Run();
+
+        for (auto& module : mRenderModules) { 
+            module->Update(&mResourceInterface);
+        }
+
         syncObject.WaitUntilFinished<core::Camera>();
-        syncObject.WaitUntilFinished<core::StaticMesh>();
-
-        struct RenderCall {
-            DG::float4x4 mWorldTransform;
-            core::StaticMesh mStaticMesh;
-        };
 
         auto& registry = frame.Registry();
-        const auto& scDesc = mSwapChain->GetDesc();
 
-        // Queue up render calls and compute transforms
-        HLSL::SceneGlobals shaderGlobals;
-        shaderGlobals.mCamera.mView = DG::float4x4::Identity();
-        shaderGlobals.mCamera.mViewProj = DG::float4x4::Identity();
-        shaderGlobals.mCamera.mProj = DG::float4x4::Identity();
-        shaderGlobals.mCamera.mViewport = DG::float2(scDesc.Width, scDesc.Height);
-        shaderGlobals.mCamera.mNearZ = mBackend == GraphicsBackend::OPENGL ? -1.0 : 0.0;
-        shaderGlobals.mCamera.mFarZ = 1.0;
+        std::vector<RenderView> viewsSorted(views);
+        std::sort(viewsSorted.begin(), viewsSorted.end(),
+            [&resources = mResourceInterface](const RenderView& rv1, const RenderView& rv2) {
+            auto& target1 = resources.Get<RenderCanvas>(rv1.mTargetId);
+            auto& target2 = resources.Get<RenderCanvas>(rv2.mTargetId);
 
-        RenderModuleGlobals rmGlobals;
-        rmGlobals.mProjection = DG::float4x4::Identity();
-        rmGlobals.mView = DG::float4x4::Identity();
-        rmGlobals.mViewportSize = DG::float2(scDesc.Width, scDesc.Height);
-        rmGlobals.mTime = time;
-        rmGlobals.mWorldUp = DG::float3(0.0f, 1.0f, 0.0f);
+            uint rv1_i = target1.GetWindow() == nullptr ? 0 : 1;
+            uint rv2_i = target2.GetWindow() == nullptr ? 0 : 1;
+            return rv1_i < rv2_i;
+        });
 
-        rmGlobals.mViewOrigin = DG::float3(0.0f, 0.0f, 0.0f);
-        rmGlobals.mViewDirection = DG::float3(0.0f, 0.0f, 1.0f);
+        for (auto rv : views) {
+            auto& target = mResourceInterface.Get<RenderCanvas>(rv.mTargetId);
+            uint width = target.GetWidth();
+            uint height = target.GetHeight();
 
-        auto cameras = registry.view<core::Camera>();
+            // Queue up render calls and compute transforms
+            HLSL::SceneGlobals shaderGlobals;
+            shaderGlobals.mCamera.mView = DG::float4x4::Identity();
+            shaderGlobals.mCamera.mViewProj = DG::float4x4::Identity();
+            shaderGlobals.mCamera.mProj = DG::float4x4::Identity();
+            shaderGlobals.mCamera.mViewport = DG::float2(width, height);
+            shaderGlobals.mCamera.mNearZ = 0.0;
+            shaderGlobals.mCamera.mFarZ = 1.0;
 
-        if (!cameras.empty()) {
-            auto cameraEntity = cameras.front();
-            auto camera = cameras.get<core::Camera>(cameraEntity);
-            rmGlobals.mProjection = GetProjection(camera, mSwapChain, 
-                mBackend == GraphicsBackend::OPENGL);
+            RenderModuleGlobals rmGlobals;
+            rmGlobals.mProjection = DG::float4x4::Identity();
+            rmGlobals.mView = DG::float4x4::Identity();
+            rmGlobals.mViewportSize = DG::float2(width, height);
+            rmGlobals.mTime = time;
+            rmGlobals.mWorldUp = DG::float3(0.0f, 1.0f, 0.0f);
+
+            rmGlobals.mViewOrigin = DG::float3(0.0f, 0.0f, 0.0f);
+            rmGlobals.mViewDirection = DG::float3(0.0f, 0.0f, 1.0f);
+
+            auto cameraEntity = rv.mCamera;
+            core::Camera camera;
+            core::Camera* cameraPtr = nullptr;
+
+            if (cameraEntity != entt::null) {
+                camera = registry.get<core::Camera>(cameraEntity);
+                cameraPtr = &camera;
+            }
             
-            auto transform = registry.try_get<core::Transform>(cameraEntity);
-            if (transform) {
-                rmGlobals.mView = ToMatrix(*transform).Inverse();
+            auto& targetBackend = mRenderCanvasBackend.Get(rv.mTargetId);
+            DG::SwapChainDesc scDesc;
+            if (targetBackend.mSwapChain) {
+                scDesc = targetBackend.mSwapChain->GetDesc();
+            } else {
+                scDesc.Width = width;
+                scDesc.Height = height;
+                scDesc.PreTransform = ToDiligent(target.GetSurfaceTransform());
+            }
+
+            rmGlobals.mProjection = GetProjection(cameraPtr, scDesc, false);
+            
+            core::Transform* transform = nullptr;
+            if (cameraEntity != entt::null) {
+                transform = registry.try_get<core::Transform>(cameraEntity);
+                if (transform) {
+                    rmGlobals.mView = ToMatrix(*transform).Inverse();
+                }
             }
 
             shaderGlobals.mCamera.mView = rmGlobals.mView;
@@ -676,206 +619,104 @@ namespace okami::graphics::diligent {
             }
 
             rmGlobals.mCamera = camera;
-        }
 
-        shaderGlobals.mCamera.mInvView = shaderGlobals.mCamera.mView.Inverse();
-        shaderGlobals.mCamera.mInvViewProj = shaderGlobals.mCamera.mViewProj.Inverse();
-        shaderGlobals.mCamera.mInvProj = shaderGlobals.mCamera.mProj.Inverse();
+            shaderGlobals.mCamera.mPosition = rmGlobals.mViewOrigin;
+            shaderGlobals.mCamera.mViewDirection = rmGlobals.mViewDirection;
+            shaderGlobals.mCamera.mInvView = shaderGlobals.mCamera.mView.Inverse();
+            shaderGlobals.mCamera.mInvViewProj = shaderGlobals.mCamera.mViewProj.Inverse();
+            shaderGlobals.mCamera.mInvProj = shaderGlobals.mCamera.mProj.Inverse();
 
-        auto staticMeshes = registry.view<core::StaticMesh>();
+            auto immediateContext = mContexts[0];
 
-        auto immediateContext = mContexts[0];
+            const auto& pass = target.GetPassInfo();
+            std::vector<ITextureView*> rtvs(pass.mAttributeCount);
+            ITextureView* dsv = nullptr;
 
-        auto colorBufferRTV = mColorBuffer->GetDefaultView(
-            DG::TEXTURE_VIEW_RENDER_TARGET);
-        auto depthBufferDSV = mDepthBuffer->GetDefaultView(
-            DG::TEXTURE_VIEW_DEPTH_STENCIL);
+            if (!targetBackend.mSwapChain) {
+                for (uint i = 0; i < pass.mAttributeCount; ++i) {
+                    rtvs[i] = targetBackend.mRenderTargets[i]
+                        ->GetDefaultView(DG::TEXTURE_VIEW_RENDER_TARGET);
+                }
 
-        // Move globals to GPU
-        mSceneGlobals.Write(immediateContext, shaderGlobals);
+                dsv = targetBackend.mDepthTarget->GetDefaultView(
+                    DG::TEXTURE_VIEW_DEPTH_STENCIL);
+            } else {
+                rtvs[0] = targetBackend.mSwapChain->GetCurrentBackBufferRTV();
+                dsv = targetBackend.mSwapChain->GetDepthBufferDSV();
+            }
 
-        // Set render targets
-        ITextureView* entityPickView = nullptr;
-        std::vector<ITextureView*> rtvs;
-        rtvs.emplace_back(colorBufferRTV);
-        if (bEntityPickEnabled) {
-            entityPickView = mEntityPickTexture->GetDefaultView(
-                DG::TEXTURE_VIEW_RENDER_TARGET);
-            rtvs.emplace_back(entityPickView);
-        }
-        float color[] = { 0.3f, 0.3f, 0.3f, 1.0f };
-        immediateContext->SetRenderTargets(rtvs.size(), rtvs.data(), depthBufferDSV, 
-            RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-
-        // Clear screen
-        immediateContext->ClearRenderTarget(colorBufferRTV, color, 
-            RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-        immediateContext->ClearDepthStencil(depthBufferDSV,
-            DG::CLEAR_DEPTH_FLAG, 1.0f, 0, 
-            DG::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-        if (bEntityPickEnabled) {
-            float color[] = { 0.0f, 0.0f, 0.0f, 0.0f };
-            immediateContext->ClearRenderTarget(entityPickView, color, 
+            immediateContext->SetRenderTargets(rtvs.size(), rtvs.data(), dsv, 
                 RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+            // Move globals to GPU
+            mSceneGlobals.Write(immediateContext, shaderGlobals);
+
+            // Clear screen
+            if (rv.bClear) {
+                float color[] = { 0.3f, 0.3f, 0.3f, 1.0f };
+                for (uint i = 0; i < pass.mAttributeCount; ++i) {
+                    immediateContext->ClearRenderTarget(rtvs[i], 
+                        color, 
+                        RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+                }
+                immediateContext->ClearDepthStencil(dsv,
+                    DG::CLEAR_DEPTH_FLAG, 1.0f, 0, 
+                    DG::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+            }
+
+            for (auto& module : mRenderModules) {
+                module->WaitUntilReady(syncObject);
+                module->QueueCommands(immediateContext,
+                    frame,
+                    rv,
+                    target,
+                    pass,
+                    rmGlobals);
+            }
+
+            for (auto overlayIt = target.GetOverlaysBegin();
+                overlayIt != target.GetOverlaysEnd();
+                ++overlayIt) {
+                
+                auto overlayImpl = 
+                    reinterpret_cast<IRenderModule*>(
+                        (*overlayIt)->GetUserData());
+
+                overlayImpl->QueueCommands(immediateContext,
+                    frame,
+                    rv,
+                    target,
+                    pass,
+                    rmGlobals);
+            }
         }
 
-        // Bind pipeline state
-        auto staticMeshState = mStaticMeshPipeline.mStateColor;
-        if (bEntityPickEnabled)
-            staticMeshState = mStaticMeshPipeline.mStateColorEntityPick;
-        immediateContext->SetPipelineState(staticMeshState);
-
-        for (auto entity : staticMeshes) {
-            auto& staticMesh = staticMeshes.get<core::StaticMesh>(entity);
-            auto transform = registry.try_get<core::Transform>(entity);
-
-            RenderCall call;
-            call.mStaticMesh = staticMesh;
-            if (transform) {
-                call.mWorldTransform = ToMatrix(*transform);
-            } else {
-                call.mWorldTransform = DG::float4x4::Identity();
-            }
+        // Synchronize swap chains
+        DG::ISwapChain* primarySwapChain = nullptr;
+        for (auto rv : views) {
             
-            auto geometryImpl = reinterpret_cast<GeometryImpl*>
-                (call.mStaticMesh.mGeometry->GetBackend());
+            auto& targetBackend = mRenderCanvasBackend.Get(rv.mTargetId);
 
-            // Setup vertex buffers
-            DG::IBuffer* vertBuffers[] = { geometryImpl->mVertexBuffers[0] };
-            DG::Uint64 offsets[] = { 0 };
-            immediateContext->SetVertexBuffers(0, 1, vertBuffers, offsets, 
-                RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_NONE);
-            if (geometryImpl->mIndexBuffer) {
-                immediateContext->SetIndexBuffer(geometryImpl->mIndexBuffer, 0, 
-                    RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-            }
+            if (targetBackend.mSwapChain) {
+                const auto& desc = targetBackend.mSwapChain->GetDesc();
 
-            // Bind shader resources
-            if (call.mStaticMesh.mMaterial) {
-                auto materialImpl = reinterpret_cast<BaseMaterialImpl*>
-                    (call.mStaticMesh.mMaterial->GetBackend());
-                immediateContext->CommitShaderResources(
-                    materialImpl->mBinding,
-                    RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-            } else {
-                immediateContext->CommitShaderResources(
-                    mStaticMeshPipeline.mDefaultBindingColor,
-                    RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-            }
-
-            HLSL::StaticInstanceData instanceData;
-            instanceData.mWorld = call.mWorldTransform;
-            instanceData.mEntity = (int32_t)entity;
-
-            // Submit instance data to the GPU
-            mInstanceData.Write(immediateContext, instanceData);
-            
-            // Submit draw call to GPU
-            const auto& geoDesc = call.mStaticMesh.mGeometry->GetDesc();
-            if (geometryImpl->mIndexBuffer) {
-                DG::DrawIndexedAttribs attribs;
-                attribs.NumIndices = geoDesc.mIndexedAttribs.mNumIndices;
-                attribs.IndexType = ToDiligent(geoDesc.mIndexedAttribs.mIndexType);
-
-                immediateContext->DrawIndexed(attribs);
-            } else {
-                DG::DrawAttribs attribs;
-                attribs.NumVertices = geoDesc.mAttribs.mNumVertices;
-                immediateContext->Draw(attribs);
-            }
-
-            DG::ITexture* texture;
-        }
-
-        // Draw sprites
-        mSpriteModule.Render<&GetDiligentTextureImpl>(
-            immediateContext, frame, syncObject);
-
-        // Remove entity buffer for the overlays
-        rtvs = { colorBufferRTV };
-        immediateContext->SetRenderTargets(rtvs.size(), rtvs.data(), 
-            depthBufferDSV, 
-            RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-
-        // Draw overlays (i.e., ImGui, etc.)
-        for (auto overlay : mOverlays) {
-            overlay->QueueCommands(immediateContext, 
-                RenderPass::OVERLAY, 
-                rmGlobals);
-        }
-
-        // Compute any entity pick requests
-        if (bEntityPickEnabled) {
-            mEntityPickRequests.ConsumerCollect();
-            auto sz = mDisplay->GetFramebufferSize();
-
-            // Copy queries from the thread-safe pick request queue
-            size_t queryCount = 0;
-            while (!mEntityPickRequests.ConsumerIsEmpty()) {
-                auto& front = mEntityPickRequests.ConsumerFront();
-
-                if (queryCount < mEntityPicker.GetMaxQueries()) {
-                    mEntityQueryBuffer[queryCount] = 
-                        glm::vec3(front.mPosition.x, 
-                            front.mPosition.y, 
-                            0.0f);
-
-                    mEntityResultPromises[queryCount] = 
-                        std::move(front.mResult);
-
-                    ++queryCount;
+                if (desc.IsPrimary) {
+                    if (!primarySwapChain) {
+                        primarySwapChain = targetBackend.mSwapChain.RawPtr();
+                    } else {
+                        std::cout << "WARNING: Multiple primary swap chains detected! " <<
+                            "This may cause performance degredation!" << std::endl;
+                    }
+                    
                 } else {
-                    front.mResult.Set(entt::null);
+                    targetBackend.mSwapChain->Present(0);
                 }
-
-                mEntityPickRequests.ConsumerPop();
-            }
-
-            // Submit pick requests to the GPU 
-            if (queryCount > 0) {
-                mEntityPicker.SubmitCommands(
-                    immediateContext, 
-                    mEntityPickTexture, 
-                    mEntityQueryBuffer.data(),
-                    queryCount);
             }
         }
 
-        // Copy/resolve the color and depth buffers
-        auto backBufferRTV = mSwapChain->GetCurrentBackBufferRTV();
-        immediateContext->SetRenderTargets(0, nullptr, nullptr, 
-            RESOURCE_STATE_TRANSITION_MODE_NONE);
-
-        CopyTextureAttribs copyAttribs;
-        copyAttribs.DstTextureTransitionMode = 
-            RESOURCE_STATE_TRANSITION_MODE_TRANSITION;
-        copyAttribs.SrcTextureTransitionMode =
-            RESOURCE_STATE_TRANSITION_MODE_TRANSITION;
-        copyAttribs.pDstTexture = mSwapChain->GetCurrentBackBufferRTV()->GetTexture();
-        copyAttribs.pSrcTexture = mColorBuffer;
-        immediateContext->CopyTexture(copyAttribs);
-
-        // Synchronize if necessary
-        if (mBackend == GraphicsBackend::OPENGL) {
-            // For OpenGL with GLFW, we need to call glfwSwapBuffers.
-            mNativeWindowProvider->GLSwapBuffers();
-        } else {
-            mSwapChain->Present();
-        }
-
-        // Read the results of the entity pick requests
-        if (bEntityPickEnabled) {
-            auto queryCount = mEntityPicker.GetRequestedQueryCount();
-
-            if (queryCount > 0) {
-                mEntityPicker.GetResults(
-                    immediateContext, 
-                    &mEntityResultBuffer[0]);
-                for (size_t i = 0; i < queryCount; ++i) {
-                    mEntityResultPromises[i].Set(
-                        entt::entity(mEntityResultBuffer[i]));
-                }
-            }
+        // Present primary chain last
+        if (primarySwapChain) {
+            primarySwapChain->Present(1);
         }
     }
 
@@ -885,19 +726,16 @@ namespace okami::graphics::diligent {
 
         // Schedule the render
         mRenderFinished.add();
-        marl::Task task([this, &frame, 
+        marl::Task task([this, 
+            &views = mRenderViews,
+            &frame, 
             renderFinished = mRenderFinished, 
             &syncObject,
             time]() {
             defer(renderFinished.done());
-            Render(frame, syncObject, time);
+            Render(frame, views, syncObject, time);
         }, marl::Task::Flags::SameThread);
         marl::schedule(std::move(task));
-
-        // Schedule the updates of resource managers
-        mGeometryManager.ScheduleBackend(mRenderFinished);
-        mTextureManager.ScheduleBackend(mRenderFinished);
-        mBaseMaterialManager.ScheduleBackend(mRenderFinished);
     }
 
     void BasicRenderer::Join(core::Frame& frame) {
@@ -909,33 +747,42 @@ namespace okami::graphics::diligent {
     }
 
     void BasicRenderer::Shutdown() {
+
+        for (auto& module : mRenderModules) {
+            module->Shutdown();
+        }
+
         for (auto overlay : mOverlays) {
             overlay->Shutdown();
         }
 
-        mEntityPicker = TextureCapturePick();
-        mEntityPickTexture.Release();
-        mColorBuffer.Release();
-        mDepthBuffer.Release();
+        mGeometryBackend.Shutdown();
+        mTextureBackend.Shutdown();
+        mRenderCanvasBackend.Shutdown();
 
         mSceneGlobals = DynamicUniformBuffer<HLSL::SceneGlobals>();
-        mInstanceData = DynamicUniformBuffer<HLSL::StaticInstanceData>();
-        mStaticMeshPipeline = StaticMeshPipeline();
 
-        mSpriteModule.Shutdown();
         mDefaultTexture.Release();
-        mSwapChain.Release();
         mContexts.clear();
         mDevice.Release();
         mEngineFactory.Release();
     }
 
-    void BasicRenderer::AddModule(std::unique_ptr<IGraphicsObject>&&) {
-        throw std::runtime_error("Not implemented!");
+    void BasicRenderer::AddModule(std::unique_ptr<IGraphicsObject>&& object) {
+        auto cast = dynamic_cast<IRenderModule*>(object.get());
+
+        if (cast) {
+            std::unique_ptr<IRenderModule> modul(cast);
+            object.release();
+
+            mRenderModules.emplace(std::move(modul));
+        } else {
+            throw std::runtime_error("Module is not IRenderModule!");
+        }
     }
 
     void BasicRenderer::AddOverlay(IGraphicsObject* object) {
-        auto renderModule = dynamic_cast<IRenderModule*>(object);
+        auto renderModule = dynamic_cast<IOverlayModule*>(object);
 
         if (renderModule) {
             mOverlays.emplace(renderModule);
@@ -945,7 +792,7 @@ namespace okami::graphics::diligent {
     }
 
     void BasicRenderer::RemoveOverlay(IGraphicsObject* object) {
-        auto renderModule = dynamic_cast<IRenderModule*>(object);
+        auto renderModule = dynamic_cast<IOverlayModule*>(object);
 
         if (renderModule) {
             mOverlays.erase(renderModule);
@@ -953,10 +800,22 @@ namespace okami::graphics::diligent {
             throw std::runtime_error("Overlay is not IRenderModule!");
         }
     }
-    glm::i32vec2 BasicRenderer::GetRenderArea() const {
-        return glm::i32vec2(
-            mSwapChain->GetDesc().Width, 
-            mSwapChain->GetDesc().Height);
+
+    DG::TEXTURE_FORMAT BasicRenderer::GetFormat(
+        RenderAttribute attrib) {
+        switch (attrib) {
+            case RenderAttribute::COLOR:
+                return mColorFormat;
+            case RenderAttribute::ENTITY_ID:
+                return DG::TEX_FORMAT_R32_UINT;
+            default:
+                return DG::TEX_FORMAT_UNKNOWN;
+        }
+    }
+
+    DG::TEXTURE_FORMAT BasicRenderer::GetDepthFormat(
+        const RenderPass& pass) {
+        return DG::TEX_FORMAT_D32_FLOAT;
     }
 
     DynamicUniformBuffer<HLSL::SceneGlobals>*
@@ -964,12 +823,7 @@ namespace okami::graphics::diligent {
         return &mSceneGlobals;
     }
 
-    core::Future<entt::entity> BasicRenderer::Pick(const glm::vec2& position) {
-        core::Promise<entt::entity> promise;
-        core::Future<entt::entity> future(promise);
-        mEntityPickRequests.ProducerEnqueue(
-            EntityPickRequest{position, 
-            std::move(promise)});
-        return future;
+    void BasicRenderer::SetRenderViews(std::vector<RenderView>&& rvs) {
+        mRenderViews = std::move(rvs);
     }
 }

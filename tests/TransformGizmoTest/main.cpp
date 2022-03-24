@@ -5,11 +5,6 @@
 #include <okami/GraphicsComponents.hpp>
 #include <okami/Camera.hpp>
 
-#define USE_GLFW 1
-#include <okami/diligent/Im3dGizmo.hpp>
-#include <okami/diligent/FirstPersonCamera.hpp>
-#include <okami/diligent/Display.hpp>
-
 #include <iostream>
 #include <marl/defer.h>
 
@@ -20,29 +15,35 @@ using namespace okami::graphics;
 
 void TestBackend(GraphicsBackend backend) {
 
-    RealtimeGraphicsParams params;
-    params.mDeviceType = backend;
+    RealtimeGraphicsParams gfxParams;
+    gfxParams.mBackend = backend;
+
+    WindowParams wndParams;
 
     switch (backend) {
         case GraphicsBackend::VULKAN:
-            params.mWindowTitle = "okami Transform Gizmo Test (Vulkan)";
-            break;
-        case GraphicsBackend::OPENGL:
-            params.mWindowTitle = "okami Transform Gizmo Test (OpenGL)";
+            wndParams.mWindowTitle = "okami Transform Gizmo Test (Vulkan)";
             break;
         case GraphicsBackend::D3D11:
-            params.mWindowTitle = "okami Transform Gizmo Test (D3D11)";
+            wndParams.mWindowTitle = "okami Transform Gizmo Test (D3D11)";
             break;
         case GraphicsBackend::D3D12:
-            params.mWindowTitle = "okami Transform Gizmo Test (D3D12)";
+            wndParams.mWindowTitle = "okami Transform Gizmo Test (D3D12)";
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
-    auto display = systems.Add(CreateGLFWDisplay(params));
-    auto renderer = systems.Add(CreateRenderer(display, resources));
-    auto im3d = systems.Add(CreateIm3d(renderer, display));
+    
+    systems.Add(CreateGLFWDisplay(&resources, gfxParams));
+    auto display = systems.QueryInterface<IDisplay>();
+
+    systems.Add(CreateRenderer(display, resources));
+    auto renderer = systems.QueryInterface<IRenderer>();
+    
+    systems.Add(CreateIm3d(renderer));
+    auto im3d = systems.QueryInterface<IIm3dSystem>();
+    
     auto gizmo = systems.Add(CreateGizmoSystem(im3d));
     systems.Add(CreateFPSCameraSystem(display));
 

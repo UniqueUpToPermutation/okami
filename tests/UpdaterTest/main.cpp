@@ -85,7 +85,7 @@ int main() {
     scheduler.bind();
     defer(scheduler.unbind());
 
-    ResourceInterface resources;
+    ResourceManager resources;
 
     SystemCollection systems;
     systems.Add(CreateUpdaterSystem(&Updater1));

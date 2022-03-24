@@ -55,9 +55,6 @@ namespace okami::core {
         virtual void Wait() = 0;
 
         // EnableInterface the specified interface type
-        virtual void EnableInterface(const entt::meta_type& interfaceType);
-
-        // EnableInterface the specified interface type
         template <typename T>
         inline void EnableInterface() {
             EnableInterface(entt::resolve<T>());
@@ -70,6 +67,12 @@ namespace okami::core {
         inline Type* QueryInterface() {
             auto [ result ] = QueryInterfaces<Type>();
             return result;
+        }
+
+        inline void Startup() {
+            marl::WaitGroup group;
+            Startup(group);
+            group.wait();
         }
 
         virtual ~ISystem() = default;

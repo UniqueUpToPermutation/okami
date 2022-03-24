@@ -5,6 +5,8 @@
 // Load shader locations in TEXT into a lookup
 void MakeShaderMap(okami::core::file_map_t* map);
 
+using namespace okami::core;
+
 namespace okami::graphics::diligent {
 
     Im3d::Vec3 ToIm3d(const DG::float3& f) {
@@ -23,43 +25,40 @@ namespace okami::graphics::diligent {
             f.m30, f.m31, f.m32, f.m33);
     }
 
-    Im3dRenderOverlay::Im3dRenderOverlay(Im3d::Context* context,
-        Im3d::Context* contextNoDepth) :
-        mContext(context),
-        mContextNoDepth(contextNoDepth) {
-    }
-
-    void Im3dRenderOverlay::Startup(core::ISystem* renderer, 
-        DG::IRenderDevice* device, 
-        DG::ISwapChain* swapChain,
+    void Im3dRenderOverlay::Startup(core::ISystem* renderer,
+        DG::IRenderDevice* device,
         const RenderModuleParams& params) {
 
         core::InterfaceCollection interfaces;
         renderer->RegisterInterfaces(interfaces);
 
         auto globalsBuffer = interfaces.Query<IGlobalsBufferProvider>();
+        auto renderPassFormatProvider = interfaces.Query<IRenderPassFormatProvider>();
 
         if (!globalsBuffer) {
             throw std::runtime_error(
                 "Renderer does not implement IGlobalsBufferProvider!");
         }
 
-        // Load shaders
-        core::EmbeddedFileLoader fileLoader(&MakeShaderMap);
+        if (!renderPassFormatProvider) {
+            throw std::runtime_error(
+                "Renderer does not implement IRenderPassFormatProvider!");
+        }
+
+        mShaders = Im3dShaders::LoadDefault(device, params.mFileSystem);
         
-        mShaders = Im3dShaders::LoadDefault(device, &fileLoader);
         mPipeline = Im3dPipeline(device, 
             *globalsBuffer->GetGlobalsBuffer(),
-            swapChain->GetCurrentBackBufferRTV()->GetDesc().Format,
-            swapChain->GetDepthBufferDSV()->GetDesc().Format,
+            renderPassFormatProvider->GetFormat(RenderAttribute::COLOR),
+            renderPassFormatProvider->GetDepthFormat(RenderPass::Final()),
             1,
             mShaders,
             true);
 
         mPipelineNoDepth = Im3dPipeline(device,
             *globalsBuffer->GetGlobalsBuffer(),
-            swapChain->GetCurrentBackBufferRTV()->GetDesc().Format,
-            swapChain->GetDepthBufferDSV()->GetDesc().Format,
+            renderPassFormatProvider->GetFormat(RenderAttribute::COLOR),
+            renderPassFormatProvider->GetDepthFormat(RenderPass::Final()),
             1,
             mShaders,
             false);
@@ -67,18 +66,27 @@ namespace okami::graphics::diligent {
         mModule = Im3dModule(device);
     }
 
-
     void Im3dRenderOverlay::QueueCommands(
-        DG::IDeviceContext* context, 
-        RenderPass pass,
+        DG::IDeviceContext* context,
+        const core::Frame& frame,
+        const RenderView& view,
+        const RenderCanvas& target,
+        const RenderPass& pass,
         const RenderModuleGlobals& globals) {
-        assert(pass == RenderPass::OVERLAY);
+        assert(pass.IsFinal());
 
-        mRenderReady.wait();
-        mModule.Draw(context, mPipeline, mContext);
-        mModule.Draw(context, mPipelineNoDepth, mContextNoDepth);
-        mLastFrameGlobals = globals;
-        mRenderFinished.signal();
+        auto it = mCanvasInfos.find(&target);
+        
+        if (it != mCanvasInfos.end()) {
+            mRenderReady.wait();
+
+            mModule.Draw(context, mPipeline, 
+                &it->second->mContext);
+            mModule.Draw(context, mPipelineNoDepth, 
+                &it->second->mContextNoDepth);
+
+            it->second->mLastFrameGlobals = globals;
+        }
     }
 
     void Im3dRenderOverlay::Shutdown() {
@@ -88,249 +96,374 @@ namespace okami::graphics::diligent {
         mShaders = Im3dShaders();
     }
 
-    Im3dSystem::Im3dSystem(IRenderer* renderer) :
-        mRenderer(renderer),
-        mOverlay(&mContext, &mContextNoDepth) {   
-        mRenderer->AddOverlay(&mOverlay);
+    bool Im3dRenderOverlay::CanvasImpl::ShouldCaptureMouse() const {
+        return mContext.m_appActiveId == Im3d::Id_Invalid;
     }
-    Im3dSystem::Im3dSystem(IRenderer* renderer, 
-        IGLFWWindowProvider* glfw) :
-        Im3dSystem(renderer) {
-        mInput = glfw;
+
+    bool Im3dRenderOverlay::CanvasImpl::ShouldCaptureKeyboard() const {
+        return false;
+    }
+
+    Im3dRenderOverlay::CanvasImpl::~CanvasImpl() {
+        if (mInput) {
+            mInput->RemoveKeyCallback(
+                mKeyHandler);
+            mInput->RemoveMouseButtonCallback(
+                mMouseButtonHandler);
+            mInput->RemoveCursorPosCallback(
+                mMousePosHandler);
+        }
+    }
+
+    void Im3dRenderOverlay::AddCanvas(
+        RenderCanvas* canvas, 
+        core::IInputProvider* input,
+        double scale) {
+
+        if (mCanvasInfos.find(canvas) != mCanvasInfos.end()) {
+            throw std::runtime_error("Overlay has already been attached to canvas!");
+        }
+        
+        auto info = std::make_unique<CanvasImpl>();
+
+        info->mCanvas = canvas;
+        info->mInput = input;
+
+        info->mKeyHandler = input->AddKeyCallback(
+            [&appData = info->mAppData](
+                IInputProvider* inputProvider,
+                Key key, 
+                int scancode, 
+                KeyAction action, 
+                KeyModifiers mods) {
+            
+            if (action == KeyAction::PRESS) {
+                switch (key) {
+                case Key::L:
+                    appData.m_keyDown[Im3d::Key_L] = true;
+                    break;
+                case Key::S:
+                    appData.m_keyDown[Im3d::Key_S] = true;
+                    break;
+                case Key::T:
+                    appData.m_keyDown[Im3d::Key_T] = true;
+                    break;
+                case Key::R:
+                    appData.m_keyDown[Im3d::Key_R] = true;
+                    break;
+                default:
+                    break;
+                }
+            } else if (action == KeyAction::RELEASE) {
+                switch (key) {
+                case Key::L:
+                    appData.m_keyDown[Im3d::Key_L] = false;
+                    break;
+                case Key::S:
+                    appData.m_keyDown[Im3d::Key_S] = false;
+                    break;
+                case Key::T:
+                    appData.m_keyDown[Im3d::Key_T] = false;
+                    break;
+                case Key::R:
+                    appData.m_keyDown[Im3d::Key_R] = false;
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            return false;
+        }, CallbackPriority::MEDIUM, info.get());
+
+        info->mMousePosHandler = input->AddCursorPosCallback(
+            [&input = info->mInputCache]
+                (IInputProvider* inputProvider,
+                    double xpos, double ypos) {
+
+            input.mMousePosX = xpos;
+            input.mMousePosY = ypos;
+
+            return false;
+        }, CallbackPriority::HIGH, info.get());
+
+        info->mMouseButtonHandler = input->AddMouseButtonCallback(
+            [&appData = info->mAppData]
+                (IInputProvider* inputProvider,
+                MouseButton button, 
+                KeyAction action, 
+                KeyModifiers mods) {
+
+            if (button == MouseButton::LEFT) {
+                if (action == KeyAction::PRESS) {
+                    appData.m_keyDown[Im3d::Mouse_Left] = true;
+                } else if (action == KeyAction::RELEASE) {
+                    appData.m_keyDown[Im3d::Mouse_Left] = false;
+                }
+            }
+
+            return false;
+        }, CallbackPriority::HIGH, info.get());
+
+        mCanvasInfos.emplace(canvas, std::move(info));
+    }
+
+    core::delegate_handle_t Im3dRenderOverlay::AddCallback(
+        RenderCanvas* canvas,
+        core::IInputProvider* input,
+        immedate_callback_t callback) {
+
+        auto it = mCanvasInfos.find(canvas);
+
+        if (it == mCanvasInfos.end()) {
+            AddCanvas(canvas, input, 2.0);
+            canvas->AddOverlay(this);
+        }
+
+        return mOnUpdate.Add(canvas, std::move(callback));
+    }
+
+    core::delegate_handle_t Im3dRenderOverlay::AddNoDepthCallback(
+        RenderCanvas* canvas,
+        core::IInputProvider* input,
+        immedate_callback_t callback) {
+
+        auto it = mCanvasInfos.find(canvas);
+
+        if (it == mCanvasInfos.end()) {
+            AddCanvas(canvas, input, 2.0);
+            canvas->AddOverlay(this);
+        }
+
+        return mOnUpdateNoDepth.Add(canvas, std::move(callback));
+    }
+
+    void Im3dRenderOverlay::RemoveCanvas(RenderCanvas* canvas) {
+        auto it = mCanvasInfos.find(canvas);
+
+        if (it != mCanvasInfos.end()) {
+            mCanvasInfos.erase(it);
+        } else {
+            throw std::runtime_error("Tried to dettach when not attached!");
+        }
+
+        mOnUpdate.RemoveAll(canvas);
+        mOnUpdateNoDepth.RemoveAll(canvas);
+    }
+
+    void Im3dRenderOverlay::OnAttach(RenderCanvas* canvas) {
+    }
+
+    void Im3dRenderOverlay::OnDettach(RenderCanvas* canvas) {
+        RemoveCanvas(canvas);
+    }
+
+    void Im3dRenderOverlay::DettachAll() {
+        for (auto it = mCanvasInfos.begin(); 
+            it != mCanvasInfos.end();) {
+            auto& info = it->second;
+            ++it;
+            info->mCanvas->RemoveOverlay(this);
+        }
+
+        mOnUpdate.Clear();
+        mOnUpdateNoDepth.Clear();
+    }
+
+    void Im3dRenderOverlay::Update(core::ResourceManager*) {
+    }
+
+    bool Im3dRenderOverlay::IsIdle() {
+        return true;
+    }
+
+    void Im3dRenderOverlay::WaitOnPendingTasks() {
+    }
+
+    void Im3dRenderOverlay::WaitUntilReady(core::SyncObject& obj) {
+        mRenderReady.wait();
+    }
+
+    Im3dRenderOverlay::Im3dRenderOverlay() :
+        mRenderReady(marl::Event::Mode::Manual) {
+    }
+
+    void Im3dRenderOverlay::UpdateAllCanvases() {
+        for (auto& [key, canvas] : mCanvasInfos) {
+            UpdateCanvas(*canvas);
+        }
+    }
+
+    void Im3dRenderOverlay::UpdateCanvas(CanvasImpl& canvas) {
+
+        auto& appData = canvas.mAppData;
+        auto& globals = canvas.mLastFrameGlobals;
+        auto input = canvas.mInput;
+        auto& inputCache = canvas.mInputCache;
+
+        appData.m_deltaTime = globals.mTime.mTimeElapsed;
+        appData.m_viewportSize = ToIm3d(globals.mViewportSize);
+        appData.m_viewOrigin = ToIm3d(globals.mViewOrigin);
+        appData.m_viewDirection = ToIm3d(globals.mViewDirection);
+        appData.m_worldUp = ToIm3d(globals.mWorldUp);
+        appData.m_projOrtho = globals.mCamera.mType == core::Camera::Type::ORTHOGRAPHIC;
+    
+        auto viewProj = globals.mView * globals.mProjection;
+        auto viewProjInv = viewProj.Inverse();
+
+        appData.setCullFrustum(ToIm3d(viewProj), true);
+
+        float scale = 1.0;
+        
+        if (input) {
+            input->WaitForInput();
+            // World space cursor ray from mouse position; for VR this might be the position/orientation of the HMD or a tracked controller.
+            DG::float2 cursorPos(inputCache.mMousePosX, inputCache.mMousePosY);
+            cursorPos = 2.0f * cursorPos / globals.mViewportSize - DG::float2(1.0f, 1.0f);
+            cursorPos.y = -cursorPos.y; // window origin is top-left, ndc is bottom-left
+
+            DG::float4 rayDir = DG::float4(cursorPos.x, cursorPos.y, -1.0f, 1.0f) * viewProjInv; 
+            rayDir = rayDir / rayDir.w;
+            DG::float3 rayDirection = DG::float3(rayDir.x, rayDir.y, rayDir.z) - globals.mViewOrigin;
+            rayDirection = DG::normalize(rayDirection);
+
+            appData.m_cursorRayOrigin = ToIm3d(globals.mViewOrigin);
+            appData.m_cursorRayDirection = ToIm3d(rayDirection);
+        }
+
+        scale = 2.0;
+
+        // m_projScaleY controls how gizmos are scaled in world space to maintain a constant screen height
+        appData.m_projScaleY = appData.m_projOrtho 
+            ? 2.0f / globals.mProjection.m11 :
+            tanf(globals.mCamera.mFieldOfView * 0.5f) * 2.0f; // or vertical fov for a perspective projection
+        appData.m_projScaleY *= scale;
+
+        auto& defaultContext = Im3d::GetContext();
+
+        Im3d::SetContext(canvas.mContext);
+        Im3d::GetAppData() = appData;
+        Im3d::NewFrame();            
+        mOnUpdate.InvokeOnly(canvas.mCanvas);
+        Im3d::EndFrame();
+
+        Im3d::SetContext(canvas.mContextNoDepth);
+        Im3d::GetAppData() = appData;
+        Im3d::NewFrame();    
+        mOnUpdateNoDepth.InvokeOnly(canvas.mCanvas);
+        Im3d::EndFrame();
+
+        Im3d::SetContext(defaultContext);
+    }
+
+    Im3dSystem::Im3dSystem(
+        IRenderer* renderer) : 
+        mRenderer(renderer) {
+        renderer->AddOverlay(&mOverlay);
+    }
+
+    Im3dSystem::Im3dSystem(
+        IRenderer* renderer, 
+        IWindow* window) : 
+            Im3dSystem(renderer, window, window->GetCanvas()) {
+    }
+
+    Im3dSystem::Im3dSystem(
+        IRenderer* renderer,
+        IInputProvider* input,
+        RenderCanvas* canvas) :
+            Im3dSystem(renderer) {
+        AttachTo(canvas, input);
     }
 
     Im3dSystem::~Im3dSystem() {
         mRenderer->RemoveOverlay(&mOverlay);
     }
 
-    core::delegate_handle_t Im3dSystem::Add(immedate_callback_t callback) {
-        return mOnUpdate.Add(std::move(callback));
+    core::delegate_handle_t Im3dSystem::Add(
+        RenderCanvas* canvas,
+        core::IInputProvider* input,
+        immedate_callback_t callback) {
+        return mOverlay.AddCallback(canvas, input, std::move(callback));
     }
+
     core::delegate_handle_t 
-        Im3dSystem::AddNoDepth(immedate_callback_t callback) {
-        return mOnUpdateNoDepth.Add(std::move(callback));
+        Im3dSystem::AddNoDepth(
+            RenderCanvas* canvas,
+            core::IInputProvider* input,
+            immedate_callback_t callback) {
+        return mOverlay.AddNoDepthCallback(canvas, input, std::move(callback));
     }
 
     void Im3dSystem::Remove(core::delegate_handle_t handle) {
-        mOnUpdate.Remove(handle);
+        mOverlay.mOnUpdate.Remove(handle);
+    }
+
+    void Im3dSystem::AttachTo(RenderCanvas* canvas, IInputProvider* input) {
+        canvas->AddOverlay(&mOverlay);
+        mOverlay.AddCanvas(canvas, input, 1.0);
+    }
+
+    void Im3dSystem::DettachFrom(RenderCanvas* canvas) {
+        canvas->RemoveOverlay(&mOverlay);
     }
 
     void Im3dSystem::Startup(marl::WaitGroup& waitGroup) {
-        if (mInput) {
-
-            mMousePosHandler = mInput->AddCursorPosCallback(
-                [&input = mInputCache](GLFWwindow* window, double xpos, double ypos) {
-
-                input.mMousePosX = xpos;
-                input.mMousePosY = ypos;
-
-                return false;
-            }, CallbackPriority::HIGH, this);
-
-            mMouseButtonHandler = mInput->AddMouseButtonCallback(
-                [&appData = mAppData](GLFWwindow* window, int button, int action, int mods) {
-
-                if (button == GLFW_MOUSE_BUTTON_LEFT) {
-                    if (action == GLFW_PRESS) {
-                        appData.m_keyDown[Im3d::Mouse_Left] = true;
-                    } else if (action == GLFW_RELEASE) {
-                        appData.m_keyDown[Im3d::Mouse_Left] = false;
-                    }
-                }
-
-                return false;
-            }, CallbackPriority::HIGH, this);
-
-            mKeyHandler = mInput->AddKeyCallback(
-                [&appData = mAppData](GLFWwindow* window, 
-                    int key, int scancode, int action, int mods) {
-                
-                if (action == GLFW_PRESS) {
-                    switch (key) {
-                    case GLFW_KEY_L:
-                        appData.m_keyDown[Im3d::Key_L] = true;
-                        break;
-                    case GLFW_KEY_S:
-                        appData.m_keyDown[Im3d::Key_S] = true;
-                        break;
-                    case GLFW_KEY_T:
-                        appData.m_keyDown[Im3d::Key_T] = true;
-                        break;
-                    case GLFW_KEY_R:
-                        appData.m_keyDown[Im3d::Key_R] = true;
-                        break;
-                    default:
-                        break;
-                    }
-                } else if (action == GLFW_RELEASE) {
-                    switch (key) {
-                    case GLFW_KEY_L:
-                        appData.m_keyDown[Im3d::Key_L] = false;
-                        break;
-                    case GLFW_KEY_S:
-                        appData.m_keyDown[Im3d::Key_S] = false;
-                        break;
-                    case GLFW_KEY_T:
-                        appData.m_keyDown[Im3d::Key_T] = false;
-                        break;
-                    case GLFW_KEY_R:
-                        appData.m_keyDown[Im3d::Key_R] = false;
-                        break;
-                    default:
-                        break;
-                    }
-                }
-
-                return false;
-            }, CallbackPriority::MEDIUM, this);
-        }
     }
+
     void Im3dSystem::RegisterInterfaces(core::InterfaceCollection& interfaces) {
-        interfaces.Add<IIm3dCallback>(this);
+        interfaces.Add<IIm3dSystem>(this);
     }
     void Im3dSystem::Shutdown() {
-        if (mInput) {
-            mInput->RemoveCursorPosCallback(mMousePosHandler);
-            mInput->RemoveMouseButtonCallback(mMouseButtonHandler);
-            mInput->RemoveKeyCallback(mKeyHandler);
-        }
+        mOverlay.DettachAll();
     }
     void Im3dSystem::LoadResources(marl::WaitGroup& waitGroup) {
     }
     void Im3dSystem::SetFrame(core::Frame& frame) {
     }
     void Im3dSystem::RequestSync(core::SyncObject& syncObject) {
+        mOverlay.mRenderReady.clear();
     }
     void Im3dSystem::Fork(core::Frame& frame, 
         core::SyncObject& syncObject,
         const core::Time& time) {
         marl::schedule([
-            renderer = mRenderer,
-            &update = mOnUpdate,
-            &updateNoDepth = mOnUpdateNoDepth,
-            &overlay = mOverlay,
-            input = mInput,
-            &inputCache = mInputCache,
-            &context = mContext,
-            &contextNoDepth = mContextNoDepth,
-            &appData = mAppData]() {
-            defer(overlay.mRenderReady.signal());
-
-            auto& globals = overlay.mLastFrameGlobals;
-
-            appData.m_deltaTime = globals.mTime.mTimeElapsed;
-            appData.m_viewportSize = ToIm3d(globals.mViewportSize);
-            appData.m_viewOrigin = ToIm3d(globals.mViewOrigin);
-            appData.m_viewDirection = ToIm3d(globals.mViewDirection);
-            appData.m_worldUp = ToIm3d(globals.mWorldUp);
-            appData.m_projOrtho = globals.mCamera.mType == core::Camera::Type::ORTHOGRAPHIC;
-        
-            auto viewProj = globals.mView * globals.mProjection;
-            auto viewProjInv = viewProj.Inverse();
-
-            appData.setCullFrustum(ToIm3d(viewProj), true);
-
-            float scale = 1.0;
-            
-            if (input) {
-                input->WaitForInput();
-                // World space cursor ray from mouse position; for VR this might be the position/orientation of the HMD or a tracked controller.
-                DG::float2 cursorPos(inputCache.mMousePosX, inputCache.mMousePosY);
-                cursorPos = 2.0f * cursorPos / globals.mViewportSize - DG::float2(1.0f, 1.0f);
-                cursorPos.y = -cursorPos.y; // window origin is top-left, ndc is bottom-left
-
-                DG::float4 rayDir = DG::float4(cursorPos.x, cursorPos.y, -1.0f, 1.0f) * viewProjInv; 
-                rayDir = rayDir / rayDir.w;
-                DG::float3 rayDirection = DG::float3(rayDir.x, rayDir.y, rayDir.z) - globals.mViewOrigin;
-                rayDirection = DG::normalize(rayDirection);
-
-                appData.m_cursorRayOrigin = ToIm3d(globals.mViewOrigin);
-                appData.m_cursorRayDirection = ToIm3d(rayDirection);
-
-                scale = input->GetContentScale();
-            }
-
-            // m_projScaleY controls how gizmos are scaled in world space to maintain a constant screen height
-            appData.m_projScaleY = appData.m_projOrtho 
-                ? 2.0f / globals.mProjection.m11 :
-                tanf(globals.mCamera.mFieldOfView * 0.5f) * 2.0f; // or vertical fov for a perspective projection
-            appData.m_projScaleY *= scale;
-
-            auto& defaultContext = Im3d::GetContext();
-
-            Im3d::SetContext(context);
-            Im3d::GetAppData() = appData;
-            Im3d::NewFrame();            
-            update();
-            Im3d::EndFrame();
-
-            Im3d::SetContext(contextNoDepth);
-            Im3d::GetAppData() = appData;
-            Im3d::NewFrame();    
-            updateNoDepth();
-            Im3d::EndFrame();
-
-            Im3d::SetContext(defaultContext);
+            renderReady = mOverlay.mRenderReady,
+            &overlay = mOverlay]() {
+            defer(renderReady.signal());
+            overlay.UpdateAllCanvases();
         });
     }
     void Im3dSystem::Join(core::Frame& frame) {
         Wait();
     }
     void Im3dSystem::Wait() {
-        mOverlay.mRenderFinished.wait();
-    }
-    bool Im3dSystem::SupportsInput() const {
-        return mInput != nullptr;
-    }
-    bool Im3dSystem::ShouldCaptureMouse() const {
-        return Im3d::GetActiveId() != Im3d::Id_Invalid;
-    }
-    bool Im3dSystem::ShouldCaptureKeyboard() const {
-        return false;
+        mOverlay.mRenderReady.wait();
     }
 }
 
 namespace okami::graphics {
     std::unique_ptr<core::ISystem> CreateIm3d(
-        core::ISystem* renderer) {
-        IRenderer* rendererInterface = nullptr;
+        IRenderer* renderer,
+        core::IInputProvider* input,
+        RenderCanvas* canvas) {
 
-        core::InterfaceCollection interfaces(renderer);
-        rendererInterface = interfaces.Query<IRenderer>();
-
-        if (!renderer) {
-            throw std::runtime_error("Renderer system does not expose "
-                "IRenderer interface!");
-        }
-
-        return std::make_unique<diligent::Im3dSystem>(rendererInterface);
+        return std::make_unique<diligent::Im3dSystem>(
+            renderer, input, canvas);
     }
 
     std::unique_ptr<core::ISystem> CreateIm3d(
-        core::ISystem* renderer,
-        core::ISystem* input) {
+        IRenderer* renderer,
+        IWindow* window) {
 
-        diligent::IGLFWWindowProvider* glfw = nullptr;
-        IRenderer* rendererInterface = nullptr;
+        return std::make_unique<diligent::Im3dSystem>(
+            renderer, window);
+    }
 
-        core::InterfaceCollection interfaces;
-        renderer->RegisterInterfaces(interfaces);
-        input->RegisterInterfaces(interfaces);
+    std::unique_ptr<core::ISystem> CreateIm3d(
+        IRenderer* renderer) {
 
-        rendererInterface = interfaces.Query<IRenderer>();
-
-        if (!rendererInterface) {
-            throw std::runtime_error("Renderer system does not expose "
-                "IRenderer interface!");
-        }
-
-        glfw = interfaces.Query<diligent::IGLFWWindowProvider>();
-
-        if (!glfw) {
-            throw std::runtime_error("Input system does not expose "
-                "IGLFWWindowProvider interface!");
-        }
-
-        return std::make_unique<diligent::Im3dSystem>(rendererInterface, glfw);
+        return std::make_unique<diligent::Im3dSystem>(
+            renderer);
     }
 }

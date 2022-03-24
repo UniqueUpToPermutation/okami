@@ -20,14 +20,12 @@ add_custom_command(
 	DEPENDS ${shader_SRC})
 
 list(APPEND SOURCE
-    src/Display.cpp
     src/BasicRenderer.cpp
     src/GraphicsUtils.cpp
     src/ShaderPreprocessor.cpp
     src/Shader.cpp
     src/Graphics.cpp
     src/SpriteBatch.cpp
-    src/SpriteModule.cpp
     src/ImGuiSystem.cpp
     src/Im3dModule.cpp
     src/Im3dSystem.cpp
@@ -35,6 +33,9 @@ list(APPEND SOURCE
     src/FirstPersonCamera.cpp
     src/Im3dGizmo.cpp
     src/Editor.cpp
+    src/Glfw.cpp
+    src/RenderModule.cpp
+    src/StaticMeshModule.cpp
     shader_rc.cpp
     ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
     ${IM3D_DIR}/im3d.cpp
@@ -45,7 +46,6 @@ if(PLATFORM_MACOS)
 endif()
 
 list(APPEND INCLUDE
-    include/okami/diligent/Display.hpp
     include/okami/diligent/BasicRenderer.hpp
     include/okami/diligent/GraphicsUtils.hpp
     include/okami/diligent/ShaderPreprocessor.hpp
@@ -60,6 +60,7 @@ list(APPEND INCLUDE
     include/okami/diligent/TextureCapture.hpp
     include/okami/diligent/FirstPersonCamera.hpp
     include/okami/diligent/Im3dGizmo.hpp
+    include/okami/diligent/Glfw.hpp
 )
 
 add_library(okami-graphics-diligent STATIC ${SOURCE} ${INCLUDE})
@@ -96,11 +97,10 @@ PRIVATE
 PUBLIC
     Diligent-Common
     Diligent-GraphicsTools
-    Diligent-TextureLoader
     Diligent-TargetPlatform
     Diligent-Imgui
+    ${OKAMI_CORE_LIB_DEPENDENCES}
     ${ENGINE_LIBRARIES}
-	Diligent-NativeAppBase
     glfw
 )
 
@@ -110,8 +110,10 @@ elseif(PLATFORM_ANDROID)
     target_link_libraries(okami-graphics-diligent PRIVATE GLESv3 PUBLIC native_app_glue)
 elseif(PLATFORM_LINUX)
     target_link_libraries(okami-graphics-diligent PRIVATE XCBKeySyms GL X11)
-elseif(PLATFORM_MACOS OR PLATFORM_IOS)
-    set_source_files_properties(${IM3D_DIR}/im3d.cpp PROPERTIES COMPILE_FLAGS -Wno-error)
+endif()
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set_source_files_properties(${IM3D_DIR}/im3d.cpp PROPERTIES COMPILE_FLAGS -Wno-everything)
 endif()
 
 list(APPEND LIB_DEPENDENCIES_LIST

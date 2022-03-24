@@ -47,40 +47,46 @@ void SpriteUpdater(Frame& frame,
 }
 
 void TestBackend(GraphicsBackend backend) {
-    RealtimeGraphicsParams params;
-    params.mDeviceType = backend;
+    RealtimeGraphicsParams gfxParams;
+    gfxParams.mBackend = backend;
+
+    WindowParams windowParams;
 
     switch (backend) {
         case GraphicsBackend::VULKAN:
-            params.mWindowTitle = "okami Diligent-Engine Sprite Test (Vulkan)";
-            break;
-        case GraphicsBackend::OPENGL:
-            params.mWindowTitle = "okami Diligent-Engine Sprite Test (OpenGL)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Sprite Test (Vulkan)";
             break;
         case GraphicsBackend::D3D11:
-            params.mWindowTitle = "okami Diligent-Engine Sprite Test (D3D11)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Sprite Test (D3D11)";
             break;
         case GraphicsBackend::D3D12:
-            params.mWindowTitle = "okami Diligent-Engine Sprite Test (D3D12)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Sprite Test (D3D12)";
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
-    auto display = systems.Add(CreateGLFWDisplay(params));
-    auto renderer = systems.Add(CreateRenderer(display, resources));
-    systems.Add(CreateUpdaterSystem(&SpriteUpdater));
+    systems.Add(CreateGLFWDisplay(&resources, gfxParams));
+    auto display = systems.QueryInterface<IDisplay>();
 
+    systems.Add(CreateRenderer(display, resources));
+    auto renderer = systems.QueryInterface<IRenderer>();
+
+    systems.Add(CreateUpdaterSystem(&SpriteUpdater));
+    
     systems.Startup();
     {
+        auto window = display->CreateWindow(windowParams);
+
         auto displayInterface = systems.QueryInterface<IDisplay>();
         auto vertexLayouts = systems.QueryInterface<IVertexLayoutProvider>();
         auto staticMeshLayout = vertexLayouts->GetVertexLayout<StaticMesh>();
 
         // Load a texture from disk
-        auto spriteTexture = resources.Load<Texture>("sprite.png");
+        auto spriteTexture = resources.Add(Texture("sprite.png"));
 
         Frame frame;
+        resources.Add(&frame);
 
         // Create an orthographic camera for 2D rendering
         auto cameraEntity = frame.CreateEntity();
@@ -101,9 +107,9 @@ void TestBackend(GraphicsBackend backend) {
 		constexpr uint obj_count = 350;
         constexpr float scale = 0.5;
 
-        auto& texDesc = spriteTexture->GetDesc();
+        auto& texDesc = resources.Get<Texture>(spriteTexture).GetDesc();
 
-        auto initialScreenSize = displayInterface->GetFramebufferSize();
+        auto initialScreenSize = window->GetFramebufferSize();
         for (uint i = 0; i < obj_count; ++i) {
             SpriteAnimData anim;
 			anim.mPositionBase.x = distribution1(generator) * initialScreenSize.x / 2.0;
@@ -131,15 +137,23 @@ void TestBackend(GraphicsBackend backend) {
             frame.Emplace<Transform>(entity, transform);
 		}
 
+        RenderView rv;
+        rv.bClear = true;
+        rv.mCamera = cameraEntity;
+        rv.mTargetId = window->GetCanvas()->GetResourceId();
+
         Clock clock;
-        while (!displayInterface->ShouldClose()) {
+        while (!window->ShouldClose()) {
             // Get the framebuffer size for the camera
-            camera.mOrthoSize = displayInterface->GetFramebufferSize();
+            camera.mOrthoSize = window->GetFramebufferSize();
+            renderer->SetRenderView(rv);
             
             auto time = clock.GetTime();
             systems.Fork(time);
             systems.Join();
         }
+
+        resources.Free(&frame);
     }
     systems.Shutdown();
 }
@@ -153,10 +167,6 @@ int main() {
 
 #if VULKAN_SUPPORTED && !PLATFORM_MACOS
     TestBackend(GraphicsBackend::VULKAN);
-#endif
-
-#if GL_SUPPORTED
-    TestBackend(GraphicsBackend::OPENGL);
 #endif
 
 #if D3D11_SUPPORTED

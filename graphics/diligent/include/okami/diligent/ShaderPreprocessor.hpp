@@ -11,6 +11,7 @@
 namespace okami::graphics::diligent {
 	struct ShaderPreprocessorConfig {
 		std::unordered_map<std::string, std::string> mDefines;
+		std::vector<std::string> mHeaderItems;
 
 		std::string Stringify(const ShaderPreprocessorConfig* overrides) const;
 	};

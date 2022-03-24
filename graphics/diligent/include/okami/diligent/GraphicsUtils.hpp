@@ -1,6 +1,7 @@
 #pragma once
 
-#include <okami/diligent/Display.hpp>
+#include <okami/diligent/Glfw.hpp>
+#include <okami/diligent/Shader.hpp>
 
 #include <okami/VertexFormat.hpp>
 #include <okami/Texture.hpp>
@@ -34,22 +35,27 @@ namespace okami::graphics::diligent {
             m[3][0], m[3][1], m[3][2], m[3][3]);
     }
 
+    DG::SURFACE_TRANSFORM ToDiligent(
+        SurfaceTransform transform);
+
     inline DG::float4x4 ToMatrix(
         const core::Transform& transform) {
         return ToDiligent(transform.ToMatrix());
     }
 
     DG::float4x4 GetProjection(
-        const core::Camera& camera,
-        DG::ISwapChain* swapChain, 
+        const core::Camera* camera,
+        const DG::SwapChainDesc& scDesc, 
         bool bIsGL);
 
+    SurfaceTransform ToOkami(DG::SURFACE_TRANSFORM transform);
+
     DG::float4x4 GetSurfacePretransformMatrix(
-        DG::ISwapChain* swapChain, 
+        const DG::SwapChainDesc& scDesc, 
 		const DG::float3& f3CameraViewAxis);
     
     DG::float4x4 GetAdjustedProjectionMatrix(
-        DG::ISwapChain* swapChain, 
+        const DG::SwapChainDesc& scDesc, 
 		bool bIsGL, 
 		float FOV, 
 		float NearPlane, 
@@ -65,19 +71,30 @@ namespace okami::graphics::diligent {
         std::vector<DG::LayoutElement> mElements;
     };
 
+    void WritePassShaderMacros(
+        const RenderPass& pass, 
+        ShaderPreprocessorConfig& config);
+
     typedef std::function<void(
         DG::RENDER_DEVICE_TYPE DeviceType, 
         DG::EngineCreateInfo& EngineCI, 
-        DG::SwapChainDesc& SCDesc)> get_engine_initialization_attribs;
+        DG::SwapChainDesc& scDesc)> get_engine_initialization_attribs;
 
-    void CreateDeviceAndSwapChain(
-        IDisplay* display,
-        INativeWindowProvider* windowProvider,
+    void CreateDevice(
+        GraphicsBackend backend,
         DG::IEngineFactory** factory,
         DG::IRenderDevice** device,
         std::vector<DG::IDeviceContext*>& contexts,
-        DG::ISwapChain** swapChain,
+        DG::SwapChainDesc* scDefaultDesc,
         const get_engine_initialization_attribs& attribsFunc);
+
+    void CreateSwapChain(
+        DG::IRenderDevice* device,
+        DG::IDeviceContext* immediateContext,
+        DG::ISwapChain** swapChain,
+        DG::SwapChainDesc scDefaultDesc,
+        DG::IEngineFactory* factory,
+        IWindow* window);
 
     DG::RESOURCE_DIMENSION ToDiligent(core::ResourceDimension dim);
     DG::VALUE_TYPE ToDiligent(core::ValueType valueType);

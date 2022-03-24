@@ -12,31 +12,36 @@ using namespace okami::graphics;
 
 void TestBackend(GraphicsBackend backend) {
 
-    RealtimeGraphicsParams params;
-    params.mDeviceType = backend;
+    RealtimeGraphicsParams gfxParams;
+    gfxParams.mBackend = backend;
+
+    WindowParams windowParams;
 
     switch (backend) {
         case GraphicsBackend::VULKAN:
-            params.mWindowTitle = "okami Diligent-Engine Texture Test (Vulkan)";
-            break;
-        case GraphicsBackend::OPENGL:
-            params.mWindowTitle = "okami Diligent-Engine Texture Test (OpenGL)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Texture Test (Vulkan)";
             break;
         case GraphicsBackend::D3D11:
-            params.mWindowTitle = "okami Diligent-Engine Texture Test (D3D11)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Texture Test (D3D11)";
             break;
         case GraphicsBackend::D3D12:
-            params.mWindowTitle = "okami Diligent-Engine Texture Test (D3D12)";
+            windowParams.mWindowTitle = "okami Diligent-Engine Texture Test (D3D12)";
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
-    auto display = systems.Add(CreateGLFWDisplay(params));
-    auto renderer = systems.Add(CreateRenderer(display, resources));
+
+    systems.Add(CreateGLFWDisplay(&resources, gfxParams));
+    auto display = systems.QueryInterface<IDisplay>();
+
+    systems.Add(CreateRenderer(display, resources));
+    auto renderer = systems.QueryInterface<IRenderer>();
 
     systems.Startup();
     {
+        auto window = display->CreateWindow(windowParams);
+
         auto displayInterface = systems.QueryInterface<IDisplay>();
         auto vertexLayouts = systems.QueryInterface<IVertexLayoutProvider>();
         auto staticMeshLayout = vertexLayouts->GetVertexLayout<StaticMesh>();
@@ -61,21 +66,23 @@ void TestBackend(GraphicsBackend backend) {
             glm::vec2(1.0f, 0.0f),
             glm::vec2(1.0f, 1.0f)
         });
+
+        Frame frame;
+        resources.Add(&frame);
         
         auto geo = resources.Add(
-            Geometry(staticMeshLayout, std::move(data)));
+            Geometry(staticMeshLayout, std::move(data)), frame);
 
         // Load a texture from disk
-        auto texture = resources.Load<Texture>("test.png");
+        auto texture = resources.Add(Texture("test.png"), frame);
 
          // Create a material for that texture
-        BaseMaterial::Data materialData;
+        StaticMeshMaterial::Data materialData;
         materialData.mAlbedo = texture;
-        auto material = resources.Add<BaseMaterial>(
-            std::move(materialData));
+        auto material = resources.Add<StaticMeshMaterial>(
+            StaticMeshMaterial(materialData));
 
-        // Create a frame with the mesh at the origin
-        Frame frame;
+        // Create a mesh at the origin
         auto entity = frame.CreateEntity();
         frame.Emplace<Transform>(entity);
         frame.Emplace<StaticMesh>(entity, StaticMesh{geo, material});
@@ -83,12 +90,21 @@ void TestBackend(GraphicsBackend backend) {
         // Geometry and texture are available to use after this is called.
         systems.SetFrame(frame);
         systems.LoadResources();
+
+        RenderView rv;
+        rv.bClear = true;
+        rv.mCamera = entt::null;
+        rv.mTargetId = window->GetCanvas()->GetResourceId();
         
         Clock clock;
-        while (!displayInterface->ShouldClose()) {
+        while (!window->ShouldClose()) {
+            renderer->SetRenderView(rv);
             systems.Fork(clock.GetTime());
             systems.Join();
         }
+
+        // Releases all resources used by the frame
+        resources.Free(&frame);
     }
     systems.Shutdown();
 }
@@ -102,10 +118,6 @@ int main() {
 
 #if VULKAN_SUPPORTED && !PLATFORM_MACOS
     TestBackend(GraphicsBackend::VULKAN);
-#endif
-
-#if GL_SUPPORTED
-    TestBackend(GraphicsBackend::OPENGL);
 #endif
 
 #if D3D11_SUPPORTED

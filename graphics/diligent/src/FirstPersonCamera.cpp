@@ -1,98 +1,87 @@
 #include <okami/diligent/FirstPersonCamera.hpp>
 #include <okami/Transform.hpp>
-#include <okami/diligent/Display.hpp>
+#include <okami/diligent/Glfw.hpp>
 
 #include <iostream>
+
+using namespace okami::core;
 
 namespace okami::graphics::diligent {
 
     class FirstPersonCameraSystem : 
-        public core::ISystem,
+        public ISystem,
         public IInputCapture {
     private:
-        core::delegate_handle_t mMouseButtonHandle;
-        core::delegate_handle_t mMousePosHandle;
-        core::delegate_handle_t mKeyboardHandle;
+        delegate_handle_t mMouseButtonHandle;
+        delegate_handle_t mMousePosHandle;
+        delegate_handle_t mKeyboardHandle;
 
-        IGLFWWindowProvider* mWindowProvider;
+        IInputProvider* mInputProvider = nullptr;
         
         marl::Event mWaitEvent;
 
-        core::UpdaterReads<core::Transform> mReads;
-        core::UpdaterWrites<core::Transform> mWrites;
+        UpdaterReads<Transform> mReads;
+        UpdaterWrites<Transform> mWrites;
 
         FirstPersonController::Input mInput;
 
         struct {
-            double mLastMouseX;
-            double mLastMouseY;
-            double mDMouseX;
-            double mDMouseY;
+            glm::dvec2 mLastMouse;
+            glm::dvec2 mDMouse;
             bool bCaptureMouse = false;
             bool bMouseMove = false;
         } mMouseData;
 
     public:
-        FirstPersonCameraSystem(core::ISystem* inputProvider);
+        FirstPersonCameraSystem(IInputProvider* inputProvider);
 
         void Startup(marl::WaitGroup& waitGroup) override;
-        void RegisterInterfaces(core::InterfaceCollection& interfaces) override;
+        void RegisterInterfaces(InterfaceCollection& interfaces) override;
         void Shutdown() override;
         void LoadResources(marl::WaitGroup& waitGroup) override;
-        void SetFrame(core::Frame& frame) override;
-        void RequestSync(core::SyncObject& syncObject) override;
-        void Fork(core::Frame& frame,
-            core::SyncObject& syncObject,
-            const core::Time& time) override;
-        void Join(core::Frame& frame) override;
+        void SetFrame(Frame& frame) override;
+        void RequestSync(SyncObject& syncObject) override;
+        void Fork(Frame& frame,
+            SyncObject& syncObject,
+            const Time& time) override;
+        void Join(Frame& frame) override;
         void Wait() override;
-        void EnableInterface(const entt::meta_type& interfaceType) override;
 
         bool ShouldCaptureMouse() const override;
         bool ShouldCaptureKeyboard() const override;
     };
 
     FirstPersonCameraSystem::FirstPersonCameraSystem(
-        core::ISystem* inputProvider) :
+        IInputProvider* inputProvider) :
+        mInputProvider(inputProvider),
         mWaitEvent(marl::Event::Mode::Manual) {
-
-        core::InterfaceCollection collection;
-        inputProvider->RegisterInterfaces(collection);
-
-        mWindowProvider = collection.Query<IGLFWWindowProvider>();
-    
-        if (!mWindowProvider) {
-            throw std::runtime_error("Input provider does not implement"
-                "IGLFWWindowProvider");
-        }
     }
+
     void FirstPersonCameraSystem::Startup(marl::WaitGroup& waitGroup) {
-        mMouseButtonHandle = mWindowProvider->AddMouseButtonCallback(
-            [&mouse = mMouseData](GLFWwindow* window, int button, int action, int mods) {
-                if (action == GLFW_PRESS) {
-                    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-                        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-                        if (glfwRawMouseMotionSupported())
-                            glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        mMouseButtonHandle = mInputProvider->AddMouseButtonCallback(
+            [&mouse = mMouseData](IInputProvider* input, MouseButton button, KeyAction action, KeyModifiers mods) {
+                if (action == KeyAction::PRESS) {
+                    if (button == MouseButton::RIGHT) {
+                        input->SetCursorMode(CursorMode::DISABLED);
+                        if (input->IsRawMouseMotionSupported())
+                            input->SetRawMouseMotion(true);
+                       
                         mouse.bCaptureMouse = true;
 
-                        glfwGetCursorPos(window,
-                            &mouse.mLastMouseX,
-                            &mouse.mLastMouseY);
-
-                        mouse.mDMouseX = 0.0;
-                        mouse.mDMouseY = 0.0;
+                        mouse.mLastMouse = input->GetCursorPos();
+                        mouse.mDMouse.x = 0.0;
+                        mouse.mDMouse.y = 0.0;
                     }
-                } else if (action == GLFW_RELEASE) {
-                    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-                        if (glfwRawMouseMotionSupported())
-                            glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
-                        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                } else if (action == KeyAction::RELEASE) {
+                    if (button == MouseButton::RIGHT) {
+                        if (input->IsRawMouseMotionSupported())
+                            input->SetRawMouseMotion(false);
+                        input->SetCursorMode(CursorMode::NORMAL);
                         
                         mouse.bCaptureMouse = false;
 
-                        mouse.mDMouseX = 0.0;
-                        mouse.mDMouseY = 0.0;
+                        mouse.mDMouse.x = 0.0;
+                        mouse.mDMouse.y = 0.0;
                     }
                 }
                 
@@ -102,15 +91,12 @@ namespace okami::graphics::diligent {
             this
         );
 
-        mMousePosHandle = mWindowProvider->AddCursorPosCallback(
-            [&mouse = mMouseData](GLFWwindow* window, double xpos, double ypos) {
+        mMousePosHandle = mInputProvider->AddCursorPosCallback(
+            [&mouse = mMouseData](IInputProvider* input, double xpos, double ypos) {
                 if (mouse.bCaptureMouse) {
-                    mouse.mDMouseX = xpos - mouse.mLastMouseX;
-                    mouse.mDMouseY = ypos - mouse.mLastMouseY;
-
-                    mouse.mLastMouseX = xpos;
-                    mouse.mLastMouseY = ypos;
-
+                    glm::dvec2 pos(xpos, ypos);
+                    mouse.mDMouse = pos - mouse.mLastMouse;
+                    mouse.mLastMouse = pos;
                     mouse.bMouseMove = true;
                 }
                 return false;
@@ -119,39 +105,42 @@ namespace okami::graphics::diligent {
             this
         );
 
-        mKeyboardHandle = mWindowProvider->AddKeyCallback(
-            [&input = mInput](GLFWwindow* window, int key, 
-                int scancode, int action, int mods) {
+        mKeyboardHandle = mInputProvider->AddKeyCallback(
+            [&input = mInput](IInputProvider* inputProvider, 
+                Key key, 
+                int scancode, 
+                KeyAction action, 
+                KeyModifiers mods) {
 
-                if (action == GLFW_PRESS) {
+                if (action == KeyAction::PRESS) {
                     switch (key) {
-                    case GLFW_KEY_W:
+                    case Key::W:
                         input.bForward = true;
                         break;
-                    case GLFW_KEY_S:
+                    case Key::S:
                         input.bBackward = true;
                         break;
-                    case GLFW_KEY_A:
+                    case Key::A:
                         input.bLeft = true;
                         break;
-                    case GLFW_KEY_D:
+                    case Key::D:
                         input.bRight = true;
                         break;
                     default:
                         break;
                     } 
-                } else if (action == GLFW_RELEASE) {
+                } else if (action == KeyAction::RELEASE) {
                     switch (key) {
-                    case GLFW_KEY_W:
+                    case Key::W:
                         input.bForward = false;
                         break;
-                    case GLFW_KEY_S:
+                    case Key::S:
                         input.bBackward = false;
                         break;
-                    case GLFW_KEY_A:
+                    case Key::A:
                         input.bLeft = false;
                         break;
-                    case GLFW_KEY_D:
+                    case Key::D:
                         input.bRight = false;
                         break;
                     default:
@@ -166,30 +155,30 @@ namespace okami::graphics::diligent {
         );
     }
 
-    void FirstPersonCameraSystem::RegisterInterfaces(core::InterfaceCollection& interfaces) {
+    void FirstPersonCameraSystem::RegisterInterfaces(InterfaceCollection& interfaces) {
     }
 
     void FirstPersonCameraSystem::Shutdown() {
-        mWindowProvider->RemoveMouseButtonCallback(mMouseButtonHandle);
-        mWindowProvider->RemoveCursorPosCallback(mMousePosHandle);
-        mWindowProvider->RemoveKeyCallback(mKeyboardHandle);
+        mInputProvider->RemoveMouseButtonCallback(mMouseButtonHandle);
+        mInputProvider->RemoveCursorPosCallback(mMousePosHandle);
+        mInputProvider->RemoveKeyCallback(mKeyboardHandle);
     }
 
     void FirstPersonCameraSystem::LoadResources(marl::WaitGroup& waitGroup) {
     }
-    void FirstPersonCameraSystem::SetFrame(core::Frame& frame) {
+    void FirstPersonCameraSystem::SetFrame(Frame& frame) {
     }
-    void FirstPersonCameraSystem::RequestSync(core::SyncObject& syncObject) {
+    void FirstPersonCameraSystem::RequestSync(SyncObject& syncObject) {
         mWaitEvent.clear();
 
         mReads.RequestSync(syncObject);
         mWrites.RequestSync(syncObject);
     }
-    void FirstPersonCameraSystem::Fork(core::Frame& frame,
-        core::SyncObject& syncObject,
-        const core::Time& time) {
+    void FirstPersonCameraSystem::Fork(Frame& frame,
+        SyncObject& syncObject,
+        const Time& time) {
 
-        marl::schedule([window = mWindowProvider,
+        marl::Task task([inputProvider = mInputProvider,
             &reads = mReads,
             &writes = mWrites,
             &event = mWaitEvent,
@@ -201,51 +190,50 @@ namespace okami::graphics::diligent {
             defer(reads.ReleaseHandles());
             defer(writes.ReleaseHandles());
 
-            window->WaitForInput();
+            inputProvider->WaitForInput();
 
             if (mouse.bCaptureMouse && mouse.bMouseMove) {
-                input.mRotateX = mouse.mDMouseX;
-                input.mRotateY = mouse.mDMouseY;
+                input.mRotateX = mouse.mDMouse.x;
+                input.mRotateY = mouse.mDMouse.y;
                 mouse.bMouseMove = false;
             } else {
                 input.mRotateX = 0.0;
                 input.mRotateY = 0.0;
             }
 
-            reads.Read<core::Transform>([&]() {
+            reads.Read<Transform>([&]() {
                 auto view = frame.Registry().view<
-                    core::Transform, 
+                    Transform, 
                     FirstPersonController>();
 
                 for (auto e : view) {
-                    auto& transform = view.get<core::Transform>(e);
+                    auto& transform = view.get<Transform>(e);
                     auto& controller = view.get<FirstPersonController>(e);
                     controller.PrepareUpdate(input, transform, time);
                 }
             });
 
-            writes.Write<core::Transform>([&]() {
+            writes.Write<Transform>([&]() {
                 auto view = frame.Registry().view<
-                    core::Transform, 
+                    Transform, 
                     FirstPersonController>();
 
                 for (auto e : view) {
-                    auto& transform = view.get<core::Transform>(e);
+                    auto& transform = view.get<Transform>(e);
                     auto& controller = view.get<FirstPersonController>(e);
                     controller.FlushUpdate(transform);
                 }
             });
-        });
+        }, marl::Task::Flags::SameThread);
+
+        marl::schedule(std::move(task));
     }
-    void FirstPersonCameraSystem::Join(core::Frame& frame) {
+    void FirstPersonCameraSystem::Join(Frame& frame) {
         Wait();
     }
     void FirstPersonCameraSystem::Wait() {
         mWaitEvent.wait();
     }
-    void FirstPersonCameraSystem::EnableInterface(const entt::meta_type& interfaceType) {
-    }
-
     bool FirstPersonCameraSystem::ShouldCaptureMouse() const {
         return mMouseData.bCaptureMouse;
     }
@@ -257,8 +245,8 @@ namespace okami::graphics::diligent {
 namespace okami::graphics {
     void FirstPersonController::PrepareUpdate(
         const FirstPersonController::Input& input, 
-        const core::Transform& transform,
-        const core::Time& time) {
+        const Transform& transform,
+        const Time& time) {
         if (!bInitialized) {
             glm::vec3 forward(0.0f, 0.0f, 1.0f);
             forward = transform.mRotation * forward;
@@ -310,12 +298,12 @@ namespace okami::graphics {
     }
 
     void FirstPersonController::FlushUpdate(
-        core::Transform& output) {
+        Transform& output) {
         output.mTranslation += mDPos;
         output.mRotation = mQX * mQY;
     }
 
-    std::unique_ptr<core::ISystem> CreateFPSCameraSystem(core::ISystem* inputSystem) {
-        return std::make_unique<diligent::FirstPersonCameraSystem>(inputSystem);
+    std::unique_ptr<ISystem> CreateFPSCameraSystem(IInputProvider* input) {
+        return std::make_unique<diligent::FirstPersonCameraSystem>(input);
     }
 }

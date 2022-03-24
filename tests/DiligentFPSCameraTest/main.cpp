@@ -15,32 +15,38 @@ using namespace okami::graphics;
 
 void TestBackend(GraphicsBackend backend) {
 
-    RealtimeGraphicsParams params;
-    params.mDeviceType = backend;
+    RealtimeGraphicsParams gfxParams;
+    gfxParams.mBackend = backend;
+
+    WindowParams windowParams;
 
     switch (backend) {
         case GraphicsBackend::VULKAN:
-            params.mWindowTitle = "okami Diligent-Engine FPS Camera Test (Vulkan)";
-            break;
-        case GraphicsBackend::OPENGL:
-            params.mWindowTitle = "okami Diligent-Engine FPS Camera Test (OpenGL)";
+            windowParams.mWindowTitle = "okami Diligent-Engine FPS Camera Test (Vulkan)";
             break;
         case GraphicsBackend::D3D11:
-            params.mWindowTitle = "okami Diligent-Engine FPS Camera Test (D3D11)";
+            windowParams.mWindowTitle = "okami Diligent-Engine FPS Camera Test (D3D11)";
             break;
         case GraphicsBackend::D3D12:
-            params.mWindowTitle = "okami Diligent-Engine FPS Camera Test (D3D12)";
+            windowParams.mWindowTitle = "okami Diligent-Engine FPS Camera Test (D3D12)";
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
-    auto display = systems.Add(CreateGLFWDisplay(params));
-    auto renderer = systems.Add(CreateRenderer(display, resources));
-    systems.Add(CreateFPSCameraSystem(display));
+    systems.Add(CreateGLFWDisplay(&resources, gfxParams));
+    auto display = systems.QueryInterface<IDisplay>();
+
+    systems.Add(CreateRenderer(display, resources));
+    auto renderer = systems.QueryInterface<IRenderer>();
 
     systems.Startup();
     {
+        auto window = display->CreateWindow(windowParams);
+        auto cameraSystem = CreateFPSCameraSystem(window);
+        cameraSystem->Startup();
+        systems.Add(std::move(cameraSystem));
+
         auto displayInterface = systems.QueryInterface<IDisplay>();
         auto vertexLayouts = systems.QueryInterface<IVertexLayoutProvider>();
         auto staticMeshLayout = vertexLayouts->GetVertexLayout<StaticMesh>();
@@ -48,12 +54,12 @@ void TestBackend(GraphicsBackend backend) {
         // Create a geometry object from a built-in prefab
         auto geo = resources.Add(Geometry::Prefabs::MaterialBall(staticMeshLayout));
         // Load a texture from disk
-        auto texture = resources.Load<Texture>("test.png");
+        auto texture = resources.Add(Texture("test.png"));
 
         // Create a material for that texture
-        BaseMaterial::Data materialData;
+        StaticMeshMaterial::Data materialData;
         materialData.mAlbedo = texture;
-        auto material = resources.Add<BaseMaterial>(
+        auto material = resources.Add<StaticMeshMaterial>(
             std::move(materialData));
 
         // Create a frame with the static mesh at the origin
@@ -74,9 +80,16 @@ void TestBackend(GraphicsBackend backend) {
         systems.SetFrame(frame);
         systems.LoadResources();
 
+        RenderView rv;
+        rv.bClear = true;
+        rv.mCamera = cameraEntity;
+        rv.mTargetId = window->GetCanvas()->GetResourceId();
+
         Clock clock;
-        while (!displayInterface->ShouldClose()) {
+        while (!window->ShouldClose()) {
             auto time = clock.GetTime();
+
+            renderer->SetRenderView(rv);
             systems.Fork(time);
             systems.Join();
         }
@@ -93,10 +106,6 @@ int main() {
 
 #if VULKAN_SUPPORTED && !PLATFORM_MACOS
     TestBackend(GraphicsBackend::VULKAN);
-#endif
-
-#if GL_SUPPORTED
-    TestBackend(GraphicsBackend::OPENGL);
 #endif
 
 #if D3D11_SUPPORTED

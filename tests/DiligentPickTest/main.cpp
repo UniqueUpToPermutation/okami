@@ -5,7 +5,7 @@
 #include <okami/GraphicsComponents.hpp>
 #include <okami/Camera.hpp>
 
-#include <okami/diligent/Display.hpp>
+#include <okami/diligent/Glfw.hpp>
 #include <okami/diligent/Im3dSystem.hpp>
 #include <okami/diligent/ImGuiSystem.hpp>
 
@@ -38,7 +38,7 @@ void TestBackend(GraphicsBackend backend) {
             break;
     }
 
-    ResourceInterface resources;
+    ResourceManager resources;
     SystemCollection systems;
     auto display = systems.Add(CreateGLFWDisplay(params));
     auto renderer = systems.Add(CreateRenderer(display, resources));
@@ -99,7 +99,7 @@ void TestBackend(GraphicsBackend backend) {
         systems.SetFrame(frame);
         systems.LoadResources();
 
-        auto im3dInterface = systems.QueryInterface<IIm3dCallback>();
+        auto im3dInterface = systems.QueryInterface<IIm3dSystem>();
         im3dInterface->Add([&selectedEntity, &frame, &geo]() {
             if (selectedEntity != entt::null &&
                 selectedEntity != entt::entity(0)) {
@@ -114,7 +114,7 @@ void TestBackend(GraphicsBackend backend) {
             }
         });
 
-        auto imguiInterface = systems.QueryInterface<IImGuiCallback>();
+        auto imguiInterface = systems.QueryInterface<IImGuiSystem>();
         imguiInterface->Add([&selectedEntity]() {
             std::stringstream ss;
             ss << "Pick Result: ";

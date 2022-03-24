@@ -128,4 +128,16 @@ namespace okami::core {
 
 		mRegistry.destroy(ent);
 	}
+
+    bool Frame::HasLoadParams() const {
+        return mLoadDesc != nullptr;
+    }
+
+    std::filesystem::path Frame::GetPath() const {
+        if (mLoadDesc) {
+            return mLoadDesc->mPath;
+        } else {
+            throw std::runtime_error("Frame doesn't have path!");
+        }
+    }
 }
