@@ -620,10 +620,12 @@ namespace okami::graphics::diligent {
 
             rmGlobals.mCamera = camera;
 
+            shaderGlobals.mCamera.mPosition = rmGlobals.mViewOrigin;
+            shaderGlobals.mCamera.mViewDirection = rmGlobals.mViewDirection;
             shaderGlobals.mCamera.mInvView = shaderGlobals.mCamera.mView.Inverse();
             shaderGlobals.mCamera.mInvViewProj = shaderGlobals.mCamera.mViewProj.Inverse();
             shaderGlobals.mCamera.mInvProj = shaderGlobals.mCamera.mProj.Inverse();
-        
+
             auto immediateContext = mContexts[0];
 
             const auto& pass = target.GetPassInfo();
