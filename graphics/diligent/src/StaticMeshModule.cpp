@@ -263,7 +263,7 @@ namespace okami::graphics::diligent {
     void WriteLightAttribs(
         const core::DirectionalLight& light,
         HLSL::LightAttribs& attribs) {
-        attribs.mLightType = HLSL_LIGHT_TYPE_POINT;
+        attribs.mLightType = HLSL_LIGHT_TYPE_DIRECTIONAL;
         attribs.mIrradiance = ToDiligent(light.mColor * light.mIrradiance);
         attribs.mRadianceFalloff = 0.0;
     }

@@ -25,9 +25,7 @@ float3 LambertDirect(BRDFInput input) {
 
     float3 color = float3(0.0, 0.0, 0.0);
 
-    if (NdotL > 0) {
-        color += NdotL * input.mAlbedo * input.mRadiance;
-    }
+    color += max(NdotL, 0.0) * input.mAlbedo * input.mRadiance;
 
     return color;
 }
@@ -39,12 +37,10 @@ float3 PhongDirect(BRDFInput input) {
 
     float3 color = float3(0.0, 0.0, 0.0);
 
-    if (NdotL > 0) {
-        float RdotV = dot(R, input.mEyeDirOut);
-        color += NdotL * input.mAlbedo * input.mRadiance;
-        color += input.mRadiance * input.mSpecularColor * 
-            pow(max(0.0, RdotV), input.mSpecularPower);
-    }
+    color += max(NdotL, 0.0) * input.mAlbedo * input.mRadiance;
+    float RdotV = -dot(R, input.mEyeDirOut);
+    color += input.mRadiance * input.mSpecularColor * 
+        pow(max(0.0, RdotV), input.mSpecularPower);
 
     return color;
 }

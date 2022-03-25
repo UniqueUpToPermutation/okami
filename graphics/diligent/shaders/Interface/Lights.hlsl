@@ -53,8 +53,10 @@ void GetLightInfo(
     switch (light.mLightType) {
         case HLSL_LIGHT_TYPE_DIRECTIONAL:
             GetLightInfoDirectional(light, surface, info);
+            break;
         case HLSL_LIGHT_TYPE_POINT:
             GetLightInfoPoint(light, surface, info);
+            break;
     }
 }
 

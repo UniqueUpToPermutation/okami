@@ -65,8 +65,10 @@ void main(in PSInput ps_input,
             input.mNormal = ps_input.Normal;
             input.mRoughness = roughness;
             input.mEyeDirOut = eyeDirOut;
+            input.mLightDirIn = lightInfo.mDirIn;
             input.mRadiance = lightInfo.mRadianceFalloff * sbuf_Lights[i].mIrradiance;
-            input.mSpecularPower = (1.0 - roughness) * gMaterial.mSpecularPower;
+            //input.mSpecularPower = 1.0 + (1.0 - roughness) * (gMaterial.mSpecularPower - 1.0);
+            input.mSpecularPower = 1.0;
             input.mSpecularColor = float3(1.0, 1.0, 1.0);
             input.mMaterialType = gMaterial.mMaterialType;
 

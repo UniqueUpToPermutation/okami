@@ -13,13 +13,13 @@ namespace okami::core {
     };
 
     struct PointLight {
-        glm::vec3 mColor;
+        glm::vec3 mColor = glm::vec3(1.0f, 1.0f, 1.0f);
         float mRadiantFlux = 4.0f * glm::pi<float>();
         float mRadianceFalloff = 1.0f;
     };
 
     struct DirectionalLight {
-        glm::vec3 mColor;
+        glm::vec3 mColor = glm::vec3(1.0f, 1.0f, 1.0f);
         float mIrradiance = 1.0f;
     };
 
