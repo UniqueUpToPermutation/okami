@@ -7,6 +7,11 @@
 using namespace Diligent;
 using namespace okami::core;
 
+#define VS_SOURCE "StaticMesh.vsh"
+#define PS_SOURCE "Default.psh"
+
+#define LIGHT_BUFFER_SIZE 4
+
 namespace okami::graphics::diligent {
 
     StaticMeshModule::Pipeline CreateStaticMeshPipeline(
@@ -15,6 +20,8 @@ namespace okami::graphics::diligent {
         IGlobalsBufferProvider* globalsBufferProvider,
         DG::IShader* vertexShader,
         DynamicUniformBuffer<HLSL::StaticInstanceData>* instanceBuffer,
+        DynamicUniformBuffer<HLSL::MaterialDesc>* materialBuffer,
+        DynamicStructuredBuffer<HLSL::LightAttribs>* lightsBuffer,
         const VertexFormat& vertexFormat,
         const RenderPass& pass,
         const RenderModuleParams& params) {
@@ -28,7 +35,7 @@ namespace okami::graphics::diligent {
             WritePassShaderMacros(pass, preprocessorConfig);
 
             ShaderParams paramsStaticMeshPSColor(
-                "BasicPixel.psh", DG::SHADER_TYPE_PIXEL, 
+                PS_SOURCE, DG::SHADER_TYPE_PIXEL, 
                 "Static Mesh PS", preprocessorConfig);
 
             pipeline.mPS.Attach(CompileEmbeddedShader(
@@ -68,6 +75,7 @@ namespace okami::graphics::diligent {
             TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP, TEXTURE_ADDRESS_WRAP
         };
 
+        // Vertex shaders
         shaderVars.emplace_back(ShaderResourceVariableDesc{
             SHADER_TYPE_VERTEX, "cbuf_SceneGlobals", 
             SHADER_RESOURCE_VARIABLE_TYPE_STATIC});
@@ -82,6 +90,15 @@ namespace okami::graphics::diligent {
 
             shaderVars.emplace_back(ShaderResourceVariableDesc{
                 SHADER_TYPE_PIXEL, "cbuf_InstanceData", 
+                SHADER_RESOURCE_VARIABLE_TYPE_STATIC});
+            shaderVars.emplace_back(ShaderResourceVariableDesc{
+                SHADER_TYPE_PIXEL, "cbuf_SceneGlobals", 
+                SHADER_RESOURCE_VARIABLE_TYPE_STATIC});
+            shaderVars.emplace_back(ShaderResourceVariableDesc{
+                SHADER_TYPE_PIXEL, "cbuf_MaterialData", 
+                SHADER_RESOURCE_VARIABLE_TYPE_STATIC});
+            shaderVars.emplace_back(ShaderResourceVariableDesc{
+                SHADER_TYPE_PIXEL, "sbuf_Lights", 
                 SHADER_RESOURCE_VARIABLE_TYPE_STATIC});
 
             samplerDescs.emplace_back(ImmutableSamplerDesc{
@@ -100,9 +117,9 @@ namespace okami::graphics::diligent {
         pipeline.mState.Attach(pipelineState);
 
         // Set the scene globals buffer
+        auto globalsBuffer = globalsBufferProvider->GetGlobalsBuffer()->Get();
         pipeline.mState->GetStaticVariableByName(
-            DG::SHADER_TYPE_VERTEX, "cbuf_SceneGlobals")->Set(
-                globalsBufferProvider->GetGlobalsBuffer()->Get());
+            DG::SHADER_TYPE_VERTEX, "cbuf_SceneGlobals")->Set(globalsBuffer);
     
         pipeline.mState->GetStaticVariableByName(
             DG::SHADER_TYPE_VERTEX, "cbuf_InstanceData")->Set(instanceBuffer->Get());
@@ -110,6 +127,12 @@ namespace okami::graphics::diligent {
         if (pass.mAttributeCount > 0) {
             pipeline.mState->GetStaticVariableByName(
                 DG::SHADER_TYPE_PIXEL, "cbuf_InstanceData")->Set(instanceBuffer->Get());
+            pipeline.mState->GetStaticVariableByName(
+                DG::SHADER_TYPE_PIXEL, "cbuf_SceneGlobals")->Set(globalsBuffer);
+            pipeline.mState->GetStaticVariableByName(
+                DG::SHADER_TYPE_PIXEL, "cbuf_MaterialData")->Set(materialBuffer->Get());
+            pipeline.mState->GetStaticVariableByName(
+                DG::SHADER_TYPE_PIXEL, "sbuf_Lights")->Set(lightsBuffer->GetView());
         }
 
         return pipeline;
@@ -122,12 +145,12 @@ namespace okami::graphics::diligent {
             core::Texture, TextureBackend>* textureBackend) :
         mFormat(core::VertexFormat::PositionUVNormal()),
         mMaterialBackend(
-            [](const StaticMeshMaterial&) { 
+            [](const Material&) { 
                 return StaticMeshMaterialBackend(); 
             },
             nullptr,
-            [this](const StaticMeshMaterial& frontendIn,
-                StaticMeshMaterial& frontendOut,
+            [this](const Material& frontendIn,
+                Material& frontendOut,
                 StaticMeshMaterialBackend& backend) {
                 OnFinalize(frontendIn, frontendOut, backend);
             },
@@ -139,12 +162,12 @@ namespace okami::graphics::diligent {
     }
 
     void StaticMeshModule::OnFinalize(
-        const core::StaticMeshMaterial& frontendIn,
-        core::StaticMeshMaterial& frontendOut,
+        const Material& frontendIn,
+        Material& frontendOut,
         StaticMeshMaterialBackend& backend) {
 
-        InitializeMaterial(frontendIn.GetData(), backend);
-        frontendOut = core::StaticMeshMaterial(frontendIn);
+        InitializeMaterial(frontendIn.GetSurface(), backend);
+        frontendOut = frontendIn;
     }
 
     void StaticMeshModule::OnDestroy(
@@ -158,11 +181,14 @@ namespace okami::graphics::diligent {
         const RenderModuleParams& params) {
 
         ShaderParams paramsStaticMeshVS(
-            "BasicVert.vsh", DG::SHADER_TYPE_VERTEX, "Static Mesh VS");
+            VS_SOURCE, DG::SHADER_TYPE_VERTEX, "Static Mesh VS");
         mVS.Attach(CompileEmbeddedShader(
             device, paramsStaticMeshVS, params.mFileSystem, true));
 
-        mInstanceData = DynamicUniformBuffer<HLSL::StaticInstanceData>(device, 1);
+        mInstanceData = DynamicUniformBuffer<HLSL::StaticInstanceData>(device);
+        mMaterialData = DynamicUniformBuffer<HLSL::MaterialDesc>(device);
+        mLightsData = DynamicStructuredBuffer<HLSL::LightAttribs>(device, LIGHT_BUFFER_SIZE);
+
         mDefaultTexture = params.mDefaultTexture;
 
         core::InterfaceCollection interfaces(renderer);
@@ -189,6 +215,8 @@ namespace okami::graphics::diligent {
                 globalBuffersProvider,
                 mVS,
                 &mInstanceData,
+                &mMaterialData,
+                &mLightsData,
                 mFormat,
                 pass,
                 params);
@@ -197,7 +225,7 @@ namespace okami::graphics::diligent {
             mPipelines.emplace_back(std::move(pipeline));
         }
 
-        InitializeMaterial(StaticMeshMaterial::Data(), mDefaultMaterial);
+        InitializeMaterial(core::MetaSurfaceDesc(), mDefaultMaterial);
     }
 
     void StaticMeshModule::Update(
@@ -211,6 +239,33 @@ namespace okami::graphics::diligent {
 
     void StaticMeshModule::WaitOnPendingTasks() {
         mMaterialBackend.LoadCounter().wait();
+    }
+
+    void WriteLightAttribs(
+        const core::Transform& transform,
+        HLSL::LightAttribs& attribs) {
+        attribs.mLightDir = 
+            ToDiligent(transform.ApplyToTangent(glm::vec3(0.0f, -1.0f, 0.0f)));
+        attribs.mPosition =
+            ToDiligent(transform.mTranslation);
+        attribs.mScale = 
+            (transform.mScale.x + transform.mScale.y + transform.mScale.z) / 3.0;
+    }
+
+    void WriteLightAttribs(
+        const core::PointLight& light,
+        HLSL::LightAttribs& attribs) {
+        attribs.mLightType = HLSL_LIGHT_TYPE_POINT;
+        attribs.mIrradiance = ToDiligent(light.mColor * light.mRadiantFlux / (4.0f * PI_F));
+        attribs.mRadianceFalloff = light.mRadianceFalloff;
+    }
+
+    void WriteLightAttribs(
+        const core::DirectionalLight& light,
+        HLSL::LightAttribs& attribs) {
+        attribs.mLightType = HLSL_LIGHT_TYPE_POINT;
+        attribs.mIrradiance = ToDiligent(light.mColor * light.mIrradiance);
+        attribs.mRadianceFalloff = 0.0;
     }
 
     void StaticMeshModule::QueueCommands(
@@ -233,13 +288,39 @@ namespace okami::graphics::diligent {
 
         context->SetPipelineState(pipeline.mState);
 
-        auto staticMeshes = registry.view<core::StaticMesh>();
-
         struct RenderCall {
             DG::float4x4 mWorldTransform;
             core::StaticMesh mStaticMesh;
         };
 
+        // Populate lights buffer
+        auto directionalLights = frame.Registry().view<DirectionalLight, Transform>();
+        auto pointLights = frame.Registry().view<PointLight, Transform>();
+
+        HLSL::LightAttribs lights[LIGHT_BUFFER_SIZE];
+        int lightIndex = 0;
+        for (auto e : directionalLights) {
+            if (lightIndex >= LIGHT_BUFFER_SIZE)
+                break;
+            WriteLightAttribs(directionalLights.get<const Transform>(e), lights[lightIndex]);
+            WriteLightAttribs(directionalLights.get<const DirectionalLight>(e), lights[lightIndex]);
+            ++lightIndex;
+        }
+
+        for (auto e : pointLights) {
+            if (lightIndex >= LIGHT_BUFFER_SIZE)
+                break;
+            WriteLightAttribs(pointLights.get<const Transform>(e), lights[lightIndex]);
+            WriteLightAttribs(pointLights.get<const PointLight>(e), lights[lightIndex]);
+            ++lightIndex;
+        }
+
+        for (; lightIndex < LIGHT_BUFFER_SIZE; lightIndex++) {
+            lights[lightIndex].mLightType = HLSL_LIGHT_TYPE_NONE;
+        }
+        mLightsData.Write(context, lights, LIGHT_BUFFER_SIZE);
+
+        auto staticMeshes = registry.view<core::StaticMesh>();
         for (auto entity : staticMeshes) {
             const auto& staticMesh = staticMeshes.get<const core::StaticMesh>(entity);
             auto transform = registry.try_get<core::Transform>(entity);
@@ -268,18 +349,20 @@ namespace okami::graphics::diligent {
                     RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
             }
 
-            // Bind shader resources
+            // Bind shader resources for material
             auto mat = mMaterialBackend.TryGet(call.mStaticMesh.mMaterial);
             if (mat) {
                 context->CommitShaderResources(
                     mat->mBindings[pipelineId],
                     RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+                mMaterialData.Write(context, mat->mDesc);
             } else {
                 context->CommitShaderResources(
                     mDefaultMaterial.mBindings[pipelineId],
                     RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+                mMaterialData.Write(context, mDefaultMaterial.mDesc);
             }
-
+            
             HLSL::StaticInstanceData instanceData;
             instanceData.mWorld = call.mWorldTransform;
             instanceData.mEntity = (int32_t)entity;
@@ -309,6 +392,8 @@ namespace okami::graphics::diligent {
         mDefaultMaterial = StaticMeshMaterialBackend();
         mVS.Release();
         mInstanceData = DynamicUniformBuffer<HLSL::StaticInstanceData>();
+        mMaterialData = DynamicUniformBuffer<HLSL::MaterialDesc>();
+        mLightsData = DynamicStructuredBuffer<HLSL::LightAttribs>();
         mPipelines.clear();
     }
 
@@ -324,12 +409,37 @@ namespace okami::graphics::diligent {
 
     void StaticMeshModule::RegisterResourceInterfaces(
         core::ResourceManager& resourceInterface) {
-        resourceInterface.Register<StaticMeshMaterial>(
+        resourceInterface.Register<Material>(
             &mMaterialBackend);
     }
 
+    int ConvertToHLSL(const core::SurfaceType type) {
+        switch (type) {
+            case core::SurfaceType::FLAT:
+                return MATERIAL_TYPE_FLAT;
+            case core::SurfaceType::LAMBERT:
+                return MATERIAL_TYPE_LAMBERT;
+            case core::SurfaceType::PHONG:
+                return MATERIAL_TYPE_PHONG;
+            case core::SurfaceType::COOK_TORRENCE:
+                return MATERIAL_TYPE_COOK_TORRENCE;
+            default:
+                throw std::runtime_error("Unrecognized enum!");
+        }
+    }
+
+    HLSL::MaterialDesc ConvertToHLSL(const core::MetaSurfaceDesc& desc) {
+        HLSL::MaterialDesc result;
+        result.mAlbedoFactor = ToDiligent(desc.mAlbedoFactor);
+        result.mMaterialType = ConvertToHLSL(desc.mType);
+        result.mMetallicFactor = desc.mMetallicFactor;
+        result.mRoughnessFactor = desc.mRoughnessFactor;
+        result.mSpecularPower = desc.mSpecularPower;
+        return result;
+    }
+
     void StaticMeshModule::InitializeMaterial(
-        const core::StaticMeshMaterial::Data& data,
+        const core::MetaSurfaceDesc& data,
         StaticMeshMaterialBackend& impl) {
 
         auto getTexture = [
@@ -359,5 +469,7 @@ namespace okami::graphics::diligent {
             DG::RefCntAutoPtr<DG::IShaderResourceBinding> autoPtr(binding);
             impl.mBindings.emplace_back(std::move(autoPtr));
         }
+
+        impl.mDesc = ConvertToHLSL(data);
     }
 }

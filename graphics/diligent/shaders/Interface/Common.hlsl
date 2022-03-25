@@ -1,5 +1,5 @@
-#ifndef BASIC_TYPES_HLSL_
-#define BASIC_TYPES_HLSL_
+#ifndef __BASIC_TYPES_HLSL__
+#define __BASIC_TYPES_HLSL__
 
 #ifdef __cplusplus
 #ifndef CHECK_STRUCT_ALIGNMENT

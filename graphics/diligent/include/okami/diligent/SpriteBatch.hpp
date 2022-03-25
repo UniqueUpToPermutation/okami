@@ -4,7 +4,7 @@
 #include <okami/Embed.hpp>
 
 #include <okami/diligent/Buffers.hpp>
-#include <okami/diligent/SceneGlobals.hpp>
+#include <okami/diligent/ShaderTypes.hpp>
 
 #include <RenderDevice.h>
 #include <RefCntAutoPtr.hpp>

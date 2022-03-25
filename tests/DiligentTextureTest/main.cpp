@@ -77,10 +77,10 @@ void TestBackend(GraphicsBackend backend) {
         auto texture = resources.Add(Texture("test.png"), frame);
 
          // Create a material for that texture
-        StaticMeshMaterial::Data materialData;
-        materialData.mAlbedo = texture;
-        auto material = resources.Add<StaticMeshMaterial>(
-            StaticMeshMaterial(materialData));
+        FlatSurface materialSurface;
+        materialSurface.mTexture = texture;
+        auto material = resources.Add(
+            Material<StaticMesh>(materialSurface));
 
         // Create a mesh at the origin
         auto entity = frame.CreateEntity();

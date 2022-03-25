@@ -4,7 +4,7 @@
 
 #include <okami/diligent/RenderModule.hpp>
 #include <okami/diligent/Buffers.hpp>
-#include <okami/diligent/SceneGlobals.hpp>
+#include <okami/diligent/ShaderTypes.hpp>
 
 #include <okami/Resource.hpp>
 #include <okami/ResourceManager.hpp>
@@ -32,22 +32,29 @@ namespace okami::graphics::diligent {
         struct StaticMeshMaterialBackend {
             std::vector<DG::RefCntAutoPtr<
                 DG::IShaderResourceBinding>>        mBindings;
+            HLSL::MaterialDesc                      mDesc;
         };
 
     private:
+        using Material = core::Material<core::StaticMesh>;
+
         core::VertexFormat                          mFormat;
         DG::RefCntAutoPtr<DG::IShader>              mVS;
         DG::RefCntAutoPtr<DG::ITexture>             mDefaultTexture;
 
         DynamicUniformBuffer<
             HLSL::StaticInstanceData>               mInstanceData;
+        DynamicUniformBuffer<
+            HLSL::MaterialDesc>                     mMaterialData;
+        DynamicStructuredBuffer<
+            HLSL::LightAttribs>                     mLightsData;
 
         std::unordered_map<RenderPass,
             int, RenderPass::Hasher>                mPipelineLookup;
         std::vector<Pipeline>                       mPipelines;
 
         core::ResourceBackend<
-            core::StaticMeshMaterial,
+            Material,
             StaticMeshMaterialBackend>              mMaterialBackend;
 
         StaticMeshMaterialBackend                   mDefaultMaterial;
@@ -60,7 +67,7 @@ namespace okami::graphics::diligent {
             TextureBackend>*                        mTextureBackend;
 
         void InitializeMaterial(
-            const core::StaticMeshMaterial::Data& materialData,
+            const core::MetaSurfaceDesc& materialData,
             StaticMeshMaterialBackend& backend);
 
     public:
@@ -71,8 +78,8 @@ namespace okami::graphics::diligent {
                 core::Texture, TextureBackend>* textureBackend);
 
         void OnFinalize(
-            const core::StaticMeshMaterial& frontendIn,
-            core::StaticMeshMaterial& frontendOut,
+            const Material& frontendIn,
+            Material& frontendOut,
             StaticMeshMaterialBackend& backend);
         void OnDestroy(
             StaticMeshMaterialBackend& backend);

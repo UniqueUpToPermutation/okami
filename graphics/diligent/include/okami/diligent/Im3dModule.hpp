@@ -5,7 +5,7 @@
 #include <okami/GraphicsComponents.hpp>
 #include <okami/diligent/GraphicsUtils.hpp>
 #include <okami/diligent/Buffers.hpp>
-#include <okami/diligent/SceneGlobals.hpp>
+#include <okami/diligent/ShaderTypes.hpp>
 
 #include <BasicMath.hpp>
 #include <RefCntAutoPtr.hpp>

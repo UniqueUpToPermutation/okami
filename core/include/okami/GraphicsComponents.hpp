@@ -4,23 +4,23 @@
 #include <okami/Geometry.hpp>
 #include <okami/Material.hpp>
 
+#include <glm/ext/scalar_constants.hpp>
+
 namespace okami::core {
-
-    class StaticMeshMaterial final : public BaseMaterial {
-    public:
-        StaticMeshMaterial() = default;
-        StaticMeshMaterial(const BaseMaterial::Data& data) : 
-            BaseMaterial(data) {    
-        }
-
-        inline const LoadParams<StaticMeshMaterial>& GetLoadParams() const {
-            throw std::runtime_error("Materials don't have load params!");
-        }
-    };
-
     struct StaticMesh {
         resource_id_t mGeometry = INVALID_RESOURCE;
         resource_id_t mMaterial = INVALID_RESOURCE;
+    };
+
+    struct PointLight {
+        glm::vec3 mColor;
+        float mRadiantFlux = 4.0f * glm::pi<float>();
+        float mRadianceFalloff = 1.0f;
+    };
+
+    struct DirectionalLight {
+        glm::vec3 mColor;
+        float mIrradiance = 1.0f;
     };
 
     struct Sprite {

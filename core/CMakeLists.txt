@@ -14,7 +14,6 @@ list(APPEND SOURCE
     src/Embed.cpp
     src/VertexFormat.cpp
     src/Texture.cpp
-    src/Material.cpp
     src/Clock.cpp
     src/Graphics.cpp
     src/ResourceManager.cpp

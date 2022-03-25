@@ -12,7 +12,7 @@
 #include <okami/diligent/Buffers.hpp>
 #include <okami/diligent/SpriteModule.hpp>
 #include <okami/diligent/RenderModule.hpp>
-#include <okami/diligent/SceneGlobals.hpp>
+#include <okami/diligent/ShaderTypes.hpp>
 #include <okami/diligent/TextureCapture.hpp>
 #include <okami/diligent/StaticMeshModule.hpp>
 

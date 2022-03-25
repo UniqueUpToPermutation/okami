@@ -87,6 +87,5 @@ namespace okami::core {
         Geometry::Register();
         Frame::Register();
         Texture::Register();
-        BaseMaterial::Register();
     }
 }

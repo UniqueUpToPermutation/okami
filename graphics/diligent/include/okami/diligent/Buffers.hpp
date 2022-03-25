@@ -91,4 +91,54 @@ namespace okami::graphics::diligent {
 			std::memcpy(data, t, sizeof(T) * count);
 		}
 	};
+
+	template <typename T>
+	class DynamicStructuredBuffer {
+	private:
+		DG::RefCntAutoPtr<DG::IBuffer> mBuffer;
+		size_t mCount;
+
+	public:
+		DynamicStructuredBuffer() = default;
+		DynamicStructuredBuffer(
+			DG::IRenderDevice* device, 
+			const uint count) : 
+			mCount(count) {
+
+			DG::BufferDesc dg_desc;
+			dg_desc.Name           		= "Dyanmic Structured Buffer";
+			dg_desc.Size  		  		= sizeof(T) * count;
+			dg_desc.Usage          		= DG::USAGE_DYNAMIC;
+			dg_desc.BindFlags      		= DG::BIND_FLAGS::BIND_SHADER_RESOURCE;
+			dg_desc.CPUAccessFlags 		= DG::CPU_ACCESS_WRITE;
+			dg_desc.ElementByteStride 	= sizeof(T);
+			dg_desc.Mode 				= DG::BUFFER_MODE::BUFFER_MODE_STRUCTURED;
+
+            DG::IBuffer* buf = nullptr;
+			device->CreateBuffer(dg_desc, nullptr, &buf);
+            mBuffer.Attach(buf);
+		}
+
+		inline size_t Count() const {
+			return mCount;
+		}
+
+		inline DG::IBuffer* Get() {
+			return mBuffer.RawPtr();
+		}
+
+		inline DG::IBufferView* GetView() {
+			return mBuffer->GetDefaultView(DG::BUFFER_VIEW_SHADER_RESOURCE);
+		}
+
+		inline void Write(DG::IDeviceContext* context, const T& t) {
+			DG::MapHelper<T> data(context, mBuffer, DG::MAP_WRITE, DG::MAP_FLAG_DISCARD);
+			*data = t;
+		}
+
+		inline void Write(DG::IDeviceContext* context, const T t[], const uint count) {
+			DG::MapHelper<T> data(context, mBuffer, DG::MAP_WRITE, DG::MAP_FLAG_DISCARD);
+			std::memcpy(data, t, sizeof(T) * count);
+		}
+	};
 }
