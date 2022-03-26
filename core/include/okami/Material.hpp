@@ -78,7 +78,7 @@ namespace okami::core {
             desc.mRoughness = mSpecular;
             desc.mAlbedoFactor = mAlbedoFactor;
             desc.mSpecularPower = mSpecularPower;
-            desc.mRoughnessFactor = mSpecularFactor;
+            desc.mRoughnessFactor = 1.0 - mSpecularFactor;
             desc.mType = SurfaceType::PHONG;
             return desc;
         }

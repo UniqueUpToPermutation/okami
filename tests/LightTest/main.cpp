@@ -57,6 +57,8 @@ void TestBackend(GraphicsBackend backend) {
         // Create a material for that texture
         PhongSurface materialSurface;
         materialSurface.mAlbedo = texture;
+        materialSurface.mSpecularPower = 12.0;
+        materialSurface.mSpecularFactor = 1.0;
         auto material = resources.Add<Material<StaticMesh>>(
             Material<StaticMesh>(materialSurface));
 
